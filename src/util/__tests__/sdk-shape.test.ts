@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { idToString, readProp } from '../sdk-shape';
+import { idToString, readDocumentField, readPath, readProp } from '../sdk-shape';
 
 describe('idToString', () => {
   it('passes strings through', () => {
@@ -53,5 +53,68 @@ describe('readProp', () => {
   it('returns undefined for nullish', () => {
     expect(readProp(null, 'anything')).toBeUndefined();
     expect(readProp(undefined, 'anything')).toBeUndefined();
+  });
+});
+
+describe('readPath', () => {
+  it('walks nested plain objects via dot-path', () => {
+    const obj = { records: { identity: 'abc' } };
+    expect(readPath(obj, 'records.identity')).toBe('abc');
+  });
+
+  it('walks through getXxx() accessors at each step', () => {
+    const inner = { getIdentity: () => 'via-getter' };
+    const outer = { getRecords: () => inner };
+    expect(readPath(outer, 'records.identity')).toBe('via-getter');
+  });
+
+  it('returns undefined when any step is missing', () => {
+    expect(readPath({ records: {} }, 'records.identity')).toBeUndefined();
+    expect(readPath({}, 'records.identity')).toBeUndefined();
+  });
+});
+
+describe('readDocumentField', () => {
+  it('reads user-defined fields out of `properties`', () => {
+    // Shape the SDK's Document class produces: system fields top-level,
+    // user fields under `properties`.
+    const doc = {
+      id: 'sys-id',
+      ownerId: 'sys-owner',
+      properties: { label: 'Alice', normalizedLabel: 'alice' },
+    };
+    expect(readDocumentField(doc, 'label')).toBe('Alice');
+    expect(readDocumentField(doc, 'normalizedLabel')).toBe('alice');
+  });
+
+  it('resolves nested user-field dot-paths like `records.identity`', () => {
+    const doc = {
+      id: 'sys-id',
+      properties: { records: { identity: 'owner-b58' } },
+    };
+    expect(readDocumentField(doc, 'records.identity')).toBe('owner-b58');
+  });
+
+  it('reads `$id` / `$ownerId` off top-level (class exposes them as id/ownerId)', () => {
+    const doc = { id: 'top-id', ownerId: 'top-owner', properties: {} };
+    expect(readDocumentField(doc, '$id')).toBe('top-id');
+    expect(readDocumentField(doc, '$ownerId')).toBe('top-owner');
+  });
+
+  it('falls back to top-level for plain-object rows without a `properties` bag', () => {
+    const row = { label: 'plain' };
+    expect(readDocumentField(row, 'label')).toBe('plain');
+  });
+
+  it('prefers the `properties` bag over a shadowed top-level key', () => {
+    // Top-level `label` may be a stale/unrelated field; the schema-declared
+    // property inside `properties` is the authoritative value.
+    const doc = { label: 'top', properties: { label: 'real' } };
+    expect(readDocumentField(doc, 'label')).toBe('real');
+  });
+
+  it('returns undefined for nullish input', () => {
+    expect(readDocumentField(null, 'label')).toBeUndefined();
+    expect(readDocumentField(undefined, 'label')).toBeUndefined();
   });
 });

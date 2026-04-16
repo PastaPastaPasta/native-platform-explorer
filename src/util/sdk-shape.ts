@@ -19,6 +19,48 @@ export function readProp<T>(obj: unknown, key: string): T | undefined {
   return undefined;
 }
 
+/** Walk a dot-separated path through `obj`, using `readProp` at each step so
+ *  WASM class instances (whose values are exposed via `getFoo()` accessors)
+ *  traverse the same way as plain objects. Supports keys like
+ *  `records.identity` on a DPNS domain document. */
+export function readPath<T>(obj: unknown, path: string): T | undefined {
+  if (!path) return undefined;
+  const parts = path.split('.');
+  let cur: unknown = obj;
+  for (const part of parts) {
+    if (cur === null || cur === undefined) return undefined;
+    cur = readProp(cur, part);
+  }
+  return cur as T | undefined;
+}
+
+/** Read a field off an SDK `Document` row.
+ *
+ *  The SDK returns Document class instances rather than plain objects. System
+ *  fields (`$id`, `$ownerId`, `id`, `ownerId`, `revision`, `createdAt`, …)
+ *  live at the top level via getters. User-defined schema fields do NOT —
+ *  they live inside a `properties: Record<string, unknown>` bag on the
+ *  instance. Reading only the top level (as the schema-derived column key
+ *  suggests) therefore misses every user field and renders blank cells.
+ *
+ *  This helper looks inside `properties` first for user fields, falls back
+ *  to the top-level for system fields, and resolves dot-paths so nested
+ *  values like `records.identity` work uniformly. */
+export function readDocumentField<T>(row: unknown, key: string): T | undefined {
+  if (!row || typeof row !== 'object') return undefined;
+  // `$id` / `$ownerId` are the serialised spellings; the class exposes them
+  // without the `$` prefix. Prefer the prefixed form if present.
+  if (key === '$id' || key === '$ownerId') {
+    return readProp<T>(row, key) ?? readProp<T>(row, key.slice(1));
+  }
+  const props = readProp<Record<string, unknown>>(row, 'properties');
+  const fromProps = readPath<T>(props, key);
+  if (fromProps !== undefined) return fromProps;
+  // Fall back to top-level — covers plain-object rows and system fields
+  // (`revision`, `createdAt`, …) accessed by their non-`$` name.
+  return readPath<T>(row, key);
+}
+
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
 
 /** Standard Bitcoin/Dash base58 encoding of a byte array. Used to render
