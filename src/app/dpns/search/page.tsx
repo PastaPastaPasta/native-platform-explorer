@@ -129,16 +129,17 @@ function Content() {
           </VStack>
         </InfoBlock>
 
-        <InfoBlock>
-          {!contractId ? (
+        {q && !contractId ? (
+          <InfoBlock>
             <Text color="gray.400" fontSize="sm">
               No DPNS contract ID registered for {network}.
             </Text>
-          ) : !q ? (
-            <Text color="gray.400" fontSize="sm">
-              Enter a prefix above.
-            </Text>
-          ) : searchQ.isLoading ? (
+          </InfoBlock>
+        ) : null}
+
+        {q && contractId ? (
+          <InfoBlock>
+            {searchQ.isLoading ? (
             <LoadingCard lines={3} />
           ) : searchQ.isError ? (
             <ErrorCard error={searchQ.error} onRetry={() => searchQ.refetch()} />
@@ -193,7 +194,6 @@ function Content() {
               </Table>
             </Box>
           )}
-          {q ? (
             <HStack justify="flex-end" mt={3}>
               <CursorPagination
                 pageIndex={cursorStack.length - 1}
@@ -207,8 +207,8 @@ function Content() {
                 }}
               />
             </HStack>
-          ) : null}
-        </InfoBlock>
+          </InfoBlock>
+        ) : null}
 
         <DpnsDirectoryPanel />
       </VStack>
