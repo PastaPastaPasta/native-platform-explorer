@@ -108,7 +108,9 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       JSON Schema
                     </Heading>
-                    <CodeBlock value={contract.documentSchemas ?? contract.raw} />
+                    <CodeBlock
+                      value={contract.documentSchemas ?? contract.plain ?? contract.raw}
+                    />
                   </InfoBlock>
                 </TabPanel>
 
@@ -219,7 +221,7 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       Internal config
                     </Heading>
-                    <CodeBlock value={contract.raw} />
+                    <CodeBlock value={contract.plain ?? contract.raw} />
                   </InfoBlock>
                 </TabPanel>
               </TabPanels>
