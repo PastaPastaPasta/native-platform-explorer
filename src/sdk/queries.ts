@@ -283,6 +283,265 @@ export function useGroupsDataContracts(contractIds: string[] | undefined) {
   );
 }
 
+// ----- documents.query (the one true list primitive) -----
+export interface DocumentsQueryParams {
+  dataContractId: string;
+  documentTypeName: string;
+  where?: unknown[];
+  orderBy?: Array<[string, 'asc' | 'desc']>;
+  limit?: number;
+  startAfter?: string;
+}
+
+export function useDocumentsQuery(params: DocumentsQueryParams | undefined) {
+  const key = params
+    ? [
+        params.dataContractId,
+        params.documentTypeName,
+        JSON.stringify(params.where ?? []),
+        JSON.stringify(params.orderBy ?? []),
+        params.limit ?? 25,
+        params.startAfter ?? '',
+      ]
+    : [];
+  return useSdkQuery(
+    ['documents', 'query', ...key],
+    (sdk) => sdk.documents.query(params as never) as Promise<unknown>,
+    { enabled: !!params, staleTime: LIVE },
+  );
+}
+
+// ----- dpns prefix search -----
+export function useDpnsUsernamesByPrefix(prefix: string | undefined, limit = 20, startAfter?: string) {
+  return useSdkQuery(
+    ['dpns', 'usernames', 'prefix', prefix, limit, startAfter ?? ''],
+    (sdk) =>
+      sdk.dpns.usernames({
+        labelPrefix: prefix!,
+        limit,
+        startAfter,
+      } as never) as Promise<unknown>,
+    { enabled: !!prefix, staleTime: LIVE },
+  );
+}
+
+// ----- epoch -----
+export function useCurrentEpoch() {
+  return useSdkQuery(
+    ['epoch', 'current'],
+    (sdk) => sdk.epoch.current() as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+export function useEpochInfo(index: number | undefined) {
+  return useSdkQuery(
+    ['epoch', 'epochsInfo', index],
+    (sdk) =>
+      sdk.epoch.epochsInfo({ startIndex: index!, endIndex: index! } as never) as Promise<unknown>,
+    { enabled: index !== undefined, staleTime: STRUCTURAL },
+  );
+}
+
+export function useEpochRange(from: number | undefined, to: number | undefined) {
+  return useSdkQuery(
+    ['epoch', 'epochsInfo', from, to],
+    (sdk) =>
+      sdk.epoch.epochsInfo({ startIndex: from!, endIndex: to! } as never) as Promise<unknown>,
+    { enabled: from !== undefined && to !== undefined && from <= to, staleTime: STRUCTURAL },
+  );
+}
+
+export function useFinalizedEpochInfo(index: number | undefined) {
+  return useSdkQuery(
+    ['epoch', 'finalizedInfos', index],
+    (sdk) =>
+      sdk.epoch.finalizedInfos({ startIndex: index!, endIndex: index! } as never) as Promise<unknown>,
+    { enabled: index !== undefined, staleTime: IMMUTABLE },
+  );
+}
+
+export function useEvonodesBlocksByRange(epoch: number | undefined, limit = 100) {
+  return useSdkQuery(
+    ['epoch', 'evonodesProposedBlocksByRange', epoch, limit],
+    (sdk) =>
+      sdk.epoch.evonodesProposedBlocksByRange({
+        epoch: epoch!,
+        limit,
+        orderAscending: false,
+      } as never) as Promise<unknown>,
+    { enabled: epoch !== undefined, staleTime: LIVE },
+  );
+}
+
+export function useEvonodesBlocksByIds(epoch: number | undefined, ids: string[] | undefined) {
+  return useSdkQuery(
+    ['epoch', 'evonodesProposedBlocksByIds', epoch, ids?.join(',') ?? ''],
+    (sdk) => sdk.epoch.evonodesProposedBlocksByIds(epoch!, ids!) as Promise<unknown>,
+    { enabled: epoch !== undefined && !!ids && ids.length > 0, staleTime: LIVE },
+  );
+}
+
+// ----- system -----
+export function useSystemStatus() {
+  return useSdkQuery(
+    ['system', 'status'],
+    (sdk) => sdk.system.status() as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+export function useCurrentQuorumsInfo() {
+  return useSdkQuery(
+    ['system', 'currentQuorumsInfo'],
+    (sdk) => sdk.system.currentQuorumsInfo() as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+export function useTotalCreditsInPlatform() {
+  return useSdkQuery(
+    ['system', 'totalCreditsInPlatform'],
+    (sdk) => sdk.system.totalCreditsInPlatform() as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+export function usePrefundedSpecializedBalance(id: string | undefined) {
+  return useSdkQuery(
+    ['system', 'prefundedSpecializedBalance', id],
+    (sdk) => sdk.system.prefundedSpecializedBalance(id!) as Promise<unknown>,
+    { enabled: !!id, staleTime: LIVE },
+  );
+}
+
+// ----- protocol -----
+export function useProtocolVersionUpgradeState() {
+  return useSdkQuery(
+    ['protocol', 'versionUpgradeState'],
+    (sdk) => sdk.protocol.versionUpgradeState() as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+export function useProtocolVersionUpgradeVoteStatus(
+  startProTxHash: string | undefined,
+  count: number,
+) {
+  return useSdkQuery(
+    ['protocol', 'versionUpgradeVoteStatus', startProTxHash ?? '', count],
+    (sdk) =>
+      sdk.protocol.versionUpgradeVoteStatus(startProTxHash, count) as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+// ----- voting polls -----
+export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number) {
+  return useSdkQuery(
+    ['voting', 'votePollsByEndDate', startDateMs ?? 0, endDateMs ?? 0],
+    (sdk) =>
+      sdk.voting.votePollsByEndDate({
+        startTimeInfo: startDateMs !== undefined ? { startTimeMs: BigInt(startDateMs) } : undefined,
+        endTimeInfo: endDateMs !== undefined ? { endTimeMs: BigInt(endDateMs) } : undefined,
+      } as never) as Promise<unknown>,
+    { staleTime: LIVE },
+  );
+}
+
+// ----- group contested resources + info -----
+export function useContestedResources(
+  contractId: string | undefined,
+  documentTypeName: string | undefined,
+  indexName: string | undefined,
+) {
+  return useSdkQuery(
+    ['group', 'contestedResources', contractId, documentTypeName, indexName],
+    (sdk) =>
+      sdk.group.contestedResources({
+        contractId: contractId!,
+        documentTypeName: documentTypeName!,
+        indexName: indexName!,
+      } as never) as Promise<unknown>,
+    {
+      enabled: !!contractId && !!documentTypeName && !!indexName,
+      staleTime: LIVE,
+    },
+  );
+}
+
+export function useGroupInfos(contractId: string | undefined) {
+  return useSdkQuery(
+    ['group', 'infos', contractId],
+    (sdk) => sdk.group.infos({ dataContractId: contractId! } as never) as Promise<unknown>,
+    { enabled: !!contractId, staleTime: STRUCTURAL },
+  );
+}
+
+export function useGroupInfo(contractId: string | undefined, position: number | undefined) {
+  return useSdkQuery(
+    ['group', 'info', contractId, position],
+    (sdk) => sdk.group.info(contractId!, position!) as Promise<unknown>,
+    {
+      enabled: !!contractId && position !== undefined,
+      staleTime: STRUCTURAL,
+    },
+  );
+}
+
+export function useGroupMembers(contractId: string | undefined, position: number | undefined) {
+  return useSdkQuery(
+    ['group', 'members', contractId, position],
+    (sdk) =>
+      sdk.group.members({ contractId: contractId!, position: position! } as never) as Promise<unknown>,
+    {
+      enabled: !!contractId && position !== undefined,
+      staleTime: LIVE,
+    },
+  );
+}
+
+export function useGroupActions(contractId: string | undefined, position: number | undefined) {
+  return useSdkQuery(
+    ['group', 'actions', contractId, position],
+    (sdk) =>
+      sdk.group.actions({ contractId: contractId!, position: position! } as never) as Promise<unknown>,
+    {
+      enabled: !!contractId && position !== undefined,
+      staleTime: LIVE,
+    },
+  );
+}
+
+export function useContestedResourceVoteState(
+  contractId: string | undefined,
+  documentTypeName: string | undefined,
+  indexName: string | undefined,
+  indexValues: unknown[] | undefined,
+) {
+  return useSdkQuery(
+    [
+      'voting',
+      'contestedResourceVoteState',
+      contractId,
+      documentTypeName,
+      indexName,
+      JSON.stringify(indexValues ?? []),
+    ],
+    (sdk) =>
+      sdk.voting.contestedResourceVoteState({
+        contractId: contractId!,
+        documentTypeName: documentTypeName!,
+        indexName: indexName!,
+        indexValues: indexValues!,
+      } as never) as Promise<unknown>,
+    {
+      enabled: !!contractId && !!documentTypeName && !!indexName && !!indexValues,
+      staleTime: LIVE,
+    },
+  );
+}
+
 // ----- DASH/USD rate -----
 export function useDashUsdRate() {
   const config = getConfig();
