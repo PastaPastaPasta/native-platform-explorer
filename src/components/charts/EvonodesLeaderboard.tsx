@@ -38,7 +38,7 @@ export function EvonodesLeaderboard({
           <HStack
             key={e.proTxHash}
             as={NextLink}
-            href={`/evonode/${e.proTxHash}/`}
+            href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}
             spacing={3}
             _hover={{ bg: 'gray.800' }}
             borderRadius="md"

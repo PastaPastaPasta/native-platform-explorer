@@ -135,7 +135,7 @@ function Content() {
                       <Td borderColor="gray.750" textAlign="right">
                         <Button
                           as={NextLink}
-                          href={`/epoch/${r.index}/`}
+                          href={`/epoch/detail/?index=${r.index}`}
                           size="xs"
                           variant="outline"
                           colorScheme="blue"

@@ -68,28 +68,44 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   const matches: ResolvedMatch[] = [];
 
   if (identity && identityQ.data) {
-    matches.push({ kind: 'Identity', href: `/identity/${identity.id}/`, primary: identity.id });
+    matches.push({
+      kind: 'Identity',
+      href: `/identity/?id=${encodeURIComponent(identity.id)}`,
+      primary: identity.id,
+    });
   }
   if (contract && contractQ.data) {
-    matches.push({ kind: 'Contract', href: `/contract/${contract.id}/`, primary: contract.id });
+    matches.push({
+      kind: 'Contract',
+      href: `/contract/?id=${encodeURIComponent(contract.id)}`,
+      primary: contract.id,
+    });
   }
   if (token && tokenQ.data) {
-    matches.push({ kind: 'Token', href: `/token/${token.id}/`, primary: token.id });
+    matches.push({
+      kind: 'Token',
+      href: `/token/?id=${encodeURIComponent(token.id)}`,
+      primary: token.id,
+    });
   }
   if (address && addressQ.data) {
-    matches.push({ kind: 'Address', href: `/address/${address.addr}/`, primary: address.addr });
+    matches.push({
+      kind: 'Address',
+      href: `/address/?addr=${encodeURIComponent(address.addr)}`,
+      primary: address.addr,
+    });
   }
   if (pkh && pkhQ.data) {
     matches.push({
       kind: 'Identity (pkh)',
-      href: `/identity/lookup/${pkh.pkh}/`,
+      href: `/identity/lookup/?pkh=${encodeURIComponent(pkh.pkh)}`,
       primary: pkh.pkh,
     });
   }
   if (dpns && dpnsQ.data) {
     matches.push({
       kind: 'DPNS',
-      href: `/dpns/${encodeURIComponent(dpns.name)}/`,
+      href: `/dpns/?name=${encodeURIComponent(dpns.name)}`,
       primary: dpns.name,
     });
   }
@@ -99,7 +115,7 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   if (stHash) {
     matches.push({
       kind: 'State transition',
-      href: `/state-transition/${stHash.hash}/`,
+      href: `/state-transition/?hash=${encodeURIComponent(stHash.hash)}`,
       primary: stHash.hash,
     });
   }
@@ -107,7 +123,7 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   if (evonode) {
     matches.push({
       kind: 'Evonode',
-      href: `/evonode/${evonode.proTxHash}/`,
+      href: `/evonode/?proTxHash=${encodeURIComponent(evonode.proTxHash)}`,
       primary: evonode.proTxHash,
     });
   }
@@ -115,7 +131,7 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   if (epoch) {
     matches.push({
       kind: 'Epoch',
-      href: `/epoch/${epoch.index}/`,
+      href: `/epoch/detail/?index=${epoch.index}`,
       primary: String(epoch.index),
     });
   }

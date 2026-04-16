@@ -114,7 +114,7 @@ function Content() {
                       <Td borderColor="gray.750" textAlign="right">
                         <Button
                           as={NextLink}
-                          href={`/dpns/${encodeURIComponent(name)}/`}
+                          href={`/dpns/?name=${encodeURIComponent(name)}`}
                           size="xs"
                           variant="outline"
                           colorScheme="blue"

@@ -1,0 +1,136 @@
+'use client';
+
+import NextLink from 'next/link';
+import {
+  Box,
+  Button,
+  Table,
+  Tbody,
+  Td,
+  Text,
+  Th,
+  Thead,
+  Tr,
+} from '@chakra-ui/react';
+import { Identifier } from '@components/data/Identifier';
+import { IdentityLink } from '@components/data/IdentityLink';
+import { NotActive } from '@components/data/NotActive';
+import type { HeuristicColumn } from '@util/schema';
+import { readProp } from '@util/sdk-shape';
+
+export interface DocumentsResultsTableProps {
+  columns: HeuristicColumn[];
+  rows: Array<Record<string, unknown>>;
+  contractId: string;
+  documentType: string;
+}
+
+function renderCell(row: Record<string, unknown>, col: HeuristicColumn) {
+  const flatValue = readProp<unknown>(row, col.key);
+  // `$id` / `$ownerId` are often exposed as getters (id / ownerId) with `$`-prefix on serialised output.
+  let value = flatValue;
+  if (value === undefined) {
+    if (col.key === '$id') value = readProp<unknown>(row, 'id');
+    else if (col.key === '$ownerId') value = readProp<unknown>(row, 'ownerId');
+  }
+
+  if (value === null || value === undefined) return <NotActive />;
+
+  if (col.kind === 'identifier') {
+    const s = typeof value === 'string' ? value : String(value);
+    if (col.key === '$ownerId') return <IdentityLink id={s} dense />;
+    return <Identifier value={s} dense avatar={false} />;
+  }
+
+  if (col.kind === 'json') {
+    return (
+      <Text
+        as="span"
+        fontFamily="mono"
+        fontSize="2xs"
+        color="gray.250"
+        noOfLines={1}
+        maxW="260px"
+        display="inline-block"
+        verticalAlign="middle"
+      >
+        {JSON.stringify(value)}
+      </Text>
+    );
+  }
+
+  return (
+    <Text as="span" fontFamily="mono" fontSize="xs" color="gray.100">
+      {String(value)}
+    </Text>
+  );
+}
+
+function getDocId(row: Record<string, unknown>, fallbackIndex: number): string {
+  const id = readProp<unknown>(row, '$id') ?? readProp<unknown>(row, 'id');
+  return String(id ?? fallbackIndex);
+}
+
+export function DocumentsResultsTable({
+  columns,
+  rows,
+  contractId,
+  documentType,
+}: DocumentsResultsTableProps) {
+  if (rows.length === 0) {
+    return (
+      <Text color="gray.400" fontSize="sm">
+        No documents match these filters.
+      </Text>
+    );
+  }
+
+  return (
+    <Box overflowX="auto">
+      <Table size="sm">
+        <Thead>
+          <Tr>
+            {columns.map((c) => (
+              <Th key={c.key} color="gray.400" borderColor="gray.750">
+                {c.label}
+              </Th>
+            ))}
+            <Th borderColor="gray.750" />
+          </Tr>
+        </Thead>
+        <Tbody>
+          {rows.map((row, i) => {
+            const docId = getDocId(row, i);
+            return (
+              <Tr key={docId} _hover={{ bg: 'gray.800' }}>
+                {columns.map((c) => (
+                  <Td key={c.key} borderColor="gray.750">
+                    {renderCell(row, c)}
+                  </Td>
+                ))}
+                <Td borderColor="gray.750">
+                  <Button
+                    as={NextLink}
+                    href={`/contract/document/?id=${encodeURIComponent(contractId)}&type=${encodeURIComponent(documentType)}&docId=${encodeURIComponent(docId)}`}
+                    size="xs"
+                    variant="outline"
+                    colorScheme="blue"
+                  >
+                    Open
+                  </Button>
+                </Td>
+              </Tr>
+            );
+          })}
+        </Tbody>
+      </Table>
+    </Box>
+  );
+}
+
+export function getLastDocId(rows: Array<Record<string, unknown>>): string | undefined {
+  const last = rows[rows.length - 1];
+  if (!last) return undefined;
+  const id = readProp<unknown>(last, '$id') ?? readProp<unknown>(last, 'id');
+  return id ? String(id) : undefined;
+}

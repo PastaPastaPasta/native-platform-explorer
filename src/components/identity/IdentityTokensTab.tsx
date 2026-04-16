@@ -113,7 +113,11 @@ export function IdentityTokensTab({ identityId }: { identityId: string }) {
                 {rows.map((r) => (
                   <Tr key={r.tokenId} _hover={{ bg: 'gray.800' }}>
                     <Td borderColor="gray.750">
-                      <Identifier value={r.tokenId} href={`/token/${r.tokenId}/`} dense />
+                      <Identifier
+                        value={r.tokenId}
+                        href={`/token/?id=${encodeURIComponent(r.tokenId)}`}
+                        dense
+                      />
                     </Td>
                     <Td borderColor="gray.750" isNumeric>
                       <BigNumberDisplay value={r.balance} />

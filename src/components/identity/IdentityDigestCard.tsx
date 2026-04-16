@@ -41,7 +41,7 @@ export function IdentityDigestCard({
               <Alias
                 name={alias}
                 status={isContested ? 'contested' : 'ok'}
-                href={`/dpns/${encodeURIComponent(alias)}/`}
+                href={`/dpns/?name=${encodeURIComponent(alias)}`}
               />
             ) : null}
           </VStack>

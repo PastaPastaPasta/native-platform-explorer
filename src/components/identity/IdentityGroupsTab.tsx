@@ -74,7 +74,11 @@ export function IdentityGroupsTab({ identityId }: { identityId: string }) {
             {rows.map((r, i) => (
               <Tr key={`${r.contractId}-${r.position}-${i}`} _hover={{ bg: 'gray.800' }}>
                 <Td borderColor="gray.750">
-                  <Identifier value={r.contractId} href={`/contract/${r.contractId}/`} dense />
+                  <Identifier
+                    value={r.contractId}
+                    href={`/contract/?id=${encodeURIComponent(r.contractId)}`}
+                    dense
+                  />
                 </Td>
                 <Td borderColor="gray.750" fontFamily="mono">#{r.position}</Td>
                 <Td borderColor="gray.750" isNumeric fontFamily="mono">
@@ -83,7 +87,7 @@ export function IdentityGroupsTab({ identityId }: { identityId: string }) {
                 <Td borderColor="gray.750" textAlign="right">
                   <Button
                     as={NextLink}
-                    href={`/groups/${r.contractId}/${r.position}/`}
+                    href={`/groups/detail/?contractId=${encodeURIComponent(r.contractId)}&position=${r.position}`}
                     size="xs"
                     variant="outline"
                     colorScheme="blue"

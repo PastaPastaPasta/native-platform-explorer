@@ -14,7 +14,7 @@ export function AliasesList({ names }: { names: string[] | undefined | null }) {
   return (
     <VStack align="flex-start" spacing={2}>
       {names.map((n) => (
-        <Alias key={n} name={n} href={`/dpns/${encodeURIComponent(n)}/`} />
+        <Alias key={n} name={n} href={`/dpns/?name=${encodeURIComponent(n)}`} />
       ))}
     </VStack>
   );

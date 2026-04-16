@@ -23,7 +23,7 @@ export function IdentityLink({
     <HStack spacing={2} as="span" display="inline-flex">
       <Identifier
         value={id}
-        href={`/identity/${id}/`}
+        href={`/identity/?id=${encodeURIComponent(id)}`}
         avatar={avatar}
         dense={dense}
         highlight="both"
@@ -32,7 +32,7 @@ export function IdentityLink({
         <Alias
           name={alias}
           status={isContested ? 'contested' : 'ok'}
-          href={`/dpns/${encodeURIComponent(alias)}/`}
+          href={`/dpns/?name=${encodeURIComponent(alias)}`}
           size="xs"
         />
       ) : null}

@@ -175,7 +175,7 @@ export default function Page() {
                       <Td borderColor="gray.750">
                         <Identifier
                           value={row.proTxHash}
-                          href={`/evonode/${row.proTxHash}/`}
+                          href={`/evonode/?proTxHash=${encodeURIComponent(row.proTxHash)}`}
                           avatar
                           dense
                         />

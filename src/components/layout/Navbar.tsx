@@ -23,9 +23,9 @@ import { NetworkStatus } from './NetworkStatus';
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
   { href: '/', label: 'Home' },
-  { href: '/identity/lookup/placeholder', label: 'Identities' },
-  { href: '/contract/placeholder', label: 'Contracts' },
-  { href: '/token/placeholder', label: 'Tokens' },
+  { href: '/identity/lookup/', label: 'Identities' },
+  { href: '/contract/', label: 'Contracts' },
+  { href: '/token/', label: 'Tokens' },
   { href: '/dpns/search', label: 'DPNS' },
   { href: '/epoch', label: 'Epoch' },
   { href: '/governance/contested', label: 'Governance' },

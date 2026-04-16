@@ -133,7 +133,11 @@ function Content() {
                 <Text fontSize="xs" color="gray.400" textTransform="uppercase">
                   Contract
                 </Text>
-                <Identifier value={contractFromUrl} href={`/contract/${contractFromUrl}/`} dense />
+                <Identifier
+                  value={contractFromUrl}
+                  href={`/contract/?id=${encodeURIComponent(contractFromUrl)}`}
+                  dense
+                />
               </HStack>
               {contractQ.isLoading ? (
                 <LoadingCard lines={1} />
@@ -190,7 +194,7 @@ function Content() {
                     <WrapItem key={i}>
                       <Button
                         as={NextLink}
-                        href={`/governance/contested/${contractFromUrl}/${docTypeFromUrl}/${indexName}/${encoded}/`}
+                        href={`/governance/contested/detail/?contract=${encodeURIComponent(contractFromUrl)}&docType=${encodeURIComponent(docTypeFromUrl)}&indexName=${encodeURIComponent(indexName)}&indexValues=${encoded}`}
                         size="sm"
                         variant="outline"
                         colorScheme="blue"

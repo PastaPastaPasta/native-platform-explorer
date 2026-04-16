@@ -234,7 +234,7 @@ export default function HomePage() {
                 <WrapItem key={w.id}>
                   <Button
                     as={NextLink}
-                    href={`/contract/${w.id}/`}
+                    href={`/contract/?id=${encodeURIComponent(w.id)}`}
                     size="sm"
                     variant="outline"
                     colorScheme="blue"
