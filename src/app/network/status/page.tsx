@@ -22,25 +22,13 @@ import { useCurrentQuorumsInfo, useSystemStatus } from '@sdk/queries';
 import { toPlain } from '@util/contract';
 import { getTimeDelta } from '@util/datetime';
 
-function Uptime({ lastBlockTimeMs }: { lastBlockTimeMs: number | null }) {
+function Uptime({ lastBlockTimeMs }: { lastBlockTimeMs: number }) {
   const [tick, setTick] = useState(0);
   useEffect(() => {
     const id = window.setInterval(() => setTick((t) => t + 1), 1000);
     return () => window.clearInterval(id);
   }, []);
   void tick;
-  if (lastBlockTimeMs === null) {
-    return (
-      <VStack align="flex-start" spacing={0}>
-        <Text fontFamily="mono" fontSize="md" color="gray.400">
-          —
-        </Text>
-        <Text fontSize="2xs" color="gray.500">
-          not exposed in status response
-        </Text>
-      </VStack>
-    );
-  }
   const d = getTimeDelta(lastBlockTimeMs);
   const abs = new Date(lastBlockTimeMs).toLocaleString();
   return (
@@ -53,15 +41,6 @@ function Uptime({ lastBlockTimeMs }: { lastBlockTimeMs: number | null }) {
       </Text>
     </VStack>
   );
-}
-
-function showPrimitive(v: unknown): string {
-  if (v === null || v === undefined) return '—';
-  if (typeof v === 'string') return v;
-  if (typeof v === 'number' || typeof v === 'bigint' || typeof v === 'boolean') {
-    return String(v);
-  }
-  return '—';
 }
 
 function firstNum(...vals: unknown[]): number | null {
@@ -172,78 +151,96 @@ export default function Page() {
           <ErrorCard error={statusQ.error} onRetry={() => statusQ.refetch()} />
         ) : (
           <>
-            <SimpleGrid columns={{ base: 1, md: 2, lg: 4 }} spacing={3}>
-              <InfoBlock>
-                <InfoLine
-                  label="Block height"
-                  value={
-                    <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                      {height !== null ? height.toLocaleString() : '—'}
-                    </Text>
-                  }
-                />
-              </InfoBlock>
-              <InfoBlock>
-                <InfoLine
-                  label="Chain ID"
-                  value={
-                    <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                      {chainIdStr || '—'}
-                    </Text>
-                  }
-                />
-              </InfoBlock>
-              <InfoBlock>
-                <Tooltip
-                  hasArrow
-                  label="Number of other masternodes this particular node is currently gossiping with at the Tenderdash P2P layer. Local to the responding node — not a network-wide total."
-                >
-                  <div>
+            {(() => {
+              const cards: React.ReactNode[] = [];
+              if (height !== null) {
+                cards.push(
+                  <InfoBlock key="height">
                     <InfoLine
-                      label="Peers (this node)"
+                      label="Block height"
                       value={
                         <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                          {peers !== null ? peers : '—'}
+                          {height.toLocaleString()}
                         </Text>
                       }
                     />
-                  </div>
-                </Tooltip>
-              </InfoBlock>
-              <InfoBlock>
-                <InfoLine
-                  label="Last block"
-                  value={<Uptime lastBlockTimeMs={latestBlockMs} />}
-                />
-              </InfoBlock>
-            </SimpleGrid>
+                  </InfoBlock>,
+                );
+              }
+              if (chainIdStr) {
+                cards.push(
+                  <InfoBlock key="chainId">
+                    <InfoLine
+                      label="Chain ID"
+                      value={
+                        <Text fontFamily="mono" fontSize="xl" color="gray.100">
+                          {chainIdStr}
+                        </Text>
+                      }
+                    />
+                  </InfoBlock>,
+                );
+              }
+              if (peers !== null) {
+                cards.push(
+                  <InfoBlock key="peers">
+                    <Tooltip
+                      hasArrow
+                      label="Number of other masternodes this particular node is currently gossiping with at the Tenderdash P2P layer. Local to the responding node — not a network-wide total."
+                    >
+                      <div>
+                        <InfoLine
+                          label="Peers (this node)"
+                          value={
+                            <Text fontFamily="mono" fontSize="xl" color="gray.100">
+                              {peers}
+                            </Text>
+                          }
+                        />
+                      </div>
+                    </Tooltip>
+                  </InfoBlock>,
+                );
+              }
+              if (latestBlockMs !== null) {
+                cards.push(
+                  <InfoBlock key="last-block">
+                    <InfoLine
+                      label="Last block"
+                      value={<Uptime lastBlockTimeMs={latestBlockMs} />}
+                    />
+                  </InfoBlock>,
+                );
+              }
+              if (cards.length === 0) return null;
+              const cols = Math.min(cards.length, 4);
+              return (
+                <SimpleGrid columns={{ base: 1, md: Math.min(cols, 2), lg: cols }} spacing={3}>
+                  {cards}
+                </SimpleGrid>
+              );
+            })()}
 
-            <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={3}>
-              <InfoBlock>
-                <InfoLine
-                  label="Latest block hash"
-                  value={
-                    latestBlockHash ? (
-                      <Identifier value={latestBlockHash} avatar={false} dense copy />
-                    ) : (
-                      <Text fontFamily="mono">—</Text>
-                    )
-                  }
-                />
-              </InfoBlock>
-              <InfoBlock>
-                <InfoLine
-                  label="This node's proTxHash"
-                  value={
-                    proTxHash ? (
-                      <Identifier value={proTxHash} avatar={false} dense copy />
-                    ) : (
-                      <Text fontFamily="mono">{showPrimitive(proTxHash)}</Text>
-                    )
-                  }
-                />
-              </InfoBlock>
-            </SimpleGrid>
+            {(latestBlockHash || proTxHash) ? (
+              <SimpleGrid columns={{ base: 1, lg: 2 }} spacing={3}>
+                {latestBlockHash ? (
+                  <InfoBlock>
+                    <InfoLine
+                      label="Latest block hash"
+                      value={<Identifier value={latestBlockHash} avatar={false} dense copy />}
+                    />
+                  </InfoBlock>
+                ) : null}
+                {proTxHash ? (
+                  <InfoBlock>
+                    <InfoLine
+                      label="This node's proTxHash"
+                      value={<Identifier value={proTxHash} avatar={false} dense copy />}
+                    />
+                  </InfoBlock>
+                ) : null}
+              </SimpleGrid>
+            ) : null}
 
             <InfoBlock>
               <Heading size="sm" color="gray.100" mb={3}>
