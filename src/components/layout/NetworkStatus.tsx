@@ -12,8 +12,8 @@ export function NetworkStatus() {
 
   switch (status) {
     case 'ready':
-      label = trusted ? 'Proofs verified' : 'Connected';
-      color = trusted ? 'success' : 'brand.light';
+      label = trusted ? 'Proofs verified' : 'Untrusted mode';
+      color = trusted ? 'success' : 'warning';
       tooltip = trusted
         ? 'Queries return cryptographic proofs verified by the WASM SDK in your browser.'
         : 'Untrusted mode: responses are fetched without proof verification.';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, HStack, Heading, VStack, Wrap, WrapItem } from '@chakra-ui/react';
+import { HStack, Heading, VStack, Wrap, WrapItem } from '@chakra-ui/react';
 import { Identifier } from '@components/data/Identifier';
 import { CreditsBlock } from '@components/data/CreditsBlock';
 import { InfoLine } from '@components/data/InfoLine';
@@ -8,15 +8,24 @@ import { Alias } from '@components/data/Alias';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useDpnsAlias } from '@sdk/useDpnsAlias';
 import { NotActive } from '@components/data/NotActive';
+import { ProofChip } from '@components/data/ProofChip';
+import type { ProofState } from '@sdk/proofs';
 
 export interface IdentityDigestCardProps {
   id: string;
   balance: bigint | null | undefined;
   revision: bigint | number | null | undefined;
   nonce: bigint | null | undefined;
+  proofState?: ProofState;
 }
 
-export function IdentityDigestCard({ id, balance, revision, nonce }: IdentityDigestCardProps) {
+export function IdentityDigestCard({
+  id,
+  balance,
+  revision,
+  nonce,
+  proofState,
+}: IdentityDigestCardProps) {
   const { alias, isContested } = useDpnsAlias(id);
 
   return (
@@ -36,19 +45,7 @@ export function IdentityDigestCard({ id, balance, revision, nonce }: IdentityDig
               />
             ) : null}
           </VStack>
-          <Badge
-            bg="gray.800"
-            color="gray.400"
-            border="1px solid"
-            borderColor="gray.750"
-            fontSize="2xs"
-            px={2}
-            py={1}
-            borderRadius="md"
-            textTransform="none"
-          >
-            Proof status · TBD (Stage 5)
-          </Badge>
+          {proofState ? <ProofChip proofState={proofState} /> : null}
         </HStack>
 
         <Wrap spacing={8}>

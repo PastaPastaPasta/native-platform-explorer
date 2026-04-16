@@ -29,7 +29,9 @@ import { IdentityVotesTab } from '@components/identity/IdentityVotesTab';
 import { ViewedIdentitiesBanner } from '@components/identity/ViewedIdentitiesBanner';
 import { AliasesList } from '@components/data/AliasesList';
 import { CodeBlock } from '@components/data/CodeBlock';
+import { ProofFailureBanner } from '@components/data/ProofFailureBanner';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { aggregateProof } from '@sdk/proofs';
 import {
   useIdentity,
   useIdentityBalanceAndRevision,
@@ -151,12 +153,36 @@ export default function IdentityView({ id: fromServer }: { id: string }) {
         ) : (
           <>
             <ViewedIdentitiesBanner identityId={id} />
-            <IdentityDigestCard
-              id={id}
-              balance={balanceAndRevision?.balance ?? null}
-              revision={balanceAndRevision?.revision ?? null}
-              nonce={(nonceQ.data as bigint | null | undefined) ?? null}
-            />
+            {(() => {
+              const agg = aggregateProof([
+                identityQ.proofState,
+                balanceQ.proofState,
+                keysQ.proofState,
+                nonceQ.proofState,
+                aliasesQ.proofState,
+              ]);
+              return (
+                <>
+                  <ProofFailureBanner
+                    proofState={agg}
+                    onRetry={() => {
+                      identityQ.refetch();
+                      balanceQ.refetch();
+                      keysQ.refetch();
+                      nonceQ.refetch();
+                      aliasesQ.refetch();
+                    }}
+                  />
+                  <IdentityDigestCard
+                    id={id}
+                    balance={balanceAndRevision?.balance ?? null}
+                    revision={balanceAndRevision?.revision ?? null}
+                    nonce={(nonceQ.data as bigint | null | undefined) ?? null}
+                    proofState={agg}
+                  />
+                </>
+              );
+            })()}
 
             <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">

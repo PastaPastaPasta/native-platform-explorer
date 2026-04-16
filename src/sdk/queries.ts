@@ -1,38 +1,52 @@
 'use client';
 
-import { useQuery, useQueries, type UseQueryOptions } from '@tanstack/react-query';
+import {
+  useQuery,
+  useQueries,
+  type UseQueryOptions,
+  type UseQueryResult,
+} from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { useSdk } from './hooks';
 import { getConfig } from '@/config';
+import { classifyProof, type ProofState } from './proofs';
 
 type Awaited<T> = T extends Promise<infer U> ? U : T;
 
+export type SdkQueryResult<TData> = UseQueryResult<TData, Error> & {
+  proofState: ProofState;
+};
+
+interface SdkQueryOpts<TData>
+  extends Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'> {
+  /** Does the underlying SDK method expose a `…WithProof` sibling? Defaults to true. */
+  hasProofVariant?: boolean;
+}
+
 /**
- * Core hook: runs a query against the current SDK only when it is ready.
- * Every cache key is prefixed with (network, trusted) so clients do not see
- * stale responses across network switches.
- *
- * The queryKey is constructed inline on every render — React Query uses
- * structural equality on keys, so an identical-by-value fresh array does
- * not trigger a refetch. We intentionally do not `useMemo` the key: a
- * memo keyed on `key` itself is a no-op because callers pass a new inline
- * array each render.
+ * Core hook: runs a query against the current SDK only when it is ready,
+ * and annotates the return with a `proofState` derived from (a) whether
+ * the underlying facade method has a proof variant and (b) the current
+ * trusted flag. Every cache key is prefixed with (network, trusted).
  */
 function useSdkQuery<TData>(
   key: readonly unknown[],
   fn: (sdk: EvoSDK) => Promise<TData>,
-  opts?: Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'>,
-) {
+  opts?: SdkQueryOpts<TData>,
+): SdkQueryResult<TData> {
   const { sdk, status, network, trusted } = useSdk();
-  return useQuery<TData, Error>({
+  const { hasProofVariant = true, ...rest } = opts ?? {};
+  const q = useQuery<TData, Error>({
     queryKey: ['npe', network, trusted, ...key],
     queryFn: async () => {
       if (!sdk) throw new Error('SDK not ready');
       return fn(sdk);
     },
-    enabled: status === 'ready' && !!sdk && (opts?.enabled ?? true),
-    ...opts,
+    enabled: status === 'ready' && !!sdk && (rest.enabled ?? true),
+    ...rest,
   });
+  const proofState = classifyProof(q, { trusted, hasProofVariant });
+  return Object.assign(q, { proofState });
 }
 
 // ----- staleTime conventions from PRD §11.2 -----
@@ -193,7 +207,7 @@ export function useDpnsResolve(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'resolveName', name],
     (sdk) => sdk.dpns.resolveName(name!) as Promise<unknown>,
-    { enabled: !!name, staleTime: STRUCTURAL },
+    { enabled: !!name, staleTime: STRUCTURAL, hasProofVariant: false },
   );
 }
 
@@ -225,7 +239,7 @@ export function useDpnsIsAvailable(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'isNameAvailable', name],
     (sdk) => sdk.dpns.isNameAvailable(name!) as Promise<unknown>,
-    { enabled: !!name, staleTime: LIVE },
+    { enabled: !!name, staleTime: LIVE, hasProofVariant: false },
   );
 }
 
@@ -233,7 +247,7 @@ export function useDpnsIsContested(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'isContestedUsername', name],
     (sdk) => sdk.dpns.isContestedUsername(name!) as Promise<unknown>,
-    { enabled: !!name, staleTime: STRUCTURAL },
+    { enabled: !!name, staleTime: STRUCTURAL, hasProofVariant: false },
   );
 }
 
@@ -241,7 +255,7 @@ export function useDpnsIsValid(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'isValidUsername', name],
     (sdk) => sdk.dpns.isValidUsername(name!) as Promise<unknown>,
-    { enabled: !!name, staleTime: IMMUTABLE },
+    { enabled: !!name, staleTime: IMMUTABLE, hasProofVariant: false },
   );
 }
 
@@ -252,7 +266,7 @@ export function useStateTransitionResult(hash: string | undefined) {
   return useSdkQuery(
     ['stateTransitions', 'waitForStateTransitionResult', hash],
     (sdk) => sdk.stateTransitions.waitForStateTransitionResult(hash!) as Promise<unknown>,
-    { enabled: !!hash, staleTime: LIVE },
+    { enabled: !!hash, staleTime: LIVE, hasProofVariant: false },
   );
 }
 
@@ -383,11 +397,12 @@ export function useEvonodesBlocksByIds(epoch: number | undefined, ids: string[] 
 }
 
 // ----- system -----
+// system.status and currentQuorumsInfo have no WithProof variants per PRD §16.
 export function useSystemStatus() {
   return useSdkQuery(
     ['system', 'status'],
     (sdk) => sdk.system.status() as Promise<unknown>,
-    { staleTime: LIVE },
+    { staleTime: LIVE, hasProofVariant: false },
   );
 }
 
@@ -395,7 +410,7 @@ export function useCurrentQuorumsInfo() {
   return useSdkQuery(
     ['system', 'currentQuorumsInfo'],
     (sdk) => sdk.system.currentQuorumsInfo() as Promise<unknown>,
-    { staleTime: LIVE },
+    { staleTime: LIVE, hasProofVariant: false },
   );
 }
 
