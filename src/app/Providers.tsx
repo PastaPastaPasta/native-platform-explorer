@@ -9,6 +9,7 @@ import { theme } from '@styles/theme';
 import { SdkProvider } from '@sdk/SdkProvider';
 import { BreadcrumbsProvider } from '@contexts/BreadcrumbsContext';
 import { ErrorBoundary } from '@components/layout/ErrorBoundary';
+import { SignerProvider } from '@/signer/SignerProvider';
 
 function makeQueryClient() {
   return new QueryClient({
@@ -31,9 +32,11 @@ export function Providers({ children }: { children: ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <NuqsAdapter>
             <SdkProvider>
-              <BreadcrumbsProvider>
-                <ErrorBoundary>{children}</ErrorBoundary>
-              </BreadcrumbsProvider>
+              <SignerProvider>
+                <BreadcrumbsProvider>
+                  <ErrorBoundary>{children}</ErrorBoundary>
+                </BreadcrumbsProvider>
+              </SignerProvider>
             </SdkProvider>
           </NuqsAdapter>
         </QueryClientProvider>

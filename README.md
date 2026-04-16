@@ -6,11 +6,48 @@ Designed as a sibling of [`pshenmic/platform-explorer`](https://github.com/pshen
 
 ## Status
 
-This repository contains the planning artifacts for the project.
+All six build stages shipped. The read surface is fully covered; write mode
+is wired through a representative set of state-transition forms (identity
+top-up, DPNS register, raw broadcast) that exercise the shared
+`OperationShell` flow. Remaining forms — document CRUD, contract publish /
+update, every token action, masternode vote, address-based funding — plug
+into the same shell and are tracked as follow-up polish.
 
 - Full product requirements: [`docs/PRD.md`](docs/PRD.md)
+- Per-stage progress + commit SHAs: [`docs/progress.md`](docs/progress.md)
 - Implementation plan, broken into 6 sequential stages: [`docs/prompts/`](docs/prompts/)
-- Live progress tracking: [`docs/progress.md`](docs/progress.md) (created when Stage 1 begins)
+
+## Development
+
+```
+pnpm install
+pnpm dev       # Next.js dev server on http://localhost:3000
+pnpm build     # static export to out/
+pnpm lint
+pnpm typecheck
+pnpm test      # vitest
+pnpm e2e       # playwright
+```
+
+Environment variables live in `.env.local.example` — copy to `.env.local`
+and edit. The most important one is `NEXT_PUBLIC_DISABLE_WRITE_MODE=true`
+for kiosk / read-only deployments: it hides `/wallet` and `/broadcast`
+while keeping the rest of the explorer identical.
+
+## Write mode
+
+Opt-in. The explorer never stores keys: the mnemonic and WIF adapters keep
+secrets only in tab memory and zero them on disconnect, idle-timeout, or
+reload. Extension support is detection-only until the
+`dash-platform-extension` public API stabilises. See [`/about`](src/app/about/page.tsx)
+for the full proof + privacy explainer.
+
+## Deploy
+
+The build output is a plain `out/` directory. Any static host works — Vercel,
+Netlify, Cloudflare Pages, GitHub Pages, IPFS. A deploy workflow
+(`.github/workflows/deploy.yml`) is a follow-up; the existing `ci.yml`
+already runs lint / typecheck / test / build / e2e on every push.
 
 ## Build plan
 
