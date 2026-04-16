@@ -24,6 +24,7 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { Alias } from '@components/data/Alias';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { CursorPagination } from '@components/pagination/CursorPagination';
+import { DpnsDirectoryPanel } from '@components/identity/DpnsDirectoryPanel';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useDpnsPrefixSearch } from '@sdk/queries';
 import { useSdk } from '@sdk/hooks';
@@ -208,6 +209,8 @@ function Content() {
             </HStack>
           ) : null}
         </InfoBlock>
+
+        <DpnsDirectoryPanel />
       </VStack>
     </Container>
   );
