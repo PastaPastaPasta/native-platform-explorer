@@ -354,6 +354,35 @@ export function useDocumentsQuery(params: DocumentsQueryParams | undefined) {
   );
 }
 
+// ----- token-history direct-purchase (partial enumeration path) -----
+// token-history is keyed by (tokenId, …) on every index, so you can't use it
+// to enumerate tokens you don't already know about. The one exception is the
+// `directPurchase` type, which exposes `byPurchaseCost` — a one-field index
+// on purchaseCost alone. Paginating that index gives us every direct-purchase
+// event across all tokens; each event carries its tokenId, so we get a real
+// (partial) discovery path: "tokens seen in direct-purchase history".
+export function useTokenHistoryDirectPurchases(
+  tokenHistoryContractId: string | undefined,
+  limit = 25,
+  startAfter?: string,
+) {
+  return useSdkQuery(
+    ['documents', 'query', 'tokenHistory', 'directPurchase', tokenHistoryContractId, limit, startAfter ?? ''],
+    (sdk) =>
+      sdk.documents.query({
+        dataContractId: tokenHistoryContractId!,
+        documentTypeName: 'directPurchase',
+        // purchaseCost >= 0 is always true (schema minimum is 0); this lets
+        // the query hit the byPurchaseCost index without adding a real filter.
+        where: [['purchaseCost', '>=', 0]],
+        orderBy: [['purchaseCost', 'asc']],
+        limit,
+        startAfter,
+      } as never) as Promise<unknown>,
+    { enabled: !!tokenHistoryContractId, staleTime: LIVE },
+  );
+}
+
 // ----- dpns prefix search -----
 // The SDK's `dpns.usernames` takes { identityId } — it lists the names a given
 // identity owns, not a prefix search. Real prefix search runs through

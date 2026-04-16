@@ -14,6 +14,7 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { LookupInput } from '@ui/LookupInput';
 import { WELL_KNOWN } from '@constants/well-known';
 import { Identifier } from '@components/data/Identifier';
+import { TokenDiscoveryPanel } from '@components/token/TokenDiscoveryPanel';
 import { isBase58Identifier } from '@util/identifier';
 
 export function TokenLanding() {
@@ -72,6 +73,8 @@ export function TokenLanding() {
             </Wrap>
           </InfoBlock>
         ) : null}
+
+        <TokenDiscoveryPanel />
 
         <InfoBlock>
           <VStack align="flex-start" spacing={2}>
