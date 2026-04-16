@@ -65,9 +65,16 @@ const IDLE_TIMEOUT_MS = 10 * 60_000;
 
 export function SignerProvider({ children }: { children: ReactNode }) {
   const [signer, setSigner] = useState<ExplorerSigner | null>(null);
-  // Surfaces the previous-session hint once, on mount; disconnect() clears it.
-  const [stash, setStash] = useState<SignerStash | null>(() => readStash());
+  // Surfaces the previous-session hint. Initial value must be null on both
+  // server and client to avoid a hydration mismatch; the useEffect below pulls
+  // the real stash from sessionStorage after mount.
+  const [stash, setStash] = useState<SignerStash | null>(null);
   const idleTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    const s = readStash();
+    if (s) setStash(s);
+  }, []);
 
   const disconnect = useCallback(() => {
     setSigner((s) => {

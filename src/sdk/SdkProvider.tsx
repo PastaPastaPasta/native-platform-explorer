@@ -57,16 +57,29 @@ async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKT
 
 export function SdkProvider({ children }: { children: ReactNode }) {
   const config = getConfig();
-  const [network, setNetworkState] = useState<Network>(() =>
-    readStoredNetwork(config.defaultNetwork ?? DEFAULT_NETWORK),
-  );
-  const [trusted, setTrustedState] = useState<boolean>(() =>
-    readStoredTrusted(config.trustedMode),
-  );
+  // Initial state is the build-time / env fallback so SSR + first client render
+  // agree (otherwise hydration mismatches: server sees window=undefined and
+  // returns the fallback, client reads localStorage and may return the other
+  // choice). After hydration the useEffect below pulls the stored values in.
+  const defaultNetwork: Network = config.defaultNetwork ?? DEFAULT_NETWORK;
+  const defaultTrusted = config.trustedMode;
+  const [network, setNetworkState] = useState<Network>(defaultNetwork);
+  const [trusted, setTrustedState] = useState<boolean>(defaultTrusted);
   const [sdk, setSdk] = useState<EvoSDKType | null>(null);
   const [status, setStatus] = useState<SdkStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
   const connectSeq = useRef(0);
+
+  // Hydrate the stored preferences after mount. Both writes fire synchronously
+  // in a single render cycle, so the SDK connect useEffect below sees the
+  // final (network, trusted) pair.
+  useEffect(() => {
+    const storedNet = readStoredNetwork(defaultNetwork);
+    const storedTrust = readStoredTrusted(defaultTrusted);
+    if (storedNet !== defaultNetwork) setNetworkState(storedNet);
+    if (storedTrust !== defaultTrusted) setTrustedState(storedTrust);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const connect = useCallback(
     async (net: Network, isTrusted: boolean) => {

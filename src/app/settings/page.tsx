@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Heading,
@@ -22,11 +22,16 @@ import type { Network } from '@sdk/networks';
 const DIAG_KEY = 'npe:diagnosticsEnabled';
 
 function useLocalStorageBool(key: string, fallback: boolean) {
-  const [val, setVal] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return fallback;
+  // Initial state must match SSR output (no localStorage). The useEffect below
+  // pulls the real stored value on mount.
+  const [val, setVal] = useState<boolean>(fallback);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
     const raw = window.localStorage.getItem(key);
-    return raw === 'true' ? true : raw === 'false' ? false : fallback;
-  });
+    const next = raw === 'true' ? true : raw === 'false' ? false : fallback;
+    if (next !== val) setVal(next);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
   return [
     val,
     (next: boolean) => {
