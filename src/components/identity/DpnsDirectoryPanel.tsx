@@ -143,22 +143,34 @@ export function DpnsDirectoryPanel() {
               </Thead>
               <Tbody>
                 {rows.map((row, i) => {
+                  // `label` preserves original casing (e.g. "Alice"); keep it.
+                  // `normalizedLabel` is homograph-safe (o→0, i/l→1) and unsafe
+                  // to display. Fall back to it only when `label` is missing.
                   const label =
                     (readProp<string>(row, 'label') as string | undefined) ??
                     (readProp<string>(row, 'normalizedLabel') as string | undefined) ??
                     '';
-                  const ownerId = idToString(
-                    readProp(row, '$ownerId') ?? readProp(row, 'ownerId'),
-                  );
+                  // For DPNS, the beneficiary identity is `records.identity`;
+                  // `$ownerId` is the submitter of the state transition, which
+                  // usually matches but can differ when a name is registered
+                  // on behalf of another identity.
+                  const records = readProp<Record<string, unknown>>(row, 'records');
+                  const ownerId =
+                    idToString(records ? readProp(records, 'identity') : undefined) ??
+                    idToString(readProp(row, '$ownerId') ?? readProp(row, 'ownerId'));
                   const key = docIdOf(row) ?? `${label}-${i}`;
                   if (!label) return null;
-                  const fqdn = `${label.toLowerCase()}.dash`;
+                  // Use normalized label in the URL (DPNS name lookups key off
+                  // the homograph-safe form) but render the original label.
+                  const fqdn = `${label}.dash`;
+                  const normalizedFqdn =
+                    ((readProp<string>(row, 'normalizedLabel') as string | undefined) ?? label.toLowerCase()) + '.dash';
                   return (
                     <Tr key={key} _hover={{ bg: 'gray.800' }}>
                       <Td borderColor="gray.750">
                         <Alias
                           name={fqdn}
-                          href={`/dpns/?name=${encodeURIComponent(fqdn)}`}
+                          href={`/dpns/?name=${encodeURIComponent(normalizedFqdn)}`}
                         />
                       </Td>
                       <Td borderColor="gray.750">
