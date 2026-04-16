@@ -401,14 +401,28 @@ export function useFinalizedEpochInfo(index: number | undefined) {
 export function useEvonodesBlocksByRange(epoch: number | undefined, limit = 100) {
   // EvonodeProposedBlocksRangeQuery accepts { epoch, limit, startAfter } only.
   // Ordering is proTxHash-ascending on the server; we sort by count client-side
-  // in evonodesMapToBars.
+  // in evonodesMapToBars. Server caps `limit` at 100 — use
+  // `useAllEvonodeBlocksInEpoch` when you need every proposer.
   return useSdkQuery(
     ['epoch', 'evonodesProposedBlocksByRange', epoch, limit],
     (sdk) =>
       sdk.epoch.evonodesProposedBlocksByRange({
         epoch: epoch!,
-        limit,
+        limit: Math.min(limit, 100),
       }) as Promise<unknown>,
+    { enabled: epoch !== undefined, staleTime: LIVE },
+  );
+}
+
+/** Paginated: walks `startAfter` across pages of 100 until every proposer in
+ *  the epoch is returned. Returns a plain Map<proTxHash, blocks>. */
+export function useAllEvonodeBlocksInEpoch(epoch: number | undefined) {
+  return useSdkQuery(
+    ['epoch', 'evonodesProposedBlocksByRange', 'all', epoch],
+    async (sdk) => {
+      const { fetchAllEvonodeBlocks } = await import('@util/epoch');
+      return fetchAllEvonodeBlocks(sdk as never, epoch!);
+    },
     { enabled: epoch !== undefined, staleTime: LIVE },
   );
 }

@@ -24,12 +24,12 @@ import { BigNumberDisplay } from '@components/data/BigNumber';
 import { NotActive } from '@components/data/NotActive';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
+  useAllEvonodeBlocksInEpoch,
   useCurrentEpoch,
-  useEvonodesBlocksByRange,
   useProtocolVersionUpgradeVoteStatus,
 } from '@sdk/queries';
 import { shortId } from '@util/identifier';
-import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
+import { normaliseEpoch } from '@util/epoch';
 import { useSdk } from '@sdk/hooks';
 
 function Content() {
@@ -46,15 +46,16 @@ function Content() {
   const currentQ = useCurrentEpoch();
   const currentIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : undefined;
 
-  // Pull the full proposer map for the current epoch (large limit) and pluck
-  // our entry out of it. The SDK's `evonodesProposedBlocksByIds` variant
-  // exists but its return-map keying is fiddly; scanning the range result is
-  // more reliable and gives us rank + share for free.
-  const allBlocksQ = useEvonodesBlocksByRange(
-    proTxHash ? currentIdx : undefined,
-    1000,
-  );
-  const allBars = evonodesMapToBars(allBlocksQ.data);
+  // Paginate through every proposer for the current epoch (server caps each
+  // page at 100). Gives us rank + share + block count in one walk.
+  const allBlocksQ = useAllEvonodeBlocksInEpoch(proTxHash ? currentIdx : undefined);
+  const allBars = (() => {
+    const m = allBlocksQ.data as Map<string, number> | undefined;
+    if (!m) return [] as Array<{ proTxHash: string; blocks: number }>;
+    return [...m.entries()]
+      .map(([p, b]) => ({ proTxHash: p, blocks: b }))
+      .sort((a, b) => b.blocks - a.blocks);
+  })();
   const myIndex = allBars.findIndex((b) => b.proTxHash === proTxHash);
   const myEntry = myIndex >= 0 ? allBars[myIndex] : null;
   const total = allBars.reduce((a, b) => a + b.blocks, 0);

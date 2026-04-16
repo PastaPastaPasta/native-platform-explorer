@@ -73,6 +73,51 @@ export function normaliseEpoch(input: unknown): NormalisedEpoch {
   };
 }
 
+// Server caps limit at 100 per request. When we need every proposer in an
+// epoch (e.g. to compute rank + share for a single evonode), walk pages via
+// `startAfter` until we've seen every entry. Hard-capped to prevent runaway
+// calls on pathologically large epochs.
+const PAGE_LIMIT = 100;
+const MAX_PAGES = 50;
+
+export async function fetchAllEvonodeBlocks(
+  sdk: {
+    epoch: {
+      evonodesProposedBlocksByRange: (q: {
+        epoch: number;
+        limit?: number;
+        startAfter?: string;
+      }) => Promise<Map<unknown, unknown>>;
+    };
+  },
+  epoch: number,
+): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  let cursor: string | undefined = undefined;
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const result = await sdk.epoch.evonodesProposedBlocksByRange({
+      epoch,
+      limit: PAGE_LIMIT,
+      startAfter: cursor,
+    });
+    if (!(result instanceof Map) || result.size === 0) break;
+    let lastKey: string | undefined;
+    for (const [key, val] of result) {
+      const proTxHash = typeof key === 'string' ? key : String(key);
+      if (!proTxHash) continue;
+      const blocks = typeof val === 'bigint' ? Number(val) : Number(val ?? 0);
+      // De-dupe just in case the server overlaps a cursor.
+      if (!out.has(proTxHash)) {
+        out.set(proTxHash, blocks);
+      }
+      lastKey = proTxHash;
+    }
+    if (!lastKey || result.size < PAGE_LIMIT) break;
+    cursor = lastKey;
+  }
+  return out;
+}
+
 export function evonodesMapToBars(
   m: unknown,
 ): Array<{ proTxHash: string; blocks: number }> {
