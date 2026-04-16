@@ -153,7 +153,6 @@ function Content() {
           />
         ) : (
           <>
-            <ViewedIdentitiesBanner identityId={id} />
             {(() => {
               const agg = aggregateProof([
                 identityQ.proofState,
@@ -179,11 +178,13 @@ function Content() {
                     balance={balanceAndRevision?.balance ?? null}
                     revision={balanceAndRevision?.revision ?? null}
                     nonce={(nonceQ.data as bigint | null | undefined) ?? null}
+                    aliases={aliases}
                     proofState={agg}
                   />
                 </>
               );
             })()}
+            <ViewedIdentitiesBanner identityId={id} />
 
             <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">

@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Button, HStack, Text } from '@chakra-ui/react';
-import { InfoBlock } from '@ui/InfoBlock';
+import { Box, Button, HStack, Text } from '@chakra-ui/react';
 import { useViewedIdentities } from '@hooks/useViewedIdentities';
 
 const DISMISSED_KEY = 'npe:viewedIdentitiesBannerDismissed';
 
+/** Small, low-contrast hint that appears beneath the identity digest. Does
+ *  not compete with the hero card for visual weight. */
 export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
   const { consent, setConsent, record } = useViewedIdentities();
   const [dismissed, setDismissed] = useState(true);
@@ -30,15 +31,22 @@ export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
   if (consent || dismissed) return null;
 
   return (
-    <InfoBlock>
+    <Box
+      px={3}
+      py={1.5}
+      borderRadius="md"
+      bg="rgba(35,44,48,0.4)"
+      border="1px dashed"
+      borderColor="whiteAlpha.100"
+    >
       <HStack justify="space-between" flexWrap="wrap" spacing={3}>
-        <Text fontSize="sm" color="gray.250">
-          Remember identities you&apos;ve viewed? It lets the token-holders seed list auto-fill.
-          Stored only in your browser; cleared on request.
+        <Text fontSize="xs" color="gray.400">
+          Remember identities you view? Seeds the token-holders form.
         </Text>
-        <HStack spacing={2}>
+        <HStack spacing={1}>
           <Button
-            size="sm"
+            size="xs"
+            variant="ghost"
             colorScheme="blue"
             onClick={() => {
               setConsent(true);
@@ -47,11 +55,11 @@ export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
           >
             Remember
           </Button>
-          <Button size="sm" variant="ghost" onClick={dismiss}>
-            No thanks
+          <Button size="xs" variant="ghost" onClick={dismiss}>
+            Dismiss
           </Button>
         </HStack>
       </HStack>
-    </InfoBlock>
+    </Box>
   );
 }

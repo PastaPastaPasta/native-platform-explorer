@@ -34,7 +34,7 @@ export function ContenderCard({
         <HStack spacing={8} flexWrap="wrap">
           <InfoLine
             label="Prefunded balance"
-            value={<CreditsBlock credits={prefundedBalance ?? null} stacked={false} showUsd={false} />}
+            value={<CreditsBlock credits={prefundedBalance ?? null} layout="compact" showUsd={false} />}
           />
           {voteCount !== undefined ? (
             <InfoLine
