@@ -1,5 +1,7 @@
 // Helpers for introspecting Dash Platform JSON Schemas to drive the
-// `/contract/[id]/documents/[type]` browser.
+// `/contract/documents` browser.
+
+import { normaliseContract, toPlain } from './contract';
 
 export interface SchemaIndex {
   name: string;
@@ -15,19 +17,28 @@ export interface HeuristicColumn {
 
 type Schema = Record<string, unknown> | undefined;
 
-export function getDocumentTypeSchema(
-  contractSchema: unknown,
-  type: string,
-): Schema {
+/** Accepts any of: a raw DataContract WASM class instance, a plain contract
+ *  object, a ContractShape (as returned by normaliseContract), or just the
+ *  documentSchemas map itself. Coerces through toPlain so WASM-instance
+ *  schemas become readable plain JSON. */
+export function getDocumentTypeSchema(contractSchema: unknown, type: string): Schema {
   if (!contractSchema || typeof contractSchema !== 'object') return undefined;
-  const outer = contractSchema as Record<string, unknown>;
-  // Contracts expose document types under `documentSchemas` | `documents` | `documentTypes`.
-  const doc =
-    (outer.documentSchemas as Schema)?.[type] ??
-    (outer.documents as Schema)?.[type] ??
-    (outer.documentTypes as Schema)?.[type];
-  if (!doc || typeof doc !== 'object') return undefined;
-  return doc as Schema;
+
+  // If the caller already normalised, prefer that.
+  const preNormalised = (contractSchema as { documentSchemas?: unknown }).documentSchemas;
+
+  const schemas =
+    (preNormalised && typeof preNormalised === 'object'
+      ? (toPlain(preNormalised) as Record<string, unknown>)
+      : undefined) ?? normaliseContract(contractSchema).documentSchemas;
+
+  if (!schemas) return undefined;
+  const entry = schemas[type];
+  if (entry === undefined || entry === null) return undefined;
+  const plain = toPlain(entry);
+  return plain && typeof plain === 'object' && !Array.isArray(plain)
+    ? (plain as Schema)
+    : undefined;
 }
 
 export function getIndicesForType(docSchema: Schema): SchemaIndex[] {

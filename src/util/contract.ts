@@ -18,7 +18,7 @@ export interface ContractShape {
 
 /** Coerce a WASM class / Map / nested value into a plain JS object as best we
  *  can so downstream renderers (CodeBlock, Object.keys) actually see data. */
-function toPlain(value: unknown): unknown {
+export function toPlain(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== 'object') return value;
   if (typeof (value as { toJSON?: unknown }).toJSON === 'function') {
