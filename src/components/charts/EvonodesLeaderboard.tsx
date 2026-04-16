@@ -10,7 +10,12 @@ export interface EvonodeBar {
 }
 
 /** Horizontal bar chart of [{ proTxHash, blocks }]. Responsive; pure CSS
- *  (no SVG) to avoid layout thrash on resize. Top-N items only. */
+ *  (no SVG) to avoid layout thrash on resize. Top-N items only.
+ *
+ *  When the counts have no meaningful variation (max < 2, typical of a
+ *  just-started epoch where everyone has proposed 1 block) we render a
+ *  compact list instead of all-100%-width bars — that would be accurate
+ *  but visually misleading. */
 export function EvonodesLeaderboard({
   entries,
   limit = 20,
@@ -29,11 +34,43 @@ export function EvonodesLeaderboard({
     );
   }
   const max = top.reduce((m, e) => Math.max(m, e.blocks), 0) || 1;
+  const min = top.reduce((m, e) => Math.min(m, e.blocks), max);
+  const flat = max === min || max < 2;
+
+  if (flat) {
+    return (
+      <VStack align="stretch" spacing={1}>
+        <Text fontSize="xs" color="gray.400" mb={1}>
+          {top.length} proposer{top.length === 1 ? '' : 's'} so far; each has proposed
+          {max === 1 ? ' 1 block.' : ` ${max} blocks.`} Ranking will appear once counts
+          diverge.
+        </Text>
+        {top.map((e) => (
+          <HStack
+            key={e.proTxHash}
+            as={NextLink}
+            href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}
+            justify="space-between"
+            spacing={3}
+            _hover={{ bg: 'gray.800' }}
+            borderRadius="md"
+            px={2}
+            py={1}
+          >
+            <Identifier value={e.proTxHash} avatar dense copy={false} />
+            <Text fontSize="xs" fontFamily="mono" color="gray.250">
+              {e.blocks} block{e.blocks === 1 ? '' : 's'}
+            </Text>
+          </HStack>
+        ))}
+      </VStack>
+    );
+  }
 
   return (
     <VStack align="stretch" spacing={1.5}>
       {top.map((e) => {
-        const pct = Math.max(2, Math.round((e.blocks / max) * 100));
+        const pct = Math.max(4, Math.round((e.blocks / max) * 100));
         return (
           <HStack
             key={e.proTxHash}

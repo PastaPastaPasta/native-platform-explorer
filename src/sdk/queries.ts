@@ -399,14 +399,16 @@ export function useFinalizedEpochInfo(index: number | undefined) {
 }
 
 export function useEvonodesBlocksByRange(epoch: number | undefined, limit = 100) {
+  // EvonodeProposedBlocksRangeQuery accepts { epoch, limit, startAfter } only.
+  // Ordering is proTxHash-ascending on the server; we sort by count client-side
+  // in evonodesMapToBars.
   return useSdkQuery(
     ['epoch', 'evonodesProposedBlocksByRange', epoch, limit],
     (sdk) =>
       sdk.epoch.evonodesProposedBlocksByRange({
         epoch: epoch!,
         limit,
-        orderAscending: false,
-      } as never) as Promise<unknown>,
+      }) as Promise<unknown>,
     { enabled: epoch !== undefined, staleTime: LIVE },
   );
 }
