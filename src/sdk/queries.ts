@@ -355,16 +355,36 @@ export function useDocumentsQuery(params: DocumentsQueryParams | undefined) {
 }
 
 // ----- dpns prefix search -----
-export function useDpnsUsernamesByPrefix(prefix: string | undefined, limit = 20, startAfter?: string) {
+// The SDK's `dpns.usernames` takes { identityId } — it lists the names a given
+// identity owns, not a prefix search. Real prefix search runs through
+// documents.query on the DPNS domain type, filtering on the
+// (normalizedParentDomainName, normalizedLabel) composite index. `prefix`
+// is expected already in homograph-safe form (lowercased, o→0, i/l→1) —
+// see @util/dpns#convertToHomographSafeChars.
+export function useDpnsPrefixSearch(
+  prefix: string | undefined,
+  dpnsContractId: string | undefined,
+  limit = 25,
+  startAfter?: string,
+) {
+  const normalized = prefix?.trim() ?? '';
+  const hasContract = !!dpnsContractId;
+  const hasPrefix = normalized.length > 0;
   return useSdkQuery(
-    ['dpns', 'usernames', 'prefix', prefix, limit, startAfter ?? ''],
+    ['documents', 'query', 'dpnsPrefix', dpnsContractId, normalized, limit, startAfter ?? ''],
     (sdk) =>
-      sdk.dpns.usernames({
-        labelPrefix: prefix!,
+      sdk.documents.query({
+        dataContractId: dpnsContractId!,
+        documentTypeName: 'domain',
+        where: [
+          ['normalizedParentDomainName', '==', 'dash'],
+          ['normalizedLabel', 'startsWith', normalized],
+        ],
+        orderBy: [['normalizedLabel', 'asc']],
         limit,
         startAfter,
       } as never) as Promise<unknown>,
-    { enabled: !!prefix, staleTime: LIVE },
+    { enabled: hasContract && hasPrefix, staleTime: LIVE },
   );
 }
 
