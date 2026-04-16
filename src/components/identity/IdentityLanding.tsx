@@ -13,6 +13,7 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LookupInput } from '@ui/LookupInput';
 import { IdentityLink } from '@components/data/IdentityLink';
+import { DpnsDirectoryPanel } from '@components/identity/DpnsDirectoryPanel';
 import { useViewedIdentities } from '@hooks/useViewedIdentities';
 import {
   isBase58Identifier,
@@ -110,6 +111,8 @@ export function IdentityLanding() {
             </Text>
           </InfoBlock>
         ) : null}
+
+        <DpnsDirectoryPanel />
 
         <InfoBlock>
           <VStack align="flex-start" spacing={2}>
