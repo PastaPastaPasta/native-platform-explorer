@@ -52,7 +52,7 @@ export default function Page() {
     { label: 'Polls' },
   ]);
 
-  const [preset, setPreset] = useState<PresetKey>('30d');
+  const [preset, setPreset] = useState<PresetKey>('all-upcoming');
   // Memoised to a stable render so the React Query cache key isn't churning.
   const nowMs = useMemo(() => Date.now(), []);
   const [customStart, setCustomStart] = useState<string>(isoDate(nowMs));
