@@ -1,5 +1,6 @@
 'use client';
 
+import NextLink from 'next/link';
 import {
   Heading,
   Tab,
@@ -126,12 +127,12 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                     </Heading>
                     <Text fontSize="sm" color="gray.400">
                       Dash Platform does not publish a global holders index. Use the{' '}
-                      <a
+                      <NextLink
                         href={`/token/holders/?id=${encodeURIComponent(tokenId)}`}
                         style={{ color: 'var(--chakra-colors-brand-light)' }}
                       >
                         seeded holders
-                      </a>{' '}
+                      </NextLink>{' '}
                       form to look up balances for identities you supply.
                     </Text>
                   </InfoBlock>

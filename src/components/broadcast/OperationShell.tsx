@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import NextLink from 'next/link';
 import {
   Badge,
   Button,
@@ -75,7 +76,11 @@ export function OperationShell<TOptions, TResult>({
           No signer connected
         </Heading>
         <Text fontSize="sm" color="gray.250">
-          Connect a signer at <a href="/wallet/" style={{ color: 'var(--chakra-colors-brand-light)' }}>/wallet</a> to broadcast state transitions.
+          Connect a signer at{' '}
+          <NextLink href="/wallet/" style={{ color: 'var(--chakra-colors-brand-light)' }}>
+            /wallet
+          </NextLink>{' '}
+          to broadcast state transitions.
         </Text>
       </InfoBlock>
     );
