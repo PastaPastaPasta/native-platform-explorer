@@ -1,0 +1,82 @@
+@use 'mixins' as *;
+
+:root {
+  --page-bg-gradient: radial-gradient(
+    ellipse at top,
+    rgba(14, 117, 181, 0.15) 0%,
+    rgba(24, 29, 32, 1) 60%
+  );
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--chakra-colors-gray-900);
+  color: var(--chakra-colors-gray-100);
+  font-family: var(--font-body), 'Open Sans', system-ui, sans-serif;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background-image: var(--page-bg-gradient);
+  background-attachment: fixed;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading), Montserrat, system-ui, sans-serif;
+  font-weight: 700;
+  margin: 0;
+}
+
+a {
+  color: var(--chakra-colors-brand-normal);
+  text-decoration: none;
+  transition: color 0.1s ease-in-out;
+  &:hover {
+    color: var(--chakra-colors-brand-light);
+  }
+}
+
+code,
+pre {
+  font-family: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
+}
+
+.glass-card {
+  @include Block();
+  padding: 1.25rem 1.5rem;
+}
+
+.glass-card--emphasised {
+  @include Block(true);
+  padding: 1.25rem 1.5rem;
+}
+
+.mono-line {
+  @include DefListItem();
+}
+
+.loading-line {
+  @include LoadingLine();
+  height: 1em;
+  border-radius: 4px;
+}
+
+::selection {
+  background: rgba(0, 141, 228, 0.35);
+  color: var(--chakra-colors-gray-100);
+}

@@ -1,0 +1,78 @@
+// Mixins ported verbatim from platform-explorer/packages/frontend/src/styles/mixins.scss
+// so the two projects feel like siblings.
+
+$blockBackgroundBlur: blur(44px);
+$font-mono: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
+
+// Glassmorphic card. Every "card" in the app uses this mixin.
+@mixin Block($border: false, $borderColor: var(--chakra-colors-brand-normal)) {
+  backdrop-filter: $blockBackgroundBlur;
+  border-radius: var(--chakra-radii-block);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(24, 31, 34, 0.2);
+
+  @if $border {
+    box-shadow: 2px 2px $borderColor;
+  }
+}
+
+// Mono-font identifier line style (used in the Identifier component).
+@mixin DefListItem($clickable: false) {
+  display: flex;
+  padding: 7px 12px;
+  margin-bottom: 8px;
+  font-family: $font-mono;
+  font-size: 12pt;
+  border-radius: 10px;
+  border: 1px solid var(--chakra-colors-gray-750);
+  background-color: rgba(46, 57, 61, 0.5); // gray-800 @ .5
+  transition: all 0.1s;
+
+  @if $clickable {
+    &:hover {
+      background-color: var(--chakra-colors-gray-750);
+    }
+  }
+}
+
+// Gradient sweep used to indicate loading on placeholder rows.
+@mixin LoadingLine($delay: 0s) {
+  overflow: hidden;
+  position: relative;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-color: rgba(255, 255, 255, 0.04);
+  }
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 100%
+    );
+    animation: LoadingLine 3s linear infinite;
+    animation-delay: $delay;
+  }
+}
+
+@keyframes LoadingLine {
+  0% {
+    left: -100%;
+  }
+  50% {
+    left: 100%;
+  }
+  100% {
+    left: 100%;
+  }
+}
