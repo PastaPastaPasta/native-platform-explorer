@@ -7,6 +7,7 @@ import {
   HStack,
   SimpleGrid,
   Text,
+  Tooltip,
   VStack,
 } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
@@ -28,12 +29,29 @@ function Uptime({ lastBlockTimeMs }: { lastBlockTimeMs: number | null }) {
     return () => window.clearInterval(id);
   }, []);
   void tick;
-  if (lastBlockTimeMs === null) return <Text fontFamily="mono">—</Text>;
+  if (lastBlockTimeMs === null) {
+    return (
+      <VStack align="flex-start" spacing={0}>
+        <Text fontFamily="mono" fontSize="md" color="gray.400">
+          —
+        </Text>
+        <Text fontSize="2xs" color="gray.500">
+          not exposed in status response
+        </Text>
+      </VStack>
+    );
+  }
   const d = getTimeDelta(lastBlockTimeMs);
+  const abs = new Date(lastBlockTimeMs).toLocaleString();
   return (
-    <Text fontFamily="mono" fontSize="sm" color="gray.100">
-      {d?.short ?? '—'}
-    </Text>
+    <VStack align="flex-start" spacing={0}>
+      <Text fontFamily="mono" fontSize="md" color="gray.100">
+        {d?.short ?? '—'}
+      </Text>
+      <Text fontSize="2xs" color="gray.400">
+        {abs}
+      </Text>
+    </VStack>
   );
 }
 
@@ -56,7 +74,19 @@ function firstNum(...vals: unknown[]): number | null {
   return null;
 }
 
+/** Tolerant timestamp coercion. Accepts: number/bigint (seconds or ms auto-
+ *  detected by magnitude), numeric string, ISO 8601 string (e.g.
+ *  "2026-04-16T21:26:30Z" as Tenderdash returns), or null/undefined. */
 function asMs(v: unknown): number | null {
+  if (v === null || v === undefined) return null;
+  if (typeof v === 'string') {
+    // ISO 8601 first — Date.parse handles common variants.
+    const iso = Date.parse(v);
+    if (Number.isFinite(iso)) return iso;
+    const n = Number(v);
+    if (!Number.isFinite(n)) return null;
+    return n < 1e11 ? n * 1000 : n;
+  }
   const n = firstNum(v);
   if (n === null) return null;
   return n < 1e11 ? n * 1000 : n;
@@ -97,7 +127,16 @@ export default function Page() {
   const latestBlockHash = (chain.latestBlockHash ?? plain.latestBlockHash) as
     | string
     | undefined;
-  const latestBlockMs = asMs(chain.latestBlockTime ?? plain.latestBlockTime);
+  const latestBlockMs = asMs(
+    chain.latestBlockTime ??
+      chain.latestBlockTimestamp ??
+      chain.blockTime ??
+      chain.time ??
+      chain.headerTime ??
+      plain.latestBlockTime ??
+      plain.blockTime ??
+      plain.time,
+  );
   const proTxHash = (node.proTxHash ?? plain.proTxHash) as string | undefined;
 
   return (
@@ -155,14 +194,21 @@ export default function Page() {
                 />
               </InfoBlock>
               <InfoBlock>
-                <InfoLine
-                  label="Peers"
-                  value={
-                    <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                      {peers !== null ? peers : '—'}
-                    </Text>
-                  }
-                />
+                <Tooltip
+                  hasArrow
+                  label="Number of other masternodes this particular node is currently gossiping with at the Tenderdash P2P layer. Local to the responding node — not a network-wide total."
+                >
+                  <div>
+                    <InfoLine
+                      label="Peers (this node)"
+                      value={
+                        <Text fontFamily="mono" fontSize="xl" color="gray.100">
+                          {peers !== null ? peers : '—'}
+                        </Text>
+                      }
+                    />
+                  </div>
+                </Tooltip>
               </InfoBlock>
               <InfoBlock>
                 <InfoLine
