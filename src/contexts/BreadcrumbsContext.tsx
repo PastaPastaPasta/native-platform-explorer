@@ -4,12 +4,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from 'react';
-import { usePathname } from 'next/navigation';
 
 export interface BreadcrumbItem {
   label: string;
@@ -27,13 +25,12 @@ const BreadcrumbsContext = createContext<BreadcrumbsContextValue | null>(null);
 
 export function BreadcrumbsProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<BreadcrumbItem[]>([]);
-  const pathname = usePathname();
 
-  // Clear on route change so each page is responsible for its own trail.
-  useEffect(() => {
-    setItems([]);
-  }, [pathname]);
-
+  // Note: we intentionally do NOT reset on pathname change. Each page calls
+  // `usePageBreadcrumbs(newTrail)` in its own useEffect on mount, which
+  // overwrites whatever was there. A pathname-reset effect caused a
+  // setState cascade across parent/child during navigation that surfaced
+  // as "Cannot update a component while rendering a different component".
   const setBreadcrumbs = useCallback((next: BreadcrumbItem[]) => setItems(next), []);
   const reset = useCallback(() => setItems([]), []);
 
