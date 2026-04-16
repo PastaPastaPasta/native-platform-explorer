@@ -18,6 +18,7 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
+import { VotePollsList } from '@components/governance/VotePollsList';
 import { CreditsBlock } from '@components/data/CreditsBlock';
 import { InfoLine } from '@components/data/InfoLine';
 import { Identifier } from '@components/data/Identifier';
@@ -215,13 +216,7 @@ export default function HomePage() {
                 No polls ending in the next 30 days.
               </Text>
             ) : (
-              <VStack align="stretch" spacing={2}>
-                {polls.slice(0, 10).map((poll, i) => (
-                  <Text key={i} fontFamily="mono" fontSize="xs" color="gray.250">
-                    {JSON.stringify(poll)}
-                  </Text>
-                ))}
-              </VStack>
+              <VotePollsList entries={polls.slice(0, 10)} />
             )}
           </InfoBlock>
 

@@ -12,7 +12,7 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import { CodeBlock } from '@components/data/CodeBlock';
+import { VotePollsList } from '@components/governance/VotePollsList';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useVotePollsByEndDate } from '@sdk/queries';
 
@@ -83,12 +83,8 @@ export default function Page() {
             <LoadingCard lines={4} />
           ) : q.isError ? (
             <ErrorCard error={q.error} onRetry={() => q.refetch()} />
-          ) : polls.length === 0 ? (
-            <Text color="gray.400" fontSize="sm">
-              No polls ending in this range.
-            </Text>
           ) : (
-            <CodeBlock value={polls} />
+            <VotePollsList entries={polls} />
           )}
         </InfoBlock>
       </VStack>
