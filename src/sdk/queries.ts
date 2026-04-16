@@ -437,14 +437,17 @@ export function useProtocolVersionUpgradeVoteStatus(
 }
 
 // ----- voting polls -----
+// VotePollsByEndDateQuery is flat: { startTimeMs?, endTimeMs?, limit?, ... },
+// plain numbers (not BigInt). Prior version nested these under startTimeInfo /
+// endTimeInfo and wrapped in BigInt, which silently returned empty results.
 export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number) {
   return useSdkQuery(
     ['voting', 'votePollsByEndDate', startDateMs ?? 0, endDateMs ?? 0],
     (sdk) =>
       sdk.voting.votePollsByEndDate({
-        startTimeInfo: startDateMs !== undefined ? { startTimeMs: BigInt(startDateMs) } : undefined,
-        endTimeInfo: endDateMs !== undefined ? { endTimeMs: BigInt(endDateMs) } : undefined,
-      } as never) as Promise<unknown>,
+        startTimeMs: startDateMs,
+        endTimeMs: endDateMs,
+      }) as Promise<unknown>,
     { staleTime: LIVE },
   );
 }

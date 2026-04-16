@@ -58,7 +58,7 @@ export function getIndicesForType(docSchema: Schema): SchemaIndex[] {
 }
 
 /** Columns we'll render in the browse table. Always: $id, $ownerId. Plus up to
- *  two additional scalar-typed properties so the rows have something to look at. */
+ *  three additional schema-declared properties so the rows have something to look at. */
 export function heuristicColumnsForType(docSchema: Schema): HeuristicColumn[] {
   const cols: HeuristicColumn[] = [
     { key: '$id', label: 'ID', kind: 'identifier' },
@@ -82,19 +82,26 @@ export function heuristicColumnsForType(docSchema: Schema): HeuristicColumn[] {
   return cols;
 }
 
-/** Given a proposed `where` clause set (list of fields) check if any declared
- *  index is a prefix match. Returns the first matching index + all candidate
- *  indices for "did you mean" suggestions. */
+/** Drive's query engine requires `where` filter fields to form the leftmost
+ *  ordered prefix of an index's property list — you cannot filter on the 2nd
+ *  property without also filtering on the 1st. We validate that exact rule
+ *  here so the browser UI surfaces the real constraint before round-tripping
+ *  to DAPI. */
 export function validateWhereAgainstIndices(
   whereFields: string[],
   indices: SchemaIndex[],
 ): { valid: boolean; matchedIndex?: string; suggestions: SchemaIndex[] } {
   if (whereFields.length === 0) return { valid: true, suggestions: indices };
+  const whereSet = new Set(whereFields);
   for (const idx of indices) {
     const idxFields = idx.properties.map((p) => p.field);
-    // Index must be a prefix that covers every filter field, in any order.
-    const covered = whereFields.every((f) => idxFields.includes(f));
-    if (covered && whereFields.length <= idxFields.length) {
+    if (whereFields.length > idxFields.length) continue;
+    const prefix = idxFields.slice(0, whereFields.length);
+    // Every prefix field must be covered by the active filters, and the active
+    // filters must not exceed the prefix (we already gated by length above).
+    const matches =
+      whereFields.length === prefix.length && prefix.every((f) => whereSet.has(f));
+    if (matches) {
       return { valid: true, matchedIndex: idx.name, suggestions: indices };
     }
   }

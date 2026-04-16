@@ -58,9 +58,11 @@ export default function HomePage() {
   const evonodesQ = useEvonodesBlocksByRange(epoch?.index, 20);
   const bars = evonodesMapToBars(evonodesQ.data);
 
-  const now = Date.now();
-  const in30d = now + 30 * 86_400_000;
-  const pollsQ = useVotePollsByEndDate(now, in30d);
+  // Round to minute granularity so the queryKey is stable across renders —
+  // otherwise the fresh Date.now() on every render invalidates the cache.
+  const nowBucket = Math.floor(Date.now() / 60_000) * 60_000;
+  const in30d = nowBucket + 30 * 86_400_000;
+  const pollsQ = useVotePollsByEndDate(nowBucket, in30d);
   const polls = (pollsQ.data as unknown[] | undefined) ?? [];
 
   const blockHeight = readProp<number | bigint>(statusQ.data, 'height');

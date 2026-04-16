@@ -68,10 +68,21 @@ describe('validateWhereAgainstIndices', () => {
   it('accepts an empty where clause', () => {
     expect(validateWhereAgainstIndices([], indices).valid).toBe(true);
   });
-  it('matches a prefix index', () => {
+  it('matches when both index properties are provided', () => {
     const r = validateWhereAgainstIndices(['parentDomainName', 'label'], indices);
     expect(r.valid).toBe(true);
     expect(r.matchedIndex).toBe('parentNameAndLabel');
+  });
+  it('matches the leftmost prefix of an index', () => {
+    const r = validateWhereAgainstIndices(['parentDomainName'], indices);
+    expect(r.valid).toBe(true);
+    expect(r.matchedIndex).toBe('parentNameAndLabel');
+  });
+  it('rejects filters that skip the leading index field', () => {
+    // label is the 2nd index property — filtering on it alone is invalid
+    // because we skipped parentDomainName.
+    const r = validateWhereAgainstIndices(['label'], indices);
+    expect(r.valid).toBe(false);
   });
   it('rejects unindexed fields', () => {
     const r = validateWhereAgainstIndices(['subdomainRules'], indices);
