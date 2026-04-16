@@ -143,28 +143,37 @@ export function DpnsDirectoryPanel() {
               </Thead>
               <Tbody>
                 {rows.map((row, i) => {
+                  // SDK's Document class stores user-defined fields inside
+                  // `properties: Record<string, unknown>` rather than as
+                  // top-level getters. Only system fields (id, ownerId,
+                  // revision, createdAt, etc.) live on the class itself.
+                  const props =
+                    (readProp<Record<string, unknown>>(row, 'properties') as
+                      | Record<string, unknown>
+                      | undefined) ?? {};
                   // `label` preserves original casing (e.g. "Alice"); keep it.
                   // `normalizedLabel` is homograph-safe (o→0, i/l→1) and unsafe
                   // to display. Fall back to it only when `label` is missing.
                   const label =
-                    (readProp<string>(row, 'label') as string | undefined) ??
-                    (readProp<string>(row, 'normalizedLabel') as string | undefined) ??
+                    (props.label as string | undefined) ??
+                    (props.normalizedLabel as string | undefined) ??
                     '';
                   // For DPNS, the beneficiary identity is `records.identity`;
-                  // `$ownerId` is the submitter of the state transition, which
+                  // `ownerId` is the submitter of the state transition, which
                   // usually matches but can differ when a name is registered
                   // on behalf of another identity.
-                  const records = readProp<Record<string, unknown>>(row, 'records');
+                  const records = props.records as Record<string, unknown> | undefined;
                   const ownerId =
-                    idToString(records ? readProp(records, 'identity') : undefined) ??
-                    idToString(readProp(row, '$ownerId') ?? readProp(row, 'ownerId'));
+                    idToString(records?.identity) ??
+                    idToString(readProp(row, 'ownerId'));
                   const key = docIdOf(row) ?? `${label}-${i}`;
                   if (!label) return null;
                   // Use normalized label in the URL (DPNS name lookups key off
                   // the homograph-safe form) but render the original label.
                   const fqdn = `${label}.dash`;
                   const normalizedFqdn =
-                    ((readProp<string>(row, 'normalizedLabel') as string | undefined) ?? label.toLowerCase()) + '.dash';
+                    ((props.normalizedLabel as string | undefined) ??
+                      label.toLowerCase()) + '.dash';
                   return (
                     <Tr key={key} _hover={{ bg: 'gray.800' }}>
                       <Td borderColor="gray.750">

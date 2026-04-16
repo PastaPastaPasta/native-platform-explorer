@@ -67,14 +67,17 @@ function useQueryLog(maxEntries = 100): LogEntry[] {
     const unsubscribe = cache.subscribe((ev) => {
       if (!ev) return;
       const q = ev.query;
-      setEntries((prev) => {
-        const next: LogEntry = {
-          key: JSON.stringify(q.queryKey),
-          stateAt: Date.now(),
-          status: q.state.status,
-        };
-        const out = [next, ...prev].slice(0, maxEntries);
-        return out;
+      const next: LogEntry = {
+        key: JSON.stringify(q.queryKey),
+        stateAt: Date.now(),
+        status: q.state.status,
+      };
+      // QueryCache notifies subscribers *synchronously* inside whatever render
+      // cycle produced the update — React flags that as "Cannot update a
+      // component while rendering a different component". Defer the setState
+      // to a microtask so it lands after the current render commits.
+      queueMicrotask(() => {
+        setEntries((prev) => [next, ...prev].slice(0, maxEntries));
       });
     });
     return () => unsubscribe();
