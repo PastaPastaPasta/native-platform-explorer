@@ -54,4 +54,57 @@ describe('readProp', () => {
     expect(readProp(null, 'anything')).toBeUndefined();
     expect(readProp(undefined, 'anything')).toBeUndefined();
   });
+
+  it('falls through to `properties` for SDK Document schema fields', () => {
+    // Shape of an @dashevo/evo-sdk Document: system fields (`id`, `ownerId`)
+    // are instance getters, schema-declared fields live inside `properties`.
+    const doc = {
+      get id() {
+        return 'doc-id';
+      },
+      properties: { label: 'alice', normalizedLabel: 'a11ce' },
+    };
+    expect(readProp(doc, 'label')).toBe('alice');
+    expect(readProp(doc, 'normalizedLabel')).toBe('a11ce');
+    // System field must still resolve via the top-level getter, not `properties`.
+    expect(readProp(doc, 'id')).toBe('doc-id');
+  });
+
+  it('also checks a `data` wrapper (alias for `properties`)', () => {
+    const doc = { data: { label: 'bob' } };
+    expect(readProp(doc, 'label')).toBe('bob');
+  });
+
+  it('prefers a top-level getter over a matching `properties` entry', () => {
+    // Guards against system fields being shadowed when schema happens to use
+    // the same name (e.g. a hypothetical user-defined `createdAt`).
+    const doc = {
+      get createdAt() {
+        return 1000;
+      },
+      properties: { createdAt: 9999 },
+    };
+    expect(readProp(doc, 'createdAt')).toBe(1000);
+  });
+
+  it('resolves dotted paths across the properties wrapper', () => {
+    // DPNS `domain` schema: `records.identity` is an index key; the `records`
+    // object lives under `.properties`, and `identity` is a nested field on it.
+    const doc = {
+      properties: {
+        records: { identity: 'nested-id' },
+      },
+    };
+    expect(readProp(doc, 'records.identity')).toBe('nested-id');
+  });
+
+  it('returns undefined for a partial dotted path', () => {
+    expect(readProp({ properties: {} }, 'records.identity')).toBeUndefined();
+    expect(readProp({ properties: { records: 'not-an-object' } }, 'records.identity')).toBeUndefined();
+  });
+
+  it('does not recurse into `properties` when asked for `properties` itself', () => {
+    const doc = { properties: { foo: 1, bar: 2 } };
+    expect(readProp(doc, 'properties')).toEqual({ foo: 1, bar: 2 });
+  });
 });
