@@ -1,5 +1,6 @@
 'use client';
 
+import { useRef } from 'react';
 import {
   useQuery,
   useQueries,
@@ -36,11 +37,33 @@ function useSdkQuery<TData>(
 ): SdkQueryResult<TData> {
   const { sdk, status, network, trusted } = useSdk();
   const { hasProofVariant = true, ...rest } = opts ?? {};
+
+  // Mirror the context's sdk onto a ref so queryFn (which runs async, outside
+  // the render cycle) can poll it. This prevents the "SDK not ready" cold-load
+  // error: on reload, a query's `enabled` flip and its `queryFn` execution
+  // can race, where queryFn closes over a pre-connect `sdk = null` and throws
+  // immediately. Polling the ref lets us wait for the SDK instead.
+  const sdkRef = useRef<EvoSDK | null>(sdk);
+  sdkRef.current = sdk;
+
   const q = useQuery<TData, Error>({
     queryKey: ['npe', network, trusted, ...key],
     queryFn: async () => {
-      if (!sdk) throw new Error('SDK not ready');
-      return fn(sdk);
+      if (!sdkRef.current) {
+        // Poll the ref for up to 15s waiting for SdkProvider.connect() to
+        // finish. This is a safety net: the `enabled` gate above should
+        // already prevent entry until the SDK is ready.
+        for (let i = 0; i < 150; i++) {
+          await new Promise((r) => setTimeout(r, 100));
+          if (sdkRef.current) break;
+        }
+        if (!sdkRef.current) {
+          throw new Error(
+            'SDK did not become ready within 15s. Check your network connection or DAPI endpoints.',
+          );
+        }
+      }
+      return fn(sdkRef.current);
     },
     enabled: status === 'ready' && !!sdk && (rest.enabled ?? true),
     ...rest,
