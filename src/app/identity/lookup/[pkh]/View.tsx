@@ -15,20 +15,10 @@ import {
   useIdentitiesByNonUniquePkh,
 } from '@sdk/queries';
 import { shortId } from '@util/identifier';
+import { idToString, readProp } from '@util/sdk-shape';
 
 function extractId(identity: unknown): string | null {
-  if (!identity || typeof identity !== 'object') return null;
-  const obj = identity as Record<string, unknown>;
-  const id = obj.id ?? (typeof obj.getId === 'function' ? (obj.getId as () => unknown)() : null);
-  if (typeof id === 'string') return id;
-  if (id && typeof id === 'object' && 'toString' in id) {
-    try {
-      return String(id);
-    } catch {
-      return null;
-    }
-  }
-  return null;
+  return idToString(readProp<unknown>(identity, 'id')) ?? null;
 }
 
 export default function View({ pkh: fromServer }: { pkh: string }) {

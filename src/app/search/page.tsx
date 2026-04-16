@@ -37,6 +37,13 @@ interface ResolvedMatch {
   secondary?: string;
 }
 
+function findByKind<K extends SearchCandidate['kind']>(
+  candidates: SearchCandidate[],
+  kind: K,
+): Extract<SearchCandidate, { kind: K }> | undefined {
+  return candidates.find((c): c is Extract<SearchCandidate, { kind: K }> => c.kind === kind);
+}
+
 function useResolveCandidates(candidates: SearchCandidate[]): {
   matches: ResolvedMatch[];
   loading: boolean;
@@ -44,100 +51,72 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   // Collapse duplicate candidate IDs to stable hook inputs. React hooks must be
   // called unconditionally, so we always call the full hook set and just disable
   // the ones we do not need.
-  const identityCandidate = candidates.find((c) => c.kind === 'identity');
-  const contractCandidate = candidates.find((c) => c.kind === 'contract');
-  const tokenCandidate = candidates.find((c) => c.kind === 'token');
-  const addressCandidate = candidates.find((c) => c.kind === 'address');
-  const pkhCandidate = candidates.find((c) => c.kind === 'identityByPkh');
-  const dpnsCandidate = candidates.find((c) => c.kind === 'dpnsName');
+  const identity = findByKind(candidates, 'identity');
+  const contract = findByKind(candidates, 'contract');
+  const token = findByKind(candidates, 'token');
+  const address = findByKind(candidates, 'address');
+  const pkh = findByKind(candidates, 'identityByPkh');
+  const dpns = findByKind(candidates, 'dpnsName');
 
-  const identityQ = useIdentity(
-    identityCandidate && identityCandidate.kind === 'identity' ? identityCandidate.id : undefined,
-  );
-  const contractQ = useContract(
-    contractCandidate && contractCandidate.kind === 'contract' ? contractCandidate.id : undefined,
-  );
-  const tokenQ = useTokenTotalSupply(
-    tokenCandidate && tokenCandidate.kind === 'token' ? tokenCandidate.id : undefined,
-  );
-  const addressQ = useAddressInfo(
-    addressCandidate && addressCandidate.kind === 'address' ? addressCandidate.addr : undefined,
-  );
-  const pkhQ = useIdentityByPublicKeyHash(
-    pkhCandidate && pkhCandidate.kind === 'identityByPkh' ? pkhCandidate.pkh : undefined,
-  );
-  const dpnsQ = useDpnsGetByName(
-    dpnsCandidate && dpnsCandidate.kind === 'dpnsName' ? dpnsCandidate.name : undefined,
-  );
+  const identityQ = useIdentity(identity?.id);
+  const contractQ = useContract(contract?.id);
+  const tokenQ = useTokenTotalSupply(token?.id);
+  const addressQ = useAddressInfo(address?.addr);
+  const pkhQ = useIdentityByPublicKeyHash(pkh?.pkh);
+  const dpnsQ = useDpnsGetByName(dpns?.name);
 
   const matches: ResolvedMatch[] = [];
 
-  if (identityCandidate && identityCandidate.kind === 'identity' && identityQ.data) {
-    matches.push({
-      kind: 'Identity',
-      href: `/identity/${identityCandidate.id}/`,
-      primary: identityCandidate.id,
-    });
+  if (identity && identityQ.data) {
+    matches.push({ kind: 'Identity', href: `/identity/${identity.id}/`, primary: identity.id });
   }
-  if (contractCandidate && contractCandidate.kind === 'contract' && contractQ.data) {
-    matches.push({
-      kind: 'Contract',
-      href: `/contract/${contractCandidate.id}/`,
-      primary: contractCandidate.id,
-    });
+  if (contract && contractQ.data) {
+    matches.push({ kind: 'Contract', href: `/contract/${contract.id}/`, primary: contract.id });
   }
-  if (tokenCandidate && tokenCandidate.kind === 'token' && tokenQ.data) {
-    matches.push({
-      kind: 'Token',
-      href: `/token/${tokenCandidate.id}/`,
-      primary: tokenCandidate.id,
-    });
+  if (token && tokenQ.data) {
+    matches.push({ kind: 'Token', href: `/token/${token.id}/`, primary: token.id });
   }
-  if (addressCandidate && addressCandidate.kind === 'address' && addressQ.data) {
-    matches.push({
-      kind: 'Address',
-      href: `/address/${addressCandidate.addr}/`,
-      primary: addressCandidate.addr,
-    });
+  if (address && addressQ.data) {
+    matches.push({ kind: 'Address', href: `/address/${address.addr}/`, primary: address.addr });
   }
-  if (pkhCandidate && pkhCandidate.kind === 'identityByPkh' && pkhQ.data) {
+  if (pkh && pkhQ.data) {
     matches.push({
       kind: 'Identity (pkh)',
-      href: `/identity/lookup/${pkhCandidate.pkh}/`,
-      primary: pkhCandidate.pkh,
+      href: `/identity/lookup/${pkh.pkh}/`,
+      primary: pkh.pkh,
     });
   }
-  if (dpnsCandidate && dpnsCandidate.kind === 'dpnsName' && dpnsQ.data) {
+  if (dpns && dpnsQ.data) {
     matches.push({
       kind: 'DPNS',
-      href: `/dpns/${encodeURIComponent(dpnsCandidate.name)}/`,
-      primary: dpnsCandidate.name,
+      href: `/dpns/${encodeURIComponent(dpns.name)}/`,
+      primary: dpns.name,
     });
   }
 
   // Always-present static links that the user might want regardless of resolution:
-  const stHashCandidate = candidates.find((c) => c.kind === 'stateTransition');
-  if (stHashCandidate && stHashCandidate.kind === 'stateTransition') {
+  const stHash = findByKind(candidates, 'stateTransition');
+  if (stHash) {
     matches.push({
       kind: 'State transition',
-      href: `/state-transition/${stHashCandidate.hash}/`,
-      primary: stHashCandidate.hash,
+      href: `/state-transition/${stHash.hash}/`,
+      primary: stHash.hash,
     });
   }
-  const evonodeCandidate = candidates.find((c) => c.kind === 'evonode');
-  if (evonodeCandidate && evonodeCandidate.kind === 'evonode') {
+  const evonode = findByKind(candidates, 'evonode');
+  if (evonode) {
     matches.push({
       kind: 'Evonode',
-      href: `/evonode/${evonodeCandidate.proTxHash}/`,
-      primary: evonodeCandidate.proTxHash,
+      href: `/evonode/${evonode.proTxHash}/`,
+      primary: evonode.proTxHash,
     });
   }
-  const epochCandidate = candidates.find((c) => c.kind === 'epoch');
-  if (epochCandidate && epochCandidate.kind === 'epoch') {
+  const epoch = findByKind(candidates, 'epoch');
+  if (epoch) {
     matches.push({
       kind: 'Epoch',
-      href: `/epoch/${epochCandidate.index}/`,
-      primary: String(epochCandidate.index),
+      href: `/epoch/${epoch.index}/`,
+      primary: String(epoch.index),
     });
   }
 

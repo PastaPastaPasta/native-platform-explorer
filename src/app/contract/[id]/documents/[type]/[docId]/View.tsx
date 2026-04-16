@@ -26,31 +26,7 @@ import { NotActive } from '@components/data/NotActive';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useDocument } from '@sdk/queries';
 import { shortId } from '@util/identifier';
-
-function readProp<T>(obj: unknown, key: string): T | undefined {
-  if (!obj || typeof obj !== 'object') return undefined;
-  const o = obj as Record<string, unknown>;
-  const direct = o[key];
-  if (direct !== undefined) return direct as T;
-  const getter = o[`get${key[0]?.toUpperCase() ?? ''}${key.slice(1)}`];
-  if (typeof getter === 'function') {
-    try {
-      return (getter as () => T).call(o);
-    } catch {
-      return undefined;
-    }
-  }
-  return undefined;
-}
-
-function idToString(x: unknown): string | undefined {
-  if (typeof x === 'string') return x;
-  if (x && typeof x === 'object') {
-    const s = (x as { toString?: () => unknown }).toString?.();
-    if (typeof s === 'string' && s !== '[object Object]') return s;
-  }
-  return undefined;
-}
+import { idToString, readProp } from '@util/sdk-shape';
 
 export default function View({
   id: fromServerId,

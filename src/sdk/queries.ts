@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo } from 'react';
 import { useQuery, useQueries, type UseQueryOptions } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { useSdk } from './hooks';
@@ -12,6 +11,12 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
  * Core hook: runs a query against the current SDK only when it is ready.
  * Every cache key is prefixed with (network, trusted) so clients do not see
  * stale responses across network switches.
+ *
+ * The queryKey is constructed inline on every render — React Query uses
+ * structural equality on keys, so an identical-by-value fresh array does
+ * not trigger a refetch. We intentionally do not `useMemo` the key: a
+ * memo keyed on `key` itself is a no-op because callers pass a new inline
+ * array each render.
  */
 function useSdkQuery<TData>(
   key: readonly unknown[],
@@ -19,9 +24,8 @@ function useSdkQuery<TData>(
   opts?: Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'>,
 ) {
   const { sdk, status, network, trusted } = useSdk();
-  const queryKey = useMemo(() => ['npe', network, trusted, ...key], [network, trusted, key]);
   return useQuery<TData, Error>({
-    queryKey,
+    queryKey: ['npe', network, trusted, ...key],
     queryFn: async () => {
       if (!sdk) throw new Error('SDK not ready');
       return fn(sdk);
@@ -60,7 +64,7 @@ export function useIdentityKeys(id: string | undefined) {
       sdk.identities.getKeys({
         identityId: id!,
         request: { type: 'all' },
-      } as never) as Promise<unknown>,
+      }) as Promise<unknown>,
     { enabled: !!id, staleTime: STRUCTURAL },
   );
 }
@@ -204,8 +208,7 @@ export function useDpnsUsername(identityId: string | undefined) {
 export function useDpnsUsernames(identityId: string | undefined) {
   return useSdkQuery(
     ['dpns', 'usernames', 'byIdentity', identityId],
-    (sdk) =>
-      sdk.dpns.usernames({ identityId: identityId! } as never) as Promise<unknown>,
+    (sdk) => sdk.dpns.usernames({ identityId: identityId! }) as Promise<unknown>,
     { enabled: !!identityId, staleTime: STRUCTURAL },
   );
 }
@@ -243,11 +246,13 @@ export function useDpnsIsValid(name: string | undefined) {
 }
 
 // ----- state transitions -----
+// Uses LIVE (30s) staleTime — a "pending" result can flip to final at any
+// moment, and we don't want to cache pending for the full structural window.
 export function useStateTransitionResult(hash: string | undefined) {
   return useSdkQuery(
     ['stateTransitions', 'waitForStateTransitionResult', hash],
     (sdk) => sdk.stateTransitions.waitForStateTransitionResult(hash!) as Promise<unknown>,
-    { enabled: !!hash, staleTime: STRUCTURAL },
+    { enabled: !!hash, staleTime: LIVE },
   );
 }
 
@@ -256,7 +261,7 @@ export function useIdentityVotes(identityId: string | undefined) {
   return useSdkQuery(
     ['voting', 'contestedResourceIdentityVotes', identityId],
     (sdk) =>
-      sdk.voting.contestedResourceIdentityVotes({ identityId: identityId! } as never) as Promise<unknown>,
+      sdk.voting.contestedResourceIdentityVotes({ identityId: identityId! }) as Promise<unknown>,
     { enabled: !!identityId, staleTime: LIVE },
   );
 }
@@ -265,7 +270,7 @@ export function useIdentityVotes(identityId: string | undefined) {
 export function useIdentityGroups(identityId: string | undefined) {
   return useSdkQuery(
     ['group', 'identityGroups', identityId],
-    (sdk) => sdk.group.identityGroups({ identityId: identityId! } as never) as Promise<unknown>,
+    (sdk) => sdk.group.identityGroups({ identityId: identityId! }) as Promise<unknown>,
     { enabled: !!identityId, staleTime: STRUCTURAL },
   );
 }

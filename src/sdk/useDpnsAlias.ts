@@ -16,7 +16,9 @@ export interface DpnsAliasInfo {
 export function useDpnsAlias(identityId: string | undefined): DpnsAliasInfo {
   const aliasQ = useDpnsUsername(identityId);
   const alias = (aliasQ.data as string | undefined) ?? undefined;
-  const contestedQ = useDpnsIsContested(alias);
+  // `isContestedUsername` expects the bare label, not the full `.dash` FQDN.
+  const label = alias?.endsWith('.dash') ? alias.slice(0, -5) : alias;
+  const contestedQ = useDpnsIsContested(label);
   return {
     alias,
     loading: aliasQ.isLoading || (!!alias && contestedQ.isLoading),
