@@ -29,15 +29,30 @@ interface LogEntry {
   status: string;
 }
 
+const DIAG_KEY = 'npe:diagnosticsEnabled';
+
+function diagEnabled(): boolean {
+  if (typeof window === 'undefined') return false;
+  // Default to on so ⌘/ works out of the box. The settings page lets users
+  // disable the shortcut.
+  return window.localStorage.getItem(DIAG_KEY) !== 'false';
+}
+
+function isEditableTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  if (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement) return true;
+  return target.isContentEditable;
+}
+
 function usePlatformShortcut(open: () => void) {
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      const isSlash = e.key === '/';
-      const isMac = (e.metaKey && isSlash) || (e.ctrlKey && isSlash);
-      if (isMac) {
-        e.preventDefault();
-        open();
-      }
+      if (!(e.key === '/')) return;
+      if (!(e.metaKey || e.ctrlKey)) return;
+      if (isEditableTarget(e.target)) return; // don't steal / in inputs
+      if (!diagEnabled()) return;
+      e.preventDefault();
+      open();
     };
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
