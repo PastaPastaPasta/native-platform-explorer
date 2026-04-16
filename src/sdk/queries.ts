@@ -63,7 +63,13 @@ function useSdkQuery<TData>(
           );
         }
       }
-      return fn(sdkRef.current);
+      // Coerce `undefined` → `null` at the boundary. React Query v5 rejects
+      // undefined returns from queryFn; several SDK methods (dpns.resolveName,
+      // dpns.getUsernameByName, identities.fetch on a missing ID, etc.)
+      // legitimately return undefined for "not found", which we want to
+      // surface as `data: null` to the caller, not an error.
+      const result = await fn(sdkRef.current);
+      return (result ?? null) as TData;
     },
     enabled: status === 'ready' && !!sdk && (rest.enabled ?? true),
     ...rest,
