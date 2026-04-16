@@ -2,24 +2,14 @@
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Text } from '@chakra-ui/react';
-import { Container } from '@ui/Container';
-import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { TokenView } from '@components/token/TokenView';
+import { TokenLanding } from '@components/token/TokenLanding';
 
 function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
-  if (!id) {
-    return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">Provide a token ID as <code>?id=…</code>.</Text>
-        </InfoBlock>
-      </Container>
-    );
-  }
+  if (!id) return <TokenLanding />;
   return <TokenView tokenId={id} />;
 }
 

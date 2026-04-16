@@ -27,6 +27,7 @@ import { IdentityTokensTab } from '@components/identity/IdentityTokensTab';
 import { IdentityGroupsTab } from '@components/identity/IdentityGroupsTab';
 import { IdentityVotesTab } from '@components/identity/IdentityVotesTab';
 import { ViewedIdentitiesBanner } from '@components/identity/ViewedIdentitiesBanner';
+import { IdentityLanding } from '@components/identity/IdentityLanding';
 import { AliasesList } from '@components/data/AliasesList';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { ProofFailureBanner } from '@components/data/ProofFailureBanner';
@@ -109,16 +110,7 @@ function Content() {
   const aliasesQ = useDpnsUsernames(id || undefined);
 
   if (!id) {
-    return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide an identity ID as <code>?id=…</code> in the URL, or use the
-            navbar search.
-          </Text>
-        </InfoBlock>
-      </Container>
-    );
+    return <IdentityLanding />;
   }
 
   const identity = identityQ.data as Record<string, unknown> | null | undefined;

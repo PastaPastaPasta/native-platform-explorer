@@ -23,6 +23,7 @@ import { LoadingCard } from '@ui/LoadingCard';
 import { NotFoundCard } from '@ui/NotFoundCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { DataContractDigestCard } from '@components/contract/DataContractDigestCard';
+import { ContractLanding } from '@components/contract/ContractLanding';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
@@ -55,13 +56,7 @@ function Content() {
   const historyQ = useContractHistory(id || undefined);
 
   if (!id) {
-    return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">Provide a contract ID as <code>?id=…</code>.</Text>
-        </InfoBlock>
-      </Container>
-    );
+    return <ContractLanding />;
   }
 
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
