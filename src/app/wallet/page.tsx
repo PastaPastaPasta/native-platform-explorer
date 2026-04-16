@@ -41,6 +41,25 @@ function SafetyBanner() {
   );
 }
 
+function ReconnectHint() {
+  const { signer, stash, clearStash } = useSigner();
+  if (signer || !stash) return null;
+  return (
+    <InfoBlock>
+      <HStack justify="space-between" flexWrap="wrap" spacing={3}>
+        <Text fontSize="sm" color="gray.250">
+          You were previously connected via <strong>{stash.kind}</strong> as
+          identity <code>{stash.identityId}</code>. Key material was cleared on
+          reload — reconnect below to sign again.
+        </Text>
+        <Button size="xs" variant="ghost" onClick={clearStash}>
+          Dismiss
+        </Button>
+      </HStack>
+    </InfoBlock>
+  );
+}
+
 function ExtensionPane() {
   const { connect } = useSigner();
   const [error, setError] = useState<Error | null>(null);
@@ -232,6 +251,7 @@ export default function Page() {
         </InfoBlock>
 
         <SignerStatusCard />
+        <ReconnectHint />
         <SafetyBanner />
 
         <InfoBlock>

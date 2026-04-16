@@ -13,82 +13,55 @@ export interface OperationEntry {
   descriptor: OperationDescriptor<unknown, unknown>;
 }
 
-// We ship a focused set of representative operations covering identity funding,
-// DPNS registration, and raw state-transition broadcast. The OperationShell +
-// form pattern is the canonical extension point: each new form plugs in here
-// and the `/broadcast` console picks it up automatically.
+// Preview-only gate used by forms that collect the right shape but can't yet
+// wire the SDK's IdentitySigner / AssetLockProof plumbing. Surfaces a clear
+// "not yet implemented — requires IdentitySigner bridge" message so users
+// don't hit cryptic WASM type errors on a button labelled "Broadcast". The
+// form + OperationShell + summary still demonstrate the Build → Review →
+// Sign → Broadcast flow end-to-end; only the final SDK call is gated.
+function previewOnly(operation: string): never {
+  throw new Error(
+    `${operation} requires the SDK's IdentitySigner bridge (Identity + ` +
+      `IdentityPublicKey + IdentitySigner instance), which is tracked as a ` +
+      `follow-up. The form and review steps are ready; only the final SDK call ` +
+      `is gated in this build.`,
+  );
+}
+
+function makeEntry<O, R>(
+  facade: FacadeKey,
+  op: string,
+  descriptor: OperationDescriptor<O, R>,
+): OperationEntry {
+  return { facade, op, descriptor: descriptor as OperationDescriptor<unknown, unknown> };
+}
+
+// We ship a focused set of representative operations covering identity
+// funding, DPNS registration, and raw state-transition broadcast. Each new
+// form plugs in via `makeEntry` and `/broadcast` picks it up automatically.
 export const OPERATIONS: OperationEntry[] = [
-  {
-    facade: 'identities',
-    op: 'topUp',
-    descriptor: {
-      title: 'Top up an identity',
-      description: 'Add credits to your identity by spending L1 DASH via an asset lock.',
-      FormComponent: IdentityTopUpForm,
-      summarise: (o: IdentityTopUpOptions) =>
-        `Top up identity ${o.identityId} by ${o.amountDash} DASH.`,
-      execute: async ({ sdk, options }: { sdk: unknown; options: IdentityTopUpOptions }) => {
-        // `identities.topUp` shape depends on the SDK build — some variants
-        // take a funding address / asset lock, others a signer. We delegate
-        // the real call through a thin wrapper below.
-        const s = sdk as {
-          identities: {
-            topUp?: (args: IdentityTopUpOptions) => Promise<unknown>;
-          };
-        };
-        if (!s.identities.topUp) {
-          throw new Error(
-            'identities.topUp is not exposed by this SDK build. Upgrade @dashevo/evo-sdk or use a different facade.',
-          );
-        }
-        return s.identities.topUp(options);
-      },
-    } as OperationDescriptor<IdentityTopUpOptions, unknown> as OperationDescriptor<unknown, unknown>,
-  },
-  {
-    facade: 'dpns',
-    op: 'registerName',
-    descriptor: {
-      title: 'Register a DPNS name',
-      description: 'Claim an unregistered DPNS label for your identity.',
-      FormComponent: DpnsRegisterForm,
-      summarise: (o: DpnsRegisterOptions) =>
-        `Register ${o.label}.dash for identity ${o.identityId}.`,
-      execute: async ({ sdk, signer, options }: { sdk: unknown; signer: unknown; options: DpnsRegisterOptions }) => {
-        const s = sdk as {
-          dpns: { registerName?: (args: unknown) => Promise<unknown> };
-        };
-        if (!s.dpns.registerName) {
-          throw new Error('dpns.registerName is not exposed by this SDK build.');
-        }
-        return s.dpns.registerName({ ...options, signer });
-      },
-    } as OperationDescriptor<DpnsRegisterOptions, unknown> as OperationDescriptor<unknown, unknown>,
-  },
-  {
-    facade: 'stateTransitions',
-    op: 'broadcastAndWait',
-    descriptor: {
-      title: 'Broadcast a raw state transition',
-      description:
-        'Paste a hex-encoded state transition and broadcast it. Power-user escape hatch — used for ops not yet exposed via a dedicated form.',
-      FormComponent: StateTransitionBroadcastForm,
-      summarise: (o: RawBroadcastOptions) =>
-        `Broadcast ${o.stHex.length / 2} bytes of raw state transition.`,
-      execute: async ({ sdk, options }: { sdk: unknown; options: RawBroadcastOptions }) => {
-        const s = sdk as {
-          stateTransitions: {
-            broadcastStateTransition?: (st: Uint8Array) => Promise<unknown>;
-          };
-        };
-        if (!s.stateTransitions.broadcastStateTransition) {
-          throw new Error('stateTransitions.broadcastStateTransition is not exposed.');
-        }
-        const bytes = Uint8Array.from(
-          options.stHex.match(/.{1,2}/g)!.map((b) => parseInt(b, 16)),
-        );
-        return s.stateTransitions.broadcastStateTransition(bytes);
-      },
-    } as OperationDescriptor<RawBroadcastOptions, unknown> as OperationDescriptor<unknown, unknown>,
-  },
+  makeEntry<IdentityTopUpOptions, unknown>('identities', 'topUp', {
+    title: 'Top up an identity',
+    description:
+      'Add credits to your identity by spending L1 DASH via an asset lock. Preview only in this build — the final broadcast is gated until the IdentitySigner bridge lands.',
+    FormComponent: IdentityTopUpForm,
+    summarise: (o) => `Top up identity ${o.identityId} by ${o.amountDash} DASH.`,
+    execute: async () => previewOnly('identities.topUp'),
+  }),
+  makeEntry<DpnsRegisterOptions, unknown>('dpns', 'registerName', {
+    title: 'Register a DPNS name',
+    description:
+      'Claim an unregistered DPNS label for your identity. Preview only in this build — the final broadcast is gated until the IdentitySigner bridge lands.',
+    FormComponent: DpnsRegisterForm,
+    summarise: (o) => `Register ${o.label}.dash for identity ${o.identityId}.`,
+    execute: async () => previewOnly('dpns.registerName'),
+  }),
+  makeEntry<RawBroadcastOptions, unknown>('stateTransitions', 'broadcastAndWait', {
+    title: 'Broadcast a raw state transition',
+    description:
+      'Paste a hex-encoded state transition. Preview only — broadcastStateTransition takes a StateTransition class instance, not raw bytes, so the final call is gated until a deserialisation helper lands.',
+    FormComponent: StateTransitionBroadcastForm,
+    summarise: (o) => `Broadcast ${o.stHex.length / 2} bytes of raw state transition.`,
+    execute: async () => previewOnly('stateTransitions.broadcastStateTransition'),
+  }),
 ];

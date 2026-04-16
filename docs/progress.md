@@ -11,11 +11,16 @@
 
 ## Scope notes
 
-- **Representative write forms only.** Stage 6 ships the `OperationShell`
-  flow end-to-end with a focused set of forms (identity top-up, DPNS
-  register, raw broadcast). The PRD's full inventory of ~30 write
-  operations plugs into the same shell following the same pattern;
-  remaining forms are follow-up polish, not architectural work.
+- **Representative write forms ship as preview-only.** All three included
+  flows (identity.topUp, dpns.registerName, stateTransitions.broadcast raw
+  hex) run the full Build → Review → Sign-ack → Broadcast lifecycle but
+  throw an explicit "requires IdentitySigner bridge" error at the SDK
+  call. This is the honest v1.0 posture — the SDK's write facades want
+  SDK-internal `Identity` + `IdentityPublicKey` + `IdentitySigner` class
+  instances, which the `ExplorerSigner` interface deliberately does not
+  expose. Wiring that bridge is tracked as the first follow-up after
+  tagging. The PRD's full inventory of ~30 write operations plugs into
+  the same shell following the same pattern.
 - **Extension adapter is detection-only** until the public API of
   `dash-platform-extension` is finalised. The stub throws a clear error
   and the /wallet Extension tab surfaces it.
