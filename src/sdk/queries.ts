@@ -462,10 +462,10 @@ export function useContestedResources(
     ['group', 'contestedResources', contractId, documentTypeName, indexName],
     (sdk) =>
       sdk.group.contestedResources({
-        contractId: contractId!,
+        dataContractId: contractId!,
         documentTypeName: documentTypeName!,
         indexName: indexName!,
-      } as never) as Promise<unknown>,
+      }) as Promise<unknown>,
     {
       enabled: !!contractId && !!documentTypeName && !!indexName,
       staleTime: LIVE,
@@ -476,7 +476,7 @@ export function useContestedResources(
 export function useGroupInfos(contractId: string | undefined) {
   return useSdkQuery(
     ['group', 'infos', contractId],
-    (sdk) => sdk.group.infos({ dataContractId: contractId! } as never) as Promise<unknown>,
+    (sdk) => sdk.group.infos({ dataContractId: contractId! }) as Promise<unknown>,
     { enabled: !!contractId, staleTime: STRUCTURAL },
   );
 }
@@ -496,7 +496,10 @@ export function useGroupMembers(contractId: string | undefined, position: number
   return useSdkQuery(
     ['group', 'members', contractId, position],
     (sdk) =>
-      sdk.group.members({ contractId: contractId!, position: position! } as never) as Promise<unknown>,
+      sdk.group.members({
+        dataContractId: contractId!,
+        groupContractPosition: position!,
+      }) as Promise<unknown>,
     {
       enabled: !!contractId && position !== undefined,
       staleTime: LIVE,
@@ -504,11 +507,19 @@ export function useGroupMembers(contractId: string | undefined, position: number
   );
 }
 
-export function useGroupActions(contractId: string | undefined, position: number | undefined) {
+export function useGroupActions(
+  contractId: string | undefined,
+  position: number | undefined,
+  status: 'ACTIVE' | 'CLOSED' = 'ACTIVE',
+) {
   return useSdkQuery(
-    ['group', 'actions', contractId, position],
+    ['group', 'actions', contractId, position, status],
     (sdk) =>
-      sdk.group.actions({ contractId: contractId!, position: position! } as never) as Promise<unknown>,
+      sdk.group.actions({
+        dataContractId: contractId!,
+        groupContractPosition: position!,
+        status,
+      }) as Promise<unknown>,
     {
       enabled: !!contractId && position !== undefined,
       staleTime: LIVE,
@@ -533,11 +544,11 @@ export function useContestedResourceVoteState(
     ],
     (sdk) =>
       sdk.voting.contestedResourceVoteState({
-        contractId: contractId!,
+        dataContractId: contractId!,
         documentTypeName: documentTypeName!,
         indexName: indexName!,
         indexValues: indexValues!,
-      } as never) as Promise<unknown>,
+      }) as Promise<unknown>,
     {
       enabled: !!contractId && !!documentTypeName && !!indexName && !!indexValues,
       staleTime: LIVE,

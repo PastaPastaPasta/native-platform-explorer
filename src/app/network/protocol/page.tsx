@@ -51,18 +51,37 @@ export default function Page() {
     }));
   }, [votesQ.data]);
 
+  // ProtocolVersionUpgradeVoteStatus is a WASM class exposing `.version: number`
+  // and `.proTxHash`. Stringifying the instance gives `[object Object]`, so we
+  // classify by comparing the voted version against the current protocol
+  // version: a vote > current is "accepted", < current is "rejected",
+  // == current (or null) is "abstained".
+  const currentVersion = (() => {
+    const n = Number(current);
+    return Number.isFinite(n) ? n : null;
+  })();
+
   const tally = useMemo(() => {
     let accepted = 0;
     let abstained = 0;
     let rejected = 0;
+    if (currentVersion === null) {
+      return { accepted: 0, abstained: votesEntries.length, rejected: 0 };
+    }
     for (const { vote } of votesEntries) {
-      const v = String(vote ?? '').toLowerCase();
-      if (v.includes('accept')) accepted += 1;
-      else if (v.includes('reject')) rejected += 1;
+      const raw = readProp<number | bigint>(vote, 'version');
+      if (raw === undefined || raw === null) {
+        abstained += 1;
+        continue;
+      }
+      const n = typeof raw === 'bigint' ? Number(raw) : Number(raw);
+      if (!Number.isFinite(n)) abstained += 1;
+      else if (n > currentVersion) accepted += 1;
+      else if (n < currentVersion) rejected += 1;
       else abstained += 1;
     }
     return { accepted, abstained, rejected };
-  }, [votesEntries]);
+  }, [votesEntries, currentVersion]);
 
   return (
     <Container py={{ base: 4, md: 6 }}>

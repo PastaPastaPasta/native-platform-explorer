@@ -17,17 +17,30 @@ import { VoteChoiceBadge, type VoteChoice } from '@components/governance/VoteCho
 import { useIdentityVotes } from '@sdk/queries';
 import { readProp } from '@util/sdk-shape';
 
+function normaliseChoice(raw: unknown): VoteChoice {
+  // ResourceVote exposes `.choice.voteType` as 'TowardsIdentity' | 'Abstain' | 'Lock'.
+  // Be tolerant of shape drift between SDK versions.
+  const choice = readProp<unknown>(raw, 'choice');
+  const voteType =
+    readProp<string>(choice, 'voteType') ??
+    readProp<string>(raw, 'voteType') ??
+    readProp<string>(raw, 'type');
+  const s = (typeof voteType === 'string' ? voteType : typeof raw === 'string' ? raw : '').toLowerCase();
+  if (s.includes('toward')) return 'towardsIdentity';
+  if (s.includes('abstain')) return 'abstain';
+  if (s.includes('lock')) return 'lock';
+  return 'unknown';
+}
+
 export function IdentityVotesTab({ identityId }: { identityId: string }) {
   const q = useIdentityVotes(identityId);
   const rows = (() => {
-    if (!q.data) return [] as Array<{ resource: string; choice: VoteChoice | string }>;
+    if (!q.data) return [] as Array<{ resource: string; choice: VoteChoice }>;
     if (q.data instanceof Map) {
-      return [...q.data.entries()].map(([resource, vote]) => {
-        const choice =
-          (readProp<string>(vote, 'voteChoice') as VoteChoice) ??
-          (typeof vote === 'string' ? (vote as VoteChoice) : 'unknown');
-        return { resource: typeof resource === 'string' ? resource : String(resource), choice };
-      });
+      return [...q.data.entries()].map(([resource, vote]) => ({
+        resource: typeof resource === 'string' ? resource : String(resource),
+        choice: normaliseChoice(vote),
+      }));
     }
     return [];
   })();
