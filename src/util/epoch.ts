@@ -80,6 +80,28 @@ export function normaliseEpoch(input: unknown): NormalisedEpoch {
 const PAGE_LIMIT = 100;
 const MAX_PAGES = 50;
 
+/** Extracts a hex proTxHash from the SDK's Identifier map key. `startAfter`
+ *  expects ProTxHashLike = ProTxHash | string | Uint8Array where the string
+ *  form is 64-char hex; the default `String(identifier)` returns base58 (44
+ *  chars) and DAPI rejects it with "Invalid ProTxHash hex string: bad hex
+ *  string length 44 (expected 64)". */
+function keyToHex(key: unknown): string | undefined {
+  if (!key) return undefined;
+  if (typeof key === 'string') {
+    return /^[0-9a-fA-F]{64}$/.test(key) ? key : undefined;
+  }
+  const maybe = key as { toHex?: () => string };
+  if (typeof maybe.toHex === 'function') {
+    try {
+      const h = maybe.toHex();
+      if (typeof h === 'string' && /^[0-9a-fA-F]{64}$/.test(h)) return h;
+    } catch {
+      /* fall through */
+    }
+  }
+  return undefined;
+}
+
 export async function fetchAllEvonodeBlocks(
   sdk: {
     epoch: {
@@ -101,19 +123,19 @@ export async function fetchAllEvonodeBlocks(
       startAfter: cursor,
     });
     if (!(result instanceof Map) || result.size === 0) break;
-    let lastKey: string | undefined;
+    let lastHex: string | undefined;
     for (const [key, val] of result) {
-      const proTxHash = typeof key === 'string' ? key : String(key);
-      if (!proTxHash) continue;
+      // Display key = base58 (what Identifier components render and what
+      // /evonode/?proTxHash=… URLs use). Pagination cursor = hex.
+      const displayKey = typeof key === 'string' ? key : String(key ?? '');
+      const hex = keyToHex(key);
+      if (!displayKey) continue;
       const blocks = typeof val === 'bigint' ? Number(val) : Number(val ?? 0);
-      // De-dupe just in case the server overlaps a cursor.
-      if (!out.has(proTxHash)) {
-        out.set(proTxHash, blocks);
-      }
-      lastKey = proTxHash;
+      if (!out.has(displayKey)) out.set(displayKey, blocks);
+      if (hex) lastHex = hex;
     }
-    if (!lastKey || result.size < PAGE_LIMIT) break;
-    cursor = lastKey;
+    if (!lastHex || result.size < PAGE_LIMIT) break;
+    cursor = lastHex;
   }
   return out;
 }
