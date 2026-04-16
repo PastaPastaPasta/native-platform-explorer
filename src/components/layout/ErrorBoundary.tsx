@@ -28,7 +28,7 @@ export class ErrorBoundary extends Component<{ children: ReactNode }, State> {
       <Container py={10}>
         <InfoBlock emphasised>
           <VStack align="flex-start" spacing={3}>
-            <Heading as="h2" size="md" color="danger.default">
+            <Heading as="h2" size="md" color="danger">
               Something went wrong.
             </Heading>
             <Text color="gray.250" fontSize="sm">

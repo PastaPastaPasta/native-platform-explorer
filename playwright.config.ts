@@ -10,6 +10,12 @@ export default defineConfig({
     baseURL: 'http://localhost:3000',
     trace: 'retain-on-failure',
   },
+  webServer: {
+    command: 'pnpm start',
+    port: 3000,
+    reuseExistingServer: !process.env.CI,
+    timeout: 120_000,
+  },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],

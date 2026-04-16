@@ -6,6 +6,13 @@ const config: ThemeConfig = {
   useSystemColorMode: false,
 };
 
+// Derive the Chakra-shaped gray scale from the flat 'gray-NNN' keys in colors.ts.
+const grayScale = Object.fromEntries(
+  Object.entries(colors)
+    .filter(([k]) => k.startsWith('gray-'))
+    .map(([k, v]) => [k.slice('gray-'.length), v]),
+) as Record<string, string>;
+
 export const theme = extendTheme({
   config,
   breakpoints: {
@@ -23,28 +30,13 @@ export const theme = extendTheme({
   },
   colors: {
     brand: colors.brand,
-    success: { default: colors.success },
-    danger: { default: colors.danger },
-    warning: { default: colors.warning },
-    orange: { default: colors.orange },
-    gray: {
-      50: colors['gray-50'],
-      100: colors['gray-100'],
-      200: colors['gray-200'],
-      250: colors['gray-250'],
-      300: colors['gray-300'],
-      400: colors['gray-400'],
-      500: colors['gray-500'],
-      525: colors['gray-525'],
-      550: colors['gray-550'],
-      600: colors['gray-600'],
-      650: colors['gray-650'],
-      675: colors['gray-675'],
-      700: colors['gray-700'],
-      750: colors['gray-750'],
-      800: colors['gray-800'],
-      900: colors['gray-900'],
-    },
+    // Flat string tokens — `color="success"` resolves to the hex value via Chakra's
+    // token lookup. No `.default` sub-path (that's a semanticTokens concept).
+    success: colors.success,
+    danger: colors.danger,
+    warning: colors.warning,
+    orange: colors.orange,
+    gray: grayScale,
   },
   radii: {
     block: '30px',

@@ -7,7 +7,7 @@ export function NetworkStatus() {
   const { status, trusted, error } = useSdk();
 
   let label = 'Connecting…';
-  let color: string = 'warning.default';
+  let color: string = 'warning';
   let tooltip = 'Contacting DAPI…';
 
   switch (status) {
@@ -20,12 +20,12 @@ export function NetworkStatus() {
       break;
     case 'error':
       label = 'Disconnected';
-      color = 'danger.default';
+      color = 'danger';
       tooltip = error?.message ?? 'The SDK failed to connect to DAPI.';
       break;
     case 'connecting':
       label = 'Connecting…';
-      color = 'warning.default';
+      color = 'warning';
       tooltip = 'Contacting DAPI…';
       break;
     case 'idle':
