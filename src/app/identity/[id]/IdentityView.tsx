@@ -23,6 +23,10 @@ import { NotFoundCard } from '@ui/NotFoundCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { IdentityDigestCard } from '@components/identity/IdentityDigestCard';
 import { PublicKeysTable } from '@components/identity/PublicKeysTable';
+import { IdentityTokensTab } from '@components/identity/IdentityTokensTab';
+import { IdentityGroupsTab } from '@components/identity/IdentityGroupsTab';
+import { IdentityVotesTab } from '@components/identity/IdentityVotesTab';
+import { ViewedIdentitiesBanner } from '@components/identity/ViewedIdentitiesBanner';
 import { AliasesList } from '@components/data/AliasesList';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
@@ -30,10 +34,8 @@ import {
   useIdentity,
   useIdentityBalanceAndRevision,
   useIdentityContractNonce,
-  useIdentityGroups,
   useIdentityKeys,
   useIdentityNonce,
-  useIdentityVotes,
 } from '@sdk/queries';
 import { useDpnsUsernames } from '@sdk/queries';
 import { shortId } from '@util/identifier';
@@ -103,8 +105,6 @@ export default function IdentityView({ id: fromServer }: { id: string }) {
   const keysQ = useIdentityKeys(id);
   const nonceQ = useIdentityNonce(id);
   const aliasesQ = useDpnsUsernames(id);
-  const groupsQ = useIdentityGroups(id);
-  const votesQ = useIdentityVotes(id);
 
   if (id === 'placeholder') {
     return (
@@ -150,6 +150,7 @@ export default function IdentityView({ id: fromServer }: { id: string }) {
           />
         ) : (
           <>
+            <ViewedIdentitiesBanner identityId={id} />
             <IdentityDigestCard
               id={id}
               balance={balanceAndRevision?.balance ?? null}
@@ -193,39 +194,15 @@ export default function IdentityView({ id: fromServer }: { id: string }) {
                 </TabPanel>
 
                 <TabPanel px={0}>
-                  <InfoBlock>
-                    <TabHeading label="Tokens" />
-                    <Text fontSize="sm" color="gray.400">
-                      Token balances for identities will arrive in Stage 3. For now this tab
-                      would call <code>tokens.identityBalances</code> against a known token list.
-                    </Text>
-                  </InfoBlock>
+                  <IdentityTokensTab identityId={id} />
                 </TabPanel>
 
                 <TabPanel px={0}>
-                  <InfoBlock>
-                    <TabHeading label="Group memberships" />
-                    {groupsQ.isLoading ? (
-                      <LoadingCard lines={2} />
-                    ) : groupsQ.isError ? (
-                      <ErrorCard error={groupsQ.error} onRetry={() => groupsQ.refetch()} />
-                    ) : (
-                      <CodeBlock value={groupsQ.data ?? 'No groups'} />
-                    )}
-                  </InfoBlock>
+                  <IdentityGroupsTab identityId={id} />
                 </TabPanel>
 
                 <TabPanel px={0}>
-                  <InfoBlock>
-                    <TabHeading label="Votes on contested resources" />
-                    {votesQ.isLoading ? (
-                      <LoadingCard lines={2} />
-                    ) : votesQ.isError ? (
-                      <ErrorCard error={votesQ.error} onRetry={() => votesQ.refetch()} />
-                    ) : (
-                      <CodeBlock value={votesQ.data ?? 'No votes recorded'} />
-                    )}
-                  </InfoBlock>
+                  <IdentityVotesTab identityId={id} />
                 </TabPanel>
 
                 <TabPanel px={0}>
