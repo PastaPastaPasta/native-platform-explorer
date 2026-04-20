@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  Box,
   Button,
   Grid,
   Heading,
@@ -9,8 +10,6 @@ import {
   SimpleGrid,
   Text,
   VStack,
-  Wrap,
-  WrapItem,
 } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import { useMemo } from 'react';
@@ -21,7 +20,6 @@ import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
 import { VotePollsList } from '@components/governance/VotePollsList';
 import { CreditsBlock } from '@components/data/CreditsBlock';
-import { InfoLine } from '@components/data/InfoLine';
 import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
@@ -39,10 +37,21 @@ import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
 import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 
-function Card({ label, value }: { label: string; value: React.ReactNode }) {
+function StatCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <InfoBlock>
-      <InfoLine label={label} value={value} />
+      <VStack align="flex-start" spacing={2}>
+        <Text
+          fontSize="11px"
+          fontWeight={500}
+          color="gray.400"
+          textTransform="uppercase"
+          letterSpacing="0.06em"
+        >
+          {label}
+        </Text>
+        {children}
+      </VStack>
     </InfoBlock>
   );
 }
@@ -97,17 +106,19 @@ export default function HomePage() {
   return (
     <Container py={{ base: 2, md: 6 }}>
       <VStack align="stretch" spacing={6}>
+        {/* Hero */}
         <InfoBlock emphasised>
           <VStack align="flex-start" spacing={4}>
-            <Heading as="h1" fontSize={{ base: '2xl', md: '3xl' }} color="gray.100">
+            <Heading as="h1" fontSize={{ base: '2xl', md: '3xl' }} color="gray.100" fontWeight={700}>
               A proof-verified, client-only Dash Platform explorer.
             </Heading>
-            <Text color="gray.250" fontSize="md">
+            <Text color="gray.300" fontSize="md" lineHeight="tall">
               Every piece of data on this site is fetched live by{' '}
-              <code>@dashevo/evo-sdk</code> running directly in your browser.
+              <Box as="code" color="brand.light" fontSize="sm" fontWeight={500}>@dashevo/evo-sdk</Box>{' '}
+              running directly in your browser.
             </Text>
             <HStack spacing={3}>
-              <Text fontSize="xs" color="gray.400" textTransform="uppercase">
+              <Text fontSize="xs" color="gray.500" textTransform="uppercase" fontWeight={500} letterSpacing="0.05em">
                 Network
               </Text>
               <Text fontSize="xs" color="brand.light" fontWeight={600}>
@@ -127,82 +138,79 @@ export default function HomePage() {
           </VStack>
         </InfoBlock>
 
+        {/* Stat cards */}
         <SimpleGrid columns={{ base: 1, md: 2, lg: 5 }} spacing={3}>
-          <Card
-            label="Block height"
-            value={
-              statusQ.isLoading ? (
-                <Progress size="xs" isIndeterminate colorScheme="blue" borderRadius="full" />
-              ) : (
-                <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                  {blockHeight !== undefined ? String(blockHeight) : '—'}
+          <StatCard label="Block height">
+            {statusQ.isLoading ? (
+              <Progress size="xs" isIndeterminate colorScheme="blue" borderRadius="full" />
+            ) : (
+              <Text fontFamily="mono" fontSize="xl" fontWeight={500} color="gray.100">
+                {blockHeight !== undefined ? String(blockHeight) : '—'}
+              </Text>
+            )}
+          </StatCard>
+
+          <StatCard label="Current epoch">
+            {epochQ.isLoading ? (
+              <Progress size="xs" isIndeterminate colorScheme="blue" borderRadius="full" />
+            ) : (
+              <VStack align="flex-start" spacing={1} w="full">
+                <Text
+                  as={NextLink}
+                  href="/epoch/"
+                  fontFamily="mono"
+                  fontSize="xl"
+                  fontWeight={500}
+                  color="brand.light"
+                  _hover={{ color: 'brand.light' }}
+                >
+                  #{epoch?.index ?? '—'}
                 </Text>
-              )
-            }
-          />
-          <Card
-            label="Current epoch"
-            value={
-              epochQ.isLoading ? (
-                <Progress size="xs" isIndeterminate colorScheme="blue" borderRadius="full" />
-              ) : (
-                <VStack align="flex-start" spacing={1}>
-                  <Text
-                    as={NextLink}
-                    href="/epoch/"
-                    fontFamily="mono"
-                    fontSize="xl"
-                    color="brand.light"
-                    _hover={{ color: 'brand.light' }}
-                  >
-                    #{epoch?.index ?? '—'}
-                  </Text>
-                  {epoch?.progressPct !== null && epoch?.progressPct !== undefined ? (
-                    <Progress
-                      value={epoch.progressPct}
-                      colorScheme="blue"
-                      size="xs"
-                      width="100%"
-                      borderRadius="full"
-                      bg="gray.800"
-                    />
-                  ) : null}
-                </VStack>
-              )
-            }
-          />
-          <Card label="Total credits" value={<CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />} />
-          <Card
-            label="Protocol version"
-            value={
-              <VStack align="flex-start" spacing={1}>
-                <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                  {protocolCurrent !== undefined ? String(protocolCurrent) : '—'}
-                </Text>
-                {protocolPending ? (
-                  <Text fontSize="xs" color="warning">
-                    upgrade → {String(protocolPending)}
-                  </Text>
+                {epoch?.progressPct !== null && epoch?.progressPct !== undefined ? (
+                  <Progress
+                    value={epoch.progressPct}
+                    colorScheme="blue"
+                    size="xs"
+                    width="100%"
+                    borderRadius="full"
+                    bg="whiteAlpha.100"
+                  />
                 ) : null}
               </VStack>
-            }
-          />
-          <Card
-            label="Active quorums"
-            value={
-              <Text fontFamily="mono" fontSize="xl" color="gray.100">
-                {quorumsCount ?? '—'}
+            )}
+          </StatCard>
+
+          <StatCard label="Total credits">
+            <CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />
+          </StatCard>
+
+          <StatCard label="Protocol version">
+            <VStack align="flex-start" spacing={1}>
+              <Text fontFamily="mono" fontSize="xl" fontWeight={500} color="gray.100">
+                {protocolCurrent !== undefined ? String(protocolCurrent) : '—'}
               </Text>
-            }
-          />
+              {protocolPending ? (
+                <Text fontSize="xs" color="warning" fontWeight={500}>
+                  upgrade → {String(protocolPending)}
+                </Text>
+              ) : null}
+            </VStack>
+          </StatCard>
+
+          <StatCard label="Active quorums">
+            <Text fontFamily="mono" fontSize="xl" fontWeight={500} color="gray.100">
+              {quorumsCount ?? '—'}
+            </Text>
+          </StatCard>
         </SimpleGrid>
 
+        {/* Top proposers */}
         <InfoBlock>
           <HStack justify="space-between" mb={3}>
-            <Heading size="sm" color="gray.100">
+            <Heading size="sm" color="gray.100" fontWeight={600}>
               Top proposers this epoch
             </Heading>
-            <Button as={NextLink} href="/epoch/" size="xs" variant="outline">
+            <Button as={NextLink} href="/epoch/" size="xs" variant="outline" borderColor="whiteAlpha.200" _hover={{ borderColor: 'whiteAlpha.400', bg: 'whiteAlpha.50' }}>
               View epoch
             </Button>
           </HStack>
@@ -213,20 +221,21 @@ export default function HomePage() {
           )}
         </InfoBlock>
 
+        {/* Bottom grid */}
         <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={4}>
           <InfoBlock>
             <HStack justify="space-between" mb={3}>
-              <Heading size="sm" color="gray.100">
+              <Heading size="sm" color="gray.100" fontWeight={600}>
                 Vote polls ending soon
               </Heading>
-              <Button as={NextLink} href="/governance/polls/" size="xs" variant="outline">
+              <Button as={NextLink} href="/governance/polls/" size="xs" variant="outline" borderColor="whiteAlpha.200" _hover={{ borderColor: 'whiteAlpha.400', bg: 'whiteAlpha.50' }}>
                 All polls
               </Button>
             </HStack>
             {pollsQ.isLoading ? (
               <LoadingCard lines={3} />
             ) : polls.length === 0 ? (
-              <Text color="gray.400" fontSize="sm">
+              <Text color="gray.500" fontSize="sm">
                 No polls ending in the next 30 days.
               </Text>
             ) : (
@@ -235,36 +244,39 @@ export default function HomePage() {
           </InfoBlock>
 
           <InfoBlock>
-            <Heading size="sm" color="gray.100" mb={3}>
+            <Heading size="sm" color="gray.100" mb={4} fontWeight={600}>
               Well-known contracts
             </Heading>
-            <Wrap spacing={2}>
+            <VStack align="stretch" spacing={2}>
               {WELL_KNOWN.map((w) => (
-                <WrapItem key={w.id}>
-                  <Button
-                    as={NextLink}
-                    href={`/contract/?id=${encodeURIComponent(w.id)}`}
-                    size="sm"
-                    variant="outline"
-                    colorScheme="blue"
-                    height="auto"
-                    py={2}
-                  >
-                    <VStack align="flex-start" spacing={0}>
-                      <Text fontSize="xs" fontWeight={600}>
-                        {w.name}
-                      </Text>
-                      <Identifier value={w.id} dense avatar={false} copy={false} />
-                    </VStack>
-                  </Button>
-                </WrapItem>
+                <Box
+                  key={w.id}
+                  as={NextLink}
+                  href={`/contract/?id=${encodeURIComponent(w.id)}`}
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="space-between"
+                  px={4}
+                  py={3}
+                  borderRadius="xl"
+                  border="1px solid"
+                  borderColor="rgba(255,255,255,0.06)"
+                  bg="rgba(46,57,61,0.25)"
+                  _hover={{ borderColor: 'rgba(0,141,228,0.3)', bg: 'rgba(46,57,61,0.4)' }}
+                  transition="all 0.2s ease"
+                >
+                  <Text fontSize="sm" fontWeight={600} color="gray.100">
+                    {w.name}
+                  </Text>
+                  <Identifier value={w.id} dense avatar={false} copy={false} />
+                </Box>
               ))}
-            </Wrap>
+            </VStack>
           </InfoBlock>
         </Grid>
 
-        <Text fontSize="xs" color="gray.400" textAlign="center">
-          Chain: {chainId ?? '—'}
+        <Text fontSize="xs" color="gray.500" textAlign="center" fontFamily="mono">
+          {chainId ?? '—'}
         </Text>
       </VStack>
     </Container>

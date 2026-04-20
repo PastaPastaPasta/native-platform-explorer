@@ -24,9 +24,9 @@ export const theme = extendTheme({
     '3xl': '120em',
   },
   fonts: {
-    heading: 'var(--font-heading), Montserrat, system-ui, sans-serif',
-    body: 'var(--font-body), "Open Sans", system-ui, sans-serif',
-    mono: 'var(--font-mono), "Roboto Mono", ui-monospace, monospace',
+    heading: 'var(--font-heading), Outfit, system-ui, sans-serif',
+    body: 'var(--font-body), "DM Sans", system-ui, sans-serif',
+    mono: 'var(--font-mono), "JetBrains Mono", ui-monospace, monospace',
   },
   colors: {
     brand: colors.brand,

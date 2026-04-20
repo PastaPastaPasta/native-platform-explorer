@@ -1,24 +1,24 @@
-import { Montserrat, Open_Sans, Roboto_Mono } from 'next/font/google';
+import { Outfit, DM_Sans, JetBrains_Mono } from 'next/font/google';
 
-export const montserrat = Montserrat({
+export const outfit = Outfit({
   subsets: ['latin'],
-  weight: ['400', '600', '700'],
+  weight: ['400', '500', '600', '700'],
   variable: '--font-heading',
   display: 'swap',
 });
 
-export const openSans = Open_Sans({
+export const dmSans = DM_Sans({
   subsets: ['latin'],
-  weight: ['400', '600'],
+  weight: ['400', '500', '600'],
   variable: '--font-body',
   display: 'swap',
 });
 
-export const robotoMono = Roboto_Mono({
+export const jetbrainsMono = JetBrains_Mono({
   subsets: ['latin'],
   weight: ['400', '500'],
   variable: '--font-mono',
   display: 'swap',
 });
 
-export const fontClassName = [montserrat.variable, openSans.variable, robotoMono.variable].join(' ');
+export const fontClassName = [outfit.variable, dmSans.variable, jetbrainsMono.variable].join(' ');

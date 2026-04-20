@@ -1,18 +1,29 @@
-// Mixins ported verbatim from platform-explorer/packages/frontend/src/styles/mixins.scss
-// so the two projects feel like siblings.
+// Mixins — glassmorphic design system for dark-mode dashboard.
 
 $blockBackgroundBlur: blur(44px);
-$font-mono: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
+$font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
 
 // Glassmorphic card. Every "card" in the app uses this mixin.
 @mixin Block($border: false, $borderColor: var(--chakra-colors-brand-normal)) {
   backdrop-filter: $blockBackgroundBlur;
   border-radius: var(--chakra-radii-block);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(24, 31, 34, 0.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: linear-gradient(
+    135deg,
+    rgba(24, 31, 34, 0.35) 0%,
+    rgba(24, 31, 34, 0.18) 100%
+  );
+  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+
+  &:hover {
+    border-color: rgba(255, 255, 255, 0.14);
+  }
 
   @if $border {
-    box-shadow: 2px 2px $borderColor;
+    box-shadow:
+      0 0 0 1px rgba(0, 141, 228, 0.2),
+      0 4px 24px rgba(0, 141, 228, 0.08);
+    border-color: rgba(0, 141, 228, 0.3);
   }
 }
 
@@ -24,13 +35,14 @@ $font-mono: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
   font-family: $font-mono;
   font-size: 12pt;
   border-radius: 10px;
-  border: 1px solid var(--chakra-colors-gray-750);
-  background-color: rgba(46, 57, 61, 0.5); // gray-800 @ .5
-  transition: all 0.1s;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  background-color: rgba(46, 57, 61, 0.4);
+  transition: all 0.2s ease;
 
   @if $clickable {
     &:hover {
-      background-color: var(--chakra-colors-gray-750);
+      background-color: rgba(46, 57, 61, 0.7);
+      border-color: rgba(255, 255, 255, 0.1);
     }
   }
 }
@@ -44,7 +56,7 @@ $font-mono: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
     content: '';
     position: absolute;
     inset: 0;
-    background-color: rgba(255, 255, 255, 0.04);
+    background-color: rgba(255, 255, 255, 0.03);
   }
 
   &::after {
@@ -57,10 +69,10 @@ $font-mono: var(--font-mono), 'Roboto Mono', ui-monospace, monospace;
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(255, 255, 255, 0.06) 50%,
+      rgba(0, 141, 228, 0.06) 50%,
       transparent 100%
     );
-    animation: LoadingLine 3s linear infinite;
+    animation: LoadingLine 2.5s ease-in-out infinite;
     animation-delay: $delay;
   }
 }

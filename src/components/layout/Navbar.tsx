@@ -41,10 +41,26 @@ function NavLink({ href, label, onClick }: { href: string; label: string; onClic
       as={NextLink}
       href={href}
       fontSize="sm"
-      fontWeight={active ? 600 : 500}
-      color={active ? 'brand.light' : 'gray.100'}
-      _hover={{ color: 'brand.light' }}
+      fontWeight={active ? 600 : 400}
+      color={active ? 'brand.light' : 'gray.300'}
+      _hover={{ color: 'gray.100' }}
+      transition="color 0.2s ease"
+      position="relative"
+      py={1}
       onClick={onClick}
+      sx={active ? {
+        '&::after': {
+          content: '""',
+          position: 'absolute',
+          bottom: '-4px',
+          left: '0',
+          right: '0',
+          height: '2px',
+          borderRadius: '1px',
+          bg: 'brand.normal',
+          opacity: 0.8,
+        },
+      } : undefined}
     >
       {label}
     </Text>
@@ -60,10 +76,10 @@ export function Navbar() {
       position="sticky"
       top={0}
       zIndex={20}
-      bg="rgba(24,31,34,0.8)"
+      bg="rgba(24,29,32,0.85)"
       sx={{ backdropFilter: 'blur(44px)' }}
       borderBottom="1px solid"
-      borderColor="whiteAlpha.100"
+      borderColor="rgba(255,255,255,0.06)"
       height="66px"
     >
       <Container height="100%">
@@ -76,16 +92,17 @@ export function Navbar() {
               fontWeight={700}
               fontSize="md"
               color="gray.100"
-              letterSpacing="wide"
+              letterSpacing="0.04em"
             >
               NPE
             </Text>
-            <Text as="span" fontSize="xs" color="gray.400" display={{ base: 'none', lg: 'inline' }}>
+            <Box w="1px" h="16px" bg="whiteAlpha.200" display={{ base: 'none', lg: 'block' }} />
+            <Text as="span" fontSize="xs" color="gray.400" display={{ base: 'none', lg: 'inline' }} fontWeight={400}>
               Native Platform Explorer
             </Text>
           </HStack>
 
-          <HStack spacing={4} display={{ base: 'none', lg: 'flex' }}>
+          <HStack spacing={5} display={{ base: 'none', lg: 'flex' }}>
             {NAV_ITEMS.map((item) => (
               <NavLink key={item.href} {...item} />
             ))}
@@ -112,7 +129,7 @@ export function Navbar() {
       </Container>
 
       <Drawer isOpen={isOpen} placement="right" onClose={onClose}>
-        <DrawerOverlay />
+        <DrawerOverlay bg="blackAlpha.700" />
         <DrawerContent bg="gray.900">
           <DrawerBody pt={10}>
             <VStack align="stretch" spacing={4}>
