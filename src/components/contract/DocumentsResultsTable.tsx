@@ -16,7 +16,7 @@ import { Identifier } from '@components/data/Identifier';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { NotActive } from '@components/data/NotActive';
 import type { HeuristicColumn } from '@util/schema';
-import { readProp } from '@util/sdk-shape';
+import { idToString, readProp } from '@util/sdk-shape';
 
 export interface DocumentsResultsTableProps {
   columns: HeuristicColumn[];
@@ -27,7 +27,8 @@ export interface DocumentsResultsTableProps {
 
 function renderCell(row: Record<string, unknown>, col: HeuristicColumn) {
   const flatValue = readProp<unknown>(row, col.key);
-  // `$id` / `$ownerId` are often exposed as getters (id / ownerId) with `$`-prefix on serialised output.
+  // `$id` / `$ownerId` are the serialised-JSON names; on SDK Document class
+  // instances those system fields are exposed under `id` / `ownerId`.
   let value = flatValue;
   if (value === undefined) {
     if (col.key === '$id') value = readProp<unknown>(row, 'id');
@@ -37,7 +38,11 @@ function renderCell(row: Record<string, unknown>, col: HeuristicColumn) {
   if (value === null || value === undefined) return <NotActive />;
 
   if (col.kind === 'identifier') {
-    const s = typeof value === 'string' ? value : String(value);
+    // `idToString` normalises Identifier class instances (toBase58), raw 32-byte
+    // Uint8Arrays, and plain strings — plain `String(value)` would emit
+    // "[object Object]" for the WASM class and "240,92,…" for a byte buffer.
+    const s = idToString(value);
+    if (!s) return <NotActive />;
     if (col.key === '$ownerId') return <IdentityLink id={s} dense />;
     return <Identifier value={s} dense avatar={false} />;
   }
@@ -68,7 +73,7 @@ function renderCell(row: Record<string, unknown>, col: HeuristicColumn) {
 
 function getDocId(row: Record<string, unknown>, fallbackIndex: number): string {
   const id = readProp<unknown>(row, '$id') ?? readProp<unknown>(row, 'id');
-  return String(id ?? fallbackIndex);
+  return idToString(id) ?? String(fallbackIndex);
 }
 
 export function DocumentsResultsTable({
@@ -132,5 +137,5 @@ export function getLastDocId(rows: Array<Record<string, unknown>>): string | und
   const last = rows[rows.length - 1];
   if (!last) return undefined;
   const id = readProp<unknown>(last, '$id') ?? readProp<unknown>(last, 'id');
-  return id ? String(id) : undefined;
+  return idToString(id);
 }
