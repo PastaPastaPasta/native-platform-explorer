@@ -73,20 +73,6 @@ pre {
   font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
 }
 
-.glass-card {
-  @include Block();
-  padding: 1.25rem 1.5rem;
-}
-
-.glass-card--emphasised {
-  @include Block(true);
-  padding: 1.25rem 1.5rem;
-}
-
-.mono-line {
-  @include DefListItem();
-}
-
 .loading-line {
   @include LoadingLine();
   height: 1em;

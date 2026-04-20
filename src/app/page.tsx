@@ -37,6 +37,14 @@ import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
 import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 
+function getQuorumsCount(raw: unknown): number | null {
+  if (!raw) return null;
+  if (Array.isArray(raw)) return raw.length;
+  if (raw instanceof Map) return raw.size;
+  const qt = readProp<unknown[]>(raw, 'quorums');
+  return Array.isArray(qt) ? qt.length : null;
+}
+
 function StatCard({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <InfoBlock>
@@ -91,14 +99,7 @@ export default function HomePage() {
     readProp<number | bigint>(statusPlain, 'height');
   const statusNetwork = (statusPlain.network as Record<string, unknown> | undefined) ?? {};
   const chainId = (statusNetwork.chainId as string | undefined) ?? readProp<string>(statusPlain, 'chainId');
-  const quorumsCount = (() => {
-    const raw = quorumsQ.data;
-    if (!raw) return null;
-    if (Array.isArray(raw)) return raw.length;
-    if (raw instanceof Map) return raw.size;
-    const qt = readProp<unknown[]>(raw, 'quorums');
-    return Array.isArray(qt) ? qt.length : null;
-  })();
+  const quorumsCount = getQuorumsCount(quorumsQ.data);
 
   const protocolCurrent = readProp<unknown>(protocolQ.data, 'currentProtocolVersion');
   const protocolPending = readProp<unknown>(protocolQ.data, 'nextProtocolVersion');
@@ -166,7 +167,7 @@ export default function HomePage() {
                 >
                   #{epoch?.index ?? '—'}
                 </Text>
-                {epoch?.progressPct !== null && epoch?.progressPct !== undefined ? (
+                {epoch?.progressPct != null ? (
                   <Progress
                     value={epoch.progressPct}
                     colorScheme="blue"

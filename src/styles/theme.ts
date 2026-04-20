@@ -44,7 +44,6 @@ export const theme = extendTheme({
   sizes: {
     container: {
       xl: '1310px',
-      maxPageW: '1920px',
     },
   },
   styles: {

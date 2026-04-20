@@ -4,7 +4,7 @@ $blockBackgroundBlur: blur(44px);
 $font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
 
 // Glassmorphic card. Every "card" in the app uses this mixin.
-@mixin Block($border: false, $borderColor: var(--chakra-colors-brand-normal)) {
+@mixin Block($border: false) {
   backdrop-filter: $blockBackgroundBlur;
   border-radius: var(--chakra-radii-block);
   border: 1px solid rgba(255, 255, 255, 0.08);
