@@ -13,6 +13,7 @@ import {
   WrapItem,
 } from '@chakra-ui/react';
 import NextLink from 'next/link';
+import { useMemo } from 'react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
@@ -35,6 +36,7 @@ import {
 import { WELL_KNOWN } from '@constants/well-known';
 import { useSdk } from '@sdk/hooks';
 import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
+import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 
 function Card({ label, value }: { label: string; value: React.ReactNode }) {
@@ -66,8 +68,20 @@ export default function HomePage() {
   const pollsQ = useVotePollsByEndDate(nowBucket, in30d);
   const polls = (pollsQ.data as unknown[] | undefined) ?? [];
 
-  const blockHeight = readProp<number | bigint>(statusQ.data, 'height');
-  const chainId = readProp<string>(statusQ.data, 'chainId');
+  // system.status() returns a nested WASM class — coerce to plain JSON and
+  // read block height from the `chain` sub-object (same approach as /network/status).
+  const statusPlain = useMemo(
+    () => (statusQ.data ? ((toPlain(statusQ.data) as Record<string, unknown>) ?? {}) : {}),
+    [statusQ.data],
+  );
+  const chain = (statusPlain.chain as Record<string, unknown> | undefined) ?? {};
+  const blockHeight =
+    (chain.latestBlockHeight as number | bigint | undefined) ??
+    (chain.blockHeight as number | bigint | undefined) ??
+    (chain.height as number | bigint | undefined) ??
+    readProp<number | bigint>(statusPlain, 'height');
+  const statusNetwork = (statusPlain.network as Record<string, unknown> | undefined) ?? {};
+  const chainId = (statusNetwork.chainId as string | undefined) ?? readProp<string>(statusPlain, 'chainId');
   const quorumsCount = (() => {
     const raw = quorumsQ.data;
     if (!raw) return null;
