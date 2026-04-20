@@ -264,10 +264,15 @@ export function useDpnsGetByName(name: string | undefined) {
   );
 }
 
+/** Strip the `.dash` TLD so we pass a bare label to SDK methods that expect one. */
+function toLabel(name: string): string {
+  return name.endsWith('.dash') ? name.slice(0, -5) : name;
+}
+
 export function useDpnsIsAvailable(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'isNameAvailable', name],
-    (sdk) => sdk.dpns.isNameAvailable(name!) as Promise<unknown>,
+    (sdk) => sdk.dpns.isNameAvailable(toLabel(name!)) as Promise<unknown>,
     { enabled: !!name, staleTime: LIVE, hasProofVariant: false },
   );
 }
@@ -275,7 +280,7 @@ export function useDpnsIsAvailable(name: string | undefined) {
 export function useDpnsIsContested(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'isContestedUsername', name],
-    (sdk) => sdk.dpns.isContestedUsername(name!) as Promise<unknown>,
+    (sdk) => sdk.dpns.isContestedUsername(toLabel(name!)) as Promise<unknown>,
     { enabled: !!name, staleTime: STRUCTURAL, hasProofVariant: false },
   );
 }
@@ -283,7 +288,7 @@ export function useDpnsIsContested(name: string | undefined) {
 export function useDpnsIsValid(name: string | undefined) {
   return useSdkQuery(
     ['dpns', 'isValidUsername', name],
-    (sdk) => sdk.dpns.isValidUsername(name!) as Promise<unknown>,
+    (sdk) => sdk.dpns.isValidUsername(toLabel(name!)) as Promise<unknown>,
     { enabled: !!name, staleTime: IMMUTABLE, hasProofVariant: false },
   );
 }
