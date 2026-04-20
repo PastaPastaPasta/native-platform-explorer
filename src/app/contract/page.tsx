@@ -53,13 +53,15 @@ function Content() {
   const contractQ = useContract(id || undefined);
   const tokenInfoQ = useTokenContractInfo(id || undefined);
   const groupsQ = useGroupsDataContracts(id ? [id] : undefined);
-  const historyQ = useContractHistory(id || undefined);
+
+  const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
+  const hasHistory = Number(contract?.version ?? 0) > 1;
+  const historyQ = useContractHistory(hasHistory ? id : undefined);
 
   if (!id) {
     return <ContractLanding />;
   }
 
-  const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
   const docTypes = contract ? documentTypeNames(contract) : [];
   const tokens = contract ? tokenPositions(contract) : [];
   const groups = contract ? groupPositions(contract) : [];
@@ -201,7 +203,11 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       Version history
                     </Heading>
-                    {historyQ.isLoading ? (
+                    {!hasHistory ? (
+                      <Text color="gray.400" fontSize="sm">
+                        This contract is at version 1 and has never been updated.
+                      </Text>
+                    ) : historyQ.isLoading ? (
                       <LoadingCard lines={3} />
                     ) : historyQ.isError ? (
                       <ErrorCard error={historyQ.error} onRetry={() => historyQ.refetch()} />
