@@ -52,7 +52,7 @@ export function TokenView({ tokenId }: { tokenId: string }) {
 
   const isLoading = supplyQ.isLoading;
   const supply = supplyQ.data as
-    | { totalSystemAmount?: bigint; baseAmount?: bigint; maxAmount?: bigint }
+    | { totalSupply?: bigint; baseSupply?: bigint; maxSupply?: bigint }
     | null
     | undefined;
 
@@ -60,7 +60,10 @@ export function TokenView({ tokenId }: { tokenId: string }) {
   const statusForToken = statusMap?.get(tokenId);
 
   const pricesMap = pricesQ.data as Map<string, unknown> | null | undefined;
-  const priceForToken = pricesMap?.get(tokenId);
+  const priceForToken = pricesMap?.get(tokenId) as
+    | { price?: bigint | number; baseCurrencyPrice?: bigint | number }
+    | null
+    | undefined;
 
   const notFound = !isLoading && supplyQ.isSuccess && !supply;
 
@@ -80,14 +83,12 @@ export function TokenView({ tokenId }: { tokenId: string }) {
           <>
             <TokenDigestCard
               id={tokenId}
-              totalSupply={supply?.totalSystemAmount ?? null}
-              maxSupply={supply?.maxAmount ?? null}
-              baseSupply={supply?.baseAmount ?? null}
+              totalSupply={supply?.totalSupply ?? null}
+              maxSupply={supply?.maxSupply ?? null}
+              baseSupply={supply?.baseSupply ?? null}
               price={
                 priceForToken
-                  ? typeof priceForToken === 'object'
-                    ? JSON.stringify(priceForToken)
-                    : String(priceForToken)
+                  ? String(priceForToken.price ?? priceForToken.baseCurrencyPrice ?? JSON.stringify(priceForToken))
                   : null
               }
               flags={flagsFromStatus(statusForToken)}
