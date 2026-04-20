@@ -11,7 +11,7 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'pnpm start',
+    command: 'pnpm serve -l 3000',
     port: 3000,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
