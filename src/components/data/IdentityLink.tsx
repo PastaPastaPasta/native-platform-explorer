@@ -11,7 +11,7 @@ export function IdentityLink({
   id,
   dense = false,
   showAlias = true,
-  avatar = true,
+  avatar = false,
 }: {
   id: string;
   dense?: boolean;

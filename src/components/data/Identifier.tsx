@@ -51,7 +51,7 @@ function render(value: string, h: IdentifierHighlight, ellipsis: IdentifierProps
 
 export function Identifier({
   value,
-  avatar = true,
+  avatar = false,
   copy = true,
   ellipsis = 'auto',
   highlight = 'both',
