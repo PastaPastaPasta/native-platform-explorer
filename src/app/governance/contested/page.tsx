@@ -226,7 +226,17 @@ function Content() {
             {resourcesQ.isLoading ? (
               <LoadingCard lines={4} />
             ) : resourcesQ.isError ? (
-              <ErrorCard error={resourcesQ.error} onRetry={() => resourcesQ.refetch()} />
+              <>
+                <ErrorCard error={resourcesQ.error} onRetry={() => resourcesQ.refetch()} />
+                <CodeBlock
+                  value={{
+                    dataContractId: contractFromUrl,
+                    documentTypeName: docTypeFromUrl,
+                    indexName: effectiveIndex,
+                    ...(indexValuePrefix ? { startIndexValues: indexValuePrefix } : {}),
+                  }}
+                />
+              </>
             ) : resources.length === 0 ? (
               <Text color="gray.400" fontSize="sm">
                 No active contested resources for this document type.
