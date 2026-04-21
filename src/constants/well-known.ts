@@ -7,7 +7,7 @@ export interface WellKnown {
   description?: string;
   url?: string;
   tags?: string[];
-  contested?: boolean;
+  contested?: { docType: string; indexName: string };
 }
 
 // Curated registry — the only way we give names to otherwise anonymous contract

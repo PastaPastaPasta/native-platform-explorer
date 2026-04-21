@@ -26,7 +26,7 @@ import { CodeBlock } from '@components/data/CodeBlock';
 import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContestedResources, useContract } from '@sdk/queries';
-import { WELL_KNOWN } from '@constants/well-known';
+import { WELL_KNOWN, findWellKnown } from '@constants/well-known';
 import { documentTypeNames, normaliseContract } from '@util/contract';
 
 function decodeIndexValues(raw: unknown): string {
@@ -45,7 +45,8 @@ function Content() {
   const docTypeFromUrl = params.get('docType') ?? '';
 
   const [contractInput, setContractInput] = useState(contractFromUrl);
-  const indexName = params.get('index') ?? 'parentNameAndLabel';
+  const wellKnown = contractFromUrl ? findWellKnown(contractFromUrl) : undefined;
+  const indexName = params.get('index') ?? wellKnown?.contested?.indexName ?? 'parentNameAndLabel';
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -110,18 +111,25 @@ function Content() {
               <Text fontSize="xs" color="gray.400">
                 Quick-pick:
               </Text>
-              {WELL_KNOWN.filter((w) => w.kind === 'contract' && w.contested).map((w) => (
-                <Button
-                  key={w.id}
-                  as={NextLink}
-                  href={`/governance/contested/?contract=${w.id}`}
-                  size="xs"
-                  variant="outline"
-                  colorScheme="blue"
-                >
-                  {w.name}
-                </Button>
-              ))}
+              {WELL_KNOWN.filter((w) => w.kind === 'contract' && w.contested).map((w) => {
+                const qp = new URLSearchParams({ contract: w.id });
+                if (w.contested) {
+                  qp.set('docType', w.contested.docType);
+                  qp.set('index', w.contested.indexName);
+                }
+                return (
+                  <Button
+                    key={w.id}
+                    as={NextLink}
+                    href={`/governance/contested/?${qp.toString()}`}
+                    size="xs"
+                    variant="outline"
+                    colorScheme="blue"
+                  >
+                    {w.name}
+                  </Button>
+                );
+              })}
             </HStack>
           </VStack>
         </InfoBlock>
