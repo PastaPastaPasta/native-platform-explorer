@@ -229,12 +229,15 @@ function Content() {
               <>
                 <ErrorCard error={resourcesQ.error} onRetry={() => resourcesQ.refetch()} />
                 <CodeBlock
-                  value={{
+                  value={`// Reproduce with @dashevo/evo-sdk
+const sdk = await EvoSDK.testnet();
+await sdk.connect();
+await sdk.group.contestedResources(${JSON.stringify({
                     dataContractId: contractFromUrl,
                     documentTypeName: docTypeFromUrl,
                     indexName: effectiveIndex,
                     ...(indexValuePrefix ? { startIndexValues: indexValuePrefix } : {}),
-                  }}
+                  }, null, 2)});`}
                 />
               </>
             ) : resources.length === 0 ? (
