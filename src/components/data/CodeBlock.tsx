@@ -17,8 +17,10 @@ function stringify(value: unknown): string {
     const rendered = JSON.stringify(value, replacer, 2);
     // JSON.stringify returns undefined for functions/symbols/etc. and can
     // return "{}" for WASM class instances whose state lives behind getters.
-    // In either case, walk the object one level to surface a readable view.
-    if (rendered === undefined || rendered === '{}') {
+    // WASM objects with only __wbg_ptr also need walking to surface real state.
+    const isWasmShell =
+      value != null && typeof value === 'object' && '__wbg_ptr' in (value as object);
+    if (rendered === undefined || rendered === '{}' || isWasmShell) {
       const walked = walkInstance(value);
       return JSON.stringify(walked, replacer, 2) ?? String(value);
     }
