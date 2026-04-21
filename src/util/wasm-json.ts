@@ -73,7 +73,7 @@ export function walkInstance(value: unknown, depth = 0): unknown {
   return out;
 }
 
-export function wasmReplacer(_k: string, v: unknown): unknown {
+function wasmReplacer(_k: string, v: unknown): unknown {
   if (typeof v === 'bigint') return v.toString();
   // SDK classes typically expose `.toJSON()`; honour it before anything else.
   if (v && typeof v === 'object' && typeof (v as { toJSON?: unknown }).toJSON === 'function') {
@@ -107,9 +107,11 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     // JSON.stringify returns undefined for functions/symbols/etc. and can
     // return "{}" for WASM class instances whose state lives behind getters.
     // WASM objects with only __wbg_ptr also need walking to surface real state.
+    // Walk when: result is empty, value is a WASM shell, or value is an array
+    // (which may contain WASM elements that JSON.stringify missed).
     const isWasmShell =
       value != null && typeof value === 'object' && '__wbg_ptr' in (value as object);
-    if (rendered === undefined || rendered === '{}' || isWasmShell) {
+    if (rendered === undefined || rendered === '{}' || isWasmShell || Array.isArray(value)) {
       const walked = walkInstance(value);
       return JSON.stringify(walked, wasmReplacer, indent) ?? String(value);
     }
