@@ -27,7 +27,7 @@ import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContestedResources, useContract } from '@sdk/queries';
 import { WELL_KNOWN, findWellKnown } from '@constants/well-known';
-import { documentTypeNames, normaliseContract } from '@util/contract';
+import { normaliseContract, contestedIndexes } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 import { safeStringify } from '@util/wasm-json';
 
@@ -48,7 +48,6 @@ function Content() {
 
   const [contractInput, setContractInput] = useState(contractFromUrl);
   const wellKnown = contractFromUrl ? findWellKnown(contractFromUrl) : undefined;
-  const indexName = params.get('index') ?? wellKnown?.contested?.indexName ?? 'parentNameAndLabel';
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -58,13 +57,26 @@ function Content() {
 
   const contractQ = useContract(contractFromUrl || undefined);
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
-  const docTypes = contract ? documentTypeNames(contract) : [];
+  const contested = contract ? contestedIndexes(contract) : [];
+
+  // Auto-navigate to the contested doc type when there's exactly one and URL doesn't have one yet.
+  const autoContested = contested.length === 1 ? contested[0] : undefined;
+  if (autoContested && contractFromUrl && !docTypeFromUrl) {
+    const qp = new URLSearchParams({ contract: contractFromUrl, docType: autoContested.docType, index: autoContested.indexName });
+    router.replace(`/governance/contested/?${qp.toString()}`);
+  }
+
+  // Resolve effective index name: URL param > auto-detected from schema > well-known > fallback
+  const effectiveIndex = params.get('index')
+    ?? contested.find((c) => c.docType === docTypeFromUrl)?.indexName
+    ?? wellKnown?.contested?.indexName
+    ?? 'parentNameAndLabel';
 
   const indexValuePrefix = wellKnown?.contested?.indexValuePrefix;
   const resourcesQ = useContestedResources(
     contractFromUrl || undefined,
     docTypeFromUrl || undefined,
-    indexName,
+    effectiveIndex,
     indexValuePrefix,
     indexValuePrefix,
   );
@@ -155,36 +167,43 @@ function Content() {
               {contractQ.isLoading ? (
                 <LoadingCard lines={1} />
               ) : contract ? (
-                wellKnown?.contested ? (
+                contested.length === 0 ? (
+                  <Text fontSize="xs" color="gray.400">
+                    No contested indexes found in this contract.
+                  </Text>
+                ) : contested.length === 1 ? (
                   <HStack>
                     <Text fontSize="xs" color="gray.400">
                       Document type:
                     </Text>
                     <Text fontSize="xs" color="gray.100" fontFamily="mono">
-                      {wellKnown.contested.docType}
+                      {autoContested!.docType}
                     </Text>
                     <Text fontSize="xs" color="gray.500">
-                      (index: {wellKnown.contested.indexName})
+                      (index: {autoContested!.indexName})
                     </Text>
                   </HStack>
                 ) : (
                   <HStack>
                     <Text fontSize="xs" color="gray.400">
-                      Document type:
+                      Contested index:
                     </Text>
                     <Menu>
                       <MenuButton as={Button} rightIcon={<ChevronDownIcon />} size="xs" variant="outline">
-                        {docTypeFromUrl || 'choose…'}
+                        {docTypeFromUrl ? `${docTypeFromUrl} / ${effectiveIndex}` : 'choose…'}
                       </MenuButton>
                       <MenuList bg="gray.800" borderColor="gray.700">
-                        {docTypes.map((t) => (
+                        {contested.map((c) => (
                           <MenuItem
-                            key={t}
+                            key={`${c.docType}/${c.indexName}`}
                             bg="transparent"
                             _hover={{ bg: 'gray.750' }}
-                            onClick={() => pushUrl(contractFromUrl, t)}
+                            onClick={() => {
+                              const qp = new URLSearchParams({ contract: contractFromUrl, docType: c.docType, index: c.indexName });
+                              router.push(`/governance/contested/?${qp.toString()}`);
+                            }}
                           >
-                            {t}
+                            {c.docType} / {c.indexName}
                           </MenuItem>
                         ))}
                       </MenuList>
@@ -221,7 +240,7 @@ function Content() {
                     <WrapItem key={i}>
                       <Button
                         as={NextLink}
-                        href={`/governance/contested/detail/?contract=${encodeURIComponent(contractFromUrl)}&docType=${encodeURIComponent(docTypeFromUrl)}&indexName=${encodeURIComponent(indexName)}&indexValues=${encoded}`}
+                        href={`/governance/contested/detail/?contract=${encodeURIComponent(contractFromUrl)}&docType=${encodeURIComponent(docTypeFromUrl)}&indexName=${encodeURIComponent(effectiveIndex)}&indexValues=${encoded}`}
                         size="sm"
                         variant="outline"
                         colorScheme="blue"

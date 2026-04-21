@@ -82,3 +82,29 @@ export function groupPositions(c: ContractShape): string[] {
   if (!c.groups) return [];
   return Object.keys(c.groups);
 }
+
+export interface ContestedIndex {
+  docType: string;
+  indexName: string;
+  properties: string[];
+}
+
+/** Scan document schemas for indexes that declare a `contested` section. */
+export function contestedIndexes(c: ContractShape): ContestedIndex[] {
+  if (!c.documentSchemas) return [];
+  const result: ContestedIndex[] = [];
+  for (const [docType, schema] of Object.entries(c.documentSchemas)) {
+    const s = schema as Record<string, unknown> | undefined;
+    const indices = (s?.indices ?? s?.indexes) as Array<Record<string, unknown>> | undefined;
+    if (!Array.isArray(indices)) continue;
+    for (const idx of indices) {
+      if (!idx.contested) continue;
+      const name = String(idx.name ?? '');
+      const props = Array.isArray(idx.properties)
+        ? (idx.properties as Array<Record<string, unknown>>).flatMap((p) => Object.keys(p))
+        : [];
+      result.push({ docType, indexName: name, properties: props });
+    }
+  }
+  return result;
+}
