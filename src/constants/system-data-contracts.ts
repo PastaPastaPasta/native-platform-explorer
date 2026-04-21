@@ -10,7 +10,7 @@ export interface SystemContract {
   testnetId: string;
   mainnetId: string | null;
   /** Contested resource index info, if this contract declares one. */
-  contested?: { docType: string; indexName: string };
+  contested?: { docType: string; indexName: string; indexValuePrefix?: unknown[] };
 }
 
 // Every system contract shares the sentinel owner (all-ones base58) and a
@@ -23,7 +23,7 @@ export const SYSTEM_DATA_CONTRACTS: SystemContract[] = [
     name: 'DPNS',
     description: 'Dash Platform Name Service — decentralised human-readable usernames.',
     ...SAME_ON_BOTH('GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec'),
-    contested: { docType: 'domain', indexName: 'parentNameAndLabel' },
+    contested: { docType: 'domain', indexName: 'parentNameAndLabel', indexValuePrefix: ['dash'] },
   },
   {
     key: 'withdrawals',

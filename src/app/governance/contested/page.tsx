@@ -60,10 +60,13 @@ function Content() {
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
   const docTypes = contract ? documentTypeNames(contract) : [];
 
+  const indexValuePrefix = wellKnown?.contested?.indexValuePrefix;
   const resourcesQ = useContestedResources(
     contractFromUrl || undefined,
     docTypeFromUrl || undefined,
     indexName,
+    indexValuePrefix,
+    indexValuePrefix,
   );
   const resources = useMemo(() => {
     const raw = resourcesQ.data;
