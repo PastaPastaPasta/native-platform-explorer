@@ -95,11 +95,12 @@ export function contestedIndexes(c: ContractShape): ContestedIndex[] {
   const result: ContestedIndex[] = [];
   for (const [docType, schema] of Object.entries(c.documentSchemas)) {
     const s = schema as Record<string, unknown> | undefined;
-    const indices = (s?.indices ?? s?.indexes) as Array<Record<string, unknown>> | undefined;
+    const indices = (s?.indices ?? s?.['$indices']) as Array<Record<string, unknown>> | undefined;
     if (!Array.isArray(indices)) continue;
     for (const idx of indices) {
       if (!idx.contested) continue;
-      const name = String(idx.name ?? '');
+      const name = typeof idx.name === 'string' && idx.name ? idx.name : undefined;
+      if (!name) continue;
       const props = Array.isArray(idx.properties)
         ? (idx.properties as Array<Record<string, unknown>>).flatMap((p) => Object.keys(p))
         : [];

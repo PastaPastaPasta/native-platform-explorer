@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NextLink from 'next/link';
 import {
@@ -61,10 +61,14 @@ function Content() {
 
   // Auto-navigate to the contested doc type when there's exactly one and URL doesn't have one yet.
   const autoContested = contested.length === 1 ? contested[0] : undefined;
-  if (autoContested && contractFromUrl && !docTypeFromUrl) {
-    const qp = new URLSearchParams({ contract: contractFromUrl, docType: autoContested.docType, index: autoContested.indexName });
-    router.replace(`/governance/contested/?${qp.toString()}`);
-  }
+  const autoDocType = autoContested?.docType;
+  const autoIndexName = autoContested?.indexName;
+  useEffect(() => {
+    if (autoDocType && autoIndexName && contractFromUrl && !docTypeFromUrl) {
+      const qp = new URLSearchParams({ contract: contractFromUrl, docType: autoDocType, index: autoIndexName });
+      router.replace(`/governance/contested/?${qp.toString()}`);
+    }
+  }, [autoDocType, autoIndexName, contractFromUrl, docTypeFromUrl, router]);
 
   // Resolve effective index name: URL param > auto-detected from schema > well-known > fallback
   const effectiveIndex = params.get('index')
