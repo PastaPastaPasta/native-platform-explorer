@@ -9,7 +9,6 @@ export interface CodeBlockProps {
   value: unknown;
   collapsedHeight?: number;
   collapsible?: boolean;
-  language?: string;
 }
 
 export function CodeBlock({ value, collapsedHeight = 240, collapsible = true }: CodeBlockProps) {

@@ -74,7 +74,7 @@ export default function Page() {
         abstained += 1;
         continue;
       }
-      const n = typeof raw === 'bigint' ? Number(raw) : Number(raw);
+      const n = Number(raw);
       if (!Number.isFinite(n)) abstained += 1;
       else if (n > currentVersion) accepted += 1;
       else if (n < currentVersion) rejected += 1;
