@@ -2,13 +2,14 @@
 
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Heading, HStack, Text, VStack, Wrap, WrapItem } from '@chakra-ui/react';
+import { Badge, Heading, HStack, Text, VStack, Wrap, WrapItem } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { Identifier } from '@components/data/Identifier';
 import { InfoLine } from '@components/data/InfoLine';
+import { DateBlock } from '@components/data/DateBlock';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { VoteTallyBar } from '@components/governance/VoteTallyBar';
 import { ContenderCard } from '@components/governance/ContenderCard';
@@ -68,20 +69,40 @@ function Content() {
   const abstainVotes = Number(readProp<number | bigint>(data, 'abstainVoteTally') ?? 0);
   const lockVotes = Number(readProp<number | bigint>(data, 'lockVoteTally') ?? 0);
   const finishedAtMs = readProp<number | bigint>(data, 'finishedAtMs');
+  const winner = readProp<unknown>(data, 'winner');
+  const winnerIdRaw =
+    readProp<string>(winner, 'identityId') ??
+    readProp<string>(winner, 'towardsIdentity');
+  const winnerId = winnerIdRaw ? String(winnerIdRaw) : undefined;
+
+  const finishedAtNum = finishedAtMs !== undefined ? Number(finishedAtMs) : null;
+  const isFinished = winnerId !== undefined || (finishedAtNum !== null && finishedAtNum <= Date.now());
 
   const contenderVoteCounts = contenders.map((c) =>
     Number(readProp<number | bigint>(c, 'voteTally') ?? 0),
   );
   const towardsTotal = contenderVoteCounts.reduce((a, b) => a + b, 0);
+  const totalVotes = towardsTotal + abstainVotes + lockVotes;
 
   return (
     <Container py={{ base: 4, md: 6 }}>
       <VStack align="stretch" spacing={4}>
         <InfoBlock emphasised>
           <VStack align="flex-start" spacing={3}>
-            <Heading size="md" color="gray.100">
-              Contested resource
-            </Heading>
+            <HStack spacing={3} flexWrap="wrap" align="center">
+              <Heading size="md" color="gray.100">
+                Contested resource
+              </Heading>
+              {data ? (
+                <Badge
+                  colorScheme={isFinished ? 'gray' : 'green'}
+                  variant="subtle"
+                  fontSize="xs"
+                >
+                  {isFinished ? 'Finished' : 'Active'}
+                </Badge>
+              ) : null}
+            </HStack>
             <HStack spacing={6} flexWrap="wrap">
               <InfoLine
                 label="Contract"
@@ -105,6 +126,32 @@ function Content() {
                 }
               />
             </HStack>
+            {data ? (
+              <HStack spacing={6} flexWrap="wrap">
+                {finishedAtNum !== null ? (
+                  <InfoLine
+                    label={isFinished ? 'Ended' : 'Voting ends'}
+                    value={<DateBlock value={finishedAtNum} relative />}
+                  />
+                ) : null}
+                <InfoLine
+                  label="Total votes"
+                  value={
+                    <Text fontFamily="mono" fontSize="xs" color="gray.100">
+                      {totalVotes}
+                    </Text>
+                  }
+                />
+                <InfoLine
+                  label="Contenders"
+                  value={
+                    <Text fontFamily="mono" fontSize="xs" color="gray.100">
+                      {contenders.length}
+                    </Text>
+                  }
+                />
+              </HStack>
+            ) : null}
           </VStack>
         </InfoBlock>
 
@@ -133,11 +180,6 @@ function Content() {
                     { label: 'lock', count: lockVotes, color: 'danger' },
                   ]}
                 />
-                {finishedAtMs !== undefined ? (
-                  <Text fontSize="xs" color="gray.400">
-                    Finishes at: {new Date(Number(finishedAtMs)).toLocaleString()}
-                  </Text>
-                ) : null}
               </VStack>
             </InfoBlock>
 
@@ -171,6 +213,7 @@ function Content() {
                               : null
                           }
                           voteCount={voteCount}
+                          isWinner={winnerId !== undefined && towardsId === winnerId}
                         />
                       </WrapItem>
                     );
