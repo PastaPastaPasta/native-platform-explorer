@@ -82,7 +82,6 @@ function Content() {
     docTypeFromUrl || undefined,
     effectiveIndex,
     indexValuePrefix,
-    indexValuePrefix,
   );
   const resources = useMemo(() => {
     const raw = resourcesQ.data;

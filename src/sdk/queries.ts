@@ -572,7 +572,6 @@ export function useContestedResources(
   documentTypeName: string | undefined,
   indexName: string | undefined,
   startIndexValues?: unknown[],
-  endIndexValues?: unknown[],
 ) {
   return useSdkQuery(
     ['group', 'contestedResources', contractId, documentTypeName, indexName, JSON.stringify(startIndexValues ?? [])],
@@ -582,7 +581,6 @@ export function useContestedResources(
         documentTypeName: documentTypeName!,
         indexName: indexName!,
         ...(startIndexValues ? { startIndexValues } : {}),
-        ...(endIndexValues ? { endIndexValues } : {}),
       }) as Promise<unknown>,
     {
       enabled: !!contractId && !!documentTypeName && !!indexName,
