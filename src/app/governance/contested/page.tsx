@@ -78,12 +78,16 @@ function Content() {
     ?? wellKnown?.contested?.indexName
     ?? 'parentNameAndLabel';
 
-  // NOTE: startIndexValues is broken on Platform — causes proof verification
-  // errors (GroveDB bug). Omit it until the platform fix lands.
+  // For a composite index with N properties, pass the first N-1 values as
+  // startIndexValues so the API returns the remaining "middle" property.
+  // We then reconstruct full index tuples by prepending the prefix.
+  // NOTE: startIndexValues currently triggers a GroveDB proof bug on Platform.
+  const indexValuePrefix = wellKnown?.contested?.indexValuePrefix;
   const resourcesQ = useContestedResources(
     contractFromUrl || undefined,
     docTypeFromUrl || undefined,
     effectiveIndex,
+    indexValuePrefix,
   );
   const resources = useMemo(() => {
     const raw = resourcesQ.data;
@@ -238,6 +242,7 @@ await sdk.group.contestedResources(${JSON.stringify({
                     dataContractId: contractFromUrl,
                     documentTypeName: docTypeFromUrl,
                     indexName: effectiveIndex,
+                    ...(indexValuePrefix ? { startIndexValues: indexValuePrefix } : {}),
                   }, null, 2)});`}
                 />
               </>
@@ -248,11 +253,17 @@ await sdk.group.contestedResources(${JSON.stringify({
             ) : (
               <Wrap spacing={2}>
                 {resources.map((r, i) => {
-                  const values = Array.isArray(r)
+                  // The API returns only the "middle" property value.
+                  // Reconstruct the full index tuple by prepending the prefix.
+                  const middleValue = Array.isArray(r)
                     ? r
-                    : readProp<unknown[]>(r, 'indexValues') ?? r;
-                  const encoded = encodeURIComponent(safeStringify(values, 0));
-                  const label = decodeIndexValues(values);
+                    : readProp<unknown>(r, 'indexValues') ?? r;
+                  const fullValues = [
+                    ...(indexValuePrefix ?? []),
+                    ...(Array.isArray(middleValue) ? middleValue : [middleValue]),
+                  ];
+                  const encoded = encodeURIComponent(safeStringify(fullValues, 0));
+                  const label = String(Array.isArray(middleValue) ? middleValue.join(' / ') : middleValue ?? '—');
                   return (
                     <WrapItem key={i}>
                       <Button
