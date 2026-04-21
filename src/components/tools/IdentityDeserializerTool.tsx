@@ -31,16 +31,11 @@ export function IdentityDeserializerTool() {
   return (
     <InfoBlock>
       <VStack align="stretch" spacing={4}>
-        <VStack align="flex-start" spacing={1}>
-          <Text fontSize="md" fontWeight={600} color="gray.100">
-            Identity Deserializer
-          </Text>
-          <Text fontSize="sm" color="gray.400">
-            Decode an identity from its serialized bytes.
-          </Text>
-        </VStack>
+        <Text fontSize="xs" color="gray.400" lineHeight="1.6">
+          Paste the raw bytes of an identity to inspect its keys, balance, and revision.
+        </Text>
 
-        <DeserializerInput onDecode={handleDecode} />
+        <DeserializerInput label="Identity bytes" onDecode={handleDecode} />
 
         {error ? <DeserializerError message={error} /> : null}
         {result ? <DeserializerResult value={result} /> : null}

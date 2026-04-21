@@ -2,8 +2,10 @@
 
 import { useCallback, useMemo, useState } from 'react';
 import {
+  Box,
   FormControl,
   FormLabel,
+  HStack,
   Input,
   Select,
   Text,
@@ -15,6 +17,29 @@ import { normaliseContract, documentTypeNames } from '@util/contract';
 import { isBase58Identifier } from '@util/identifier';
 import { DeserializerInput } from './DeserializerInput';
 import { DeserializerError, DeserializerResult } from './DeserializerOutput';
+
+function StepIndicator({ step, active, done }: { step: number; active: boolean; done: boolean }) {
+  return (
+    <Box
+      w={5}
+      h={5}
+      borderRadius="full"
+      display="flex"
+      alignItems="center"
+      justifyContent="center"
+      fontSize="2xs"
+      fontWeight={600}
+      flexShrink={0}
+      bg={done ? 'rgba(0,141,228,0.2)' : active ? 'rgba(0,141,228,0.1)' : 'rgba(255,255,255,0.04)'}
+      color={done ? 'brand.light' : active ? 'brand.normal' : 'gray.600'}
+      border="1px solid"
+      borderColor={done ? 'rgba(0,141,228,0.3)' : active ? 'rgba(0,141,228,0.2)' : 'rgba(255,255,255,0.08)'}
+      transition="all 0.2s ease"
+    >
+      {done ? '✓' : step}
+    </Box>
+  );
+}
 
 export function DocumentDeserializerTool() {
   const [contractId, setContractId] = useState('');
@@ -30,7 +55,9 @@ export function DocumentDeserializerTool() {
     return documentTypeNames(normaliseContract(contractQ.data));
   }, [contractQ.data]);
 
-  const ready = !!contractQ.data && !!docType;
+  const hasContract = !!contractQ.data;
+  const hasDocType = !!docType;
+  const ready = hasContract && hasDocType;
 
   const handleDecode = useCallback(
     async (bytes: Uint8Array | null) => {
@@ -61,82 +88,94 @@ export function DocumentDeserializerTool() {
   return (
     <InfoBlock>
       <VStack align="stretch" spacing={4}>
-        <VStack align="flex-start" spacing={1}>
-          <Text fontSize="md" fontWeight={600} color="gray.100">
-            Document Deserializer
-          </Text>
-          <Text fontSize="sm" color="gray.400">
-            Decode a document from its serialized bytes. Requires a data contract and
-            document type for context.
-          </Text>
+        <Text fontSize="xs" color="gray.400" lineHeight="1.6">
+          Documents require their contract schema for deserialization.
+          Enter the contract ID, pick a document type, then paste the raw bytes.
+        </Text>
+
+        <VStack align="stretch" spacing={3}>
+          <HStack spacing={3} align="flex-start">
+            <StepIndicator step={1} active={!hasContract} done={hasContract} />
+            <FormControl flex={1}>
+              <FormLabel fontSize="xs" color="gray.250" mb={1}>
+                Contract ID
+              </FormLabel>
+              <Input
+                size="sm"
+                value={contractId}
+                onChange={(e) => {
+                  setContractId(e.target.value);
+                  setDocType('');
+                  setResult(null);
+                  setError(null);
+                }}
+                placeholder="Base58 contract identifier"
+                fontFamily="mono"
+                fontSize="xs"
+                bg="rgba(24,29,32,0.8)"
+                borderColor="rgba(255,255,255,0.08)"
+                borderRadius="lg"
+                _focus={{ borderColor: 'rgba(0,141,228,0.4)', boxShadow: 'none' }}
+              />
+              {contractId && !validContractId ? (
+                <Text fontSize="2xs" color="yellow.300" mt={1}>
+                  Enter a valid base58 identifier (43–44 characters)
+                </Text>
+              ) : null}
+              {contractQ.isLoading ? (
+                <Text fontSize="2xs" color="gray.500" mt={1}>
+                  Fetching contract…
+                </Text>
+              ) : null}
+              {contractQ.error ? (
+                <Text fontSize="2xs" color="red.300" mt={1}>
+                  {contractQ.error.message}
+                </Text>
+              ) : null}
+            </FormControl>
+          </HStack>
+
+          <HStack spacing={3} align="flex-start">
+            <StepIndicator step={2} active={hasContract && !hasDocType} done={hasDocType} />
+            <FormControl flex={1} isDisabled={!hasContract}>
+              <FormLabel fontSize="xs" color="gray.250" mb={1}>
+                Document type
+              </FormLabel>
+              <Select
+                size="sm"
+                value={docType}
+                onChange={(e) => {
+                  setDocType(e.target.value);
+                  setResult(null);
+                  setError(null);
+                }}
+                bg="rgba(24,29,32,0.8)"
+                borderColor="rgba(255,255,255,0.08)"
+                borderRadius="lg"
+                fontSize="xs"
+                placeholder={docTypes.length > 0 ? 'Select type' : hasContract ? 'No types found' : 'Waiting for contract…'}
+                _focus={{ borderColor: 'rgba(0,141,228,0.4)', boxShadow: 'none' }}
+              >
+                {docTypes.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </Select>
+            </FormControl>
+          </HStack>
+
+          <HStack spacing={3} align="flex-start">
+            <StepIndicator step={3} active={ready} done={!!result} />
+            <Box flex={1}>
+              <DeserializerInput
+                disabled={!ready}
+                label={ready ? 'Document bytes' : 'Document bytes'}
+                onDecode={handleDecode}
+              />
+            </Box>
+          </HStack>
         </VStack>
-
-        <FormControl>
-          <FormLabel fontSize="xs" color="gray.250">
-            Contract ID
-          </FormLabel>
-          <Input
-            size="sm"
-            value={contractId}
-            onChange={(e) => {
-              setContractId(e.target.value);
-              setDocType('');
-              setResult(null);
-              setError(null);
-            }}
-            placeholder="Enter base58 contract identifier"
-            fontFamily="mono"
-            bg="gray.800"
-            borderColor="gray.700"
-          />
-          {contractId && !validContractId ? (
-            <Text fontSize="xs" color="yellow.300" mt={1}>
-              Enter a valid base58 identifier (43–44 characters)
-            </Text>
-          ) : null}
-          {contractQ.isLoading ? (
-            <Text fontSize="xs" color="gray.400" mt={1}>
-              Fetching contract…
-            </Text>
-          ) : null}
-          {contractQ.error ? (
-            <Text fontSize="xs" color="red.300" mt={1}>
-              Failed to fetch contract: {contractQ.error.message}
-            </Text>
-          ) : null}
-        </FormControl>
-
-        {docTypes.length > 0 ? (
-          <FormControl>
-            <FormLabel fontSize="xs" color="gray.250">
-              Document type
-            </FormLabel>
-            <Select
-              size="sm"
-              value={docType}
-              onChange={(e) => {
-                setDocType(e.target.value);
-                setResult(null);
-                setError(null);
-              }}
-              bg="gray.800"
-              borderColor="gray.700"
-              placeholder="Select document type"
-            >
-              {docTypes.map((t) => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </Select>
-          </FormControl>
-        ) : null}
-
-        <DeserializerInput
-          disabled={!ready}
-          label={ready ? 'Document bytes' : 'Document bytes (select contract and type first)'}
-          onDecode={handleDecode}
-        />
 
         {error ? <DeserializerError message={error} /> : null}
         {result ? <DeserializerResult value={result} /> : null}

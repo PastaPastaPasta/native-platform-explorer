@@ -32,14 +32,6 @@ import { normaliseContract, contestedIndexes } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 import { safeStringify } from '@util/wasm-json';
 
-function decodeIndexValues(raw: unknown): string {
-  try {
-    if (Array.isArray(raw)) return raw.map((v) => String(v)).join(' / ');
-    return String(raw ?? '—');
-  } catch {
-    return '—';
-  }
-}
 
 function Content() {
   const router = useRouter();

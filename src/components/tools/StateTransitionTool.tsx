@@ -31,17 +31,12 @@ export function StateTransitionTool() {
   return (
     <InfoBlock>
       <VStack align="stretch" spacing={4}>
-        <VStack align="flex-start" spacing={1}>
-          <Text fontSize="md" fontWeight={600} color="gray.100">
-            State Transition Deserializer
-          </Text>
-          <Text fontSize="sm" color="gray.400">
-            Decode a state transition from its serialized bytes. Accepts hex, base64, or
-            comma-separated byte values.
-          </Text>
-        </VStack>
+        <Text fontSize="xs" color="gray.400" lineHeight="1.6">
+          Paste the raw bytes of a state transition — identity creates, contract updates,
+          document batches, transfers, and more. Accepts hex, base64, or comma-separated integers.
+        </Text>
 
-        <DeserializerInput onDecode={handleDecode} />
+        <DeserializerInput label="State transition bytes" onDecode={handleDecode} />
 
         {error ? <DeserializerError message={error} /> : null}
         {result ? <DeserializerResult value={result} /> : null}

@@ -1,15 +1,43 @@
 'use client';
 
 import { useCallback, useState } from 'react';
-import { HStack, Text, VStack } from '@chakra-ui/react';
+import { Box, HStack, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { normaliseContract, documentTypeNames, tokenPositions } from '@util/contract';
 import { DeserializerInput } from './DeserializerInput';
 import { DeserializerError, DeserializerResult } from './DeserializerOutput';
 
+interface ContractMeta {
+  id?: string;
+  ownerId?: string;
+  version?: string;
+  docTypes: string[];
+  tokens: string[];
+}
+
+function MetaChip({ label, value }: { label: string; value: string }) {
+  return (
+    <Box
+      px={3}
+      py={1.5}
+      borderRadius="lg"
+      bg="rgba(46,57,61,0.4)"
+      border="1px solid"
+      borderColor="rgba(255,255,255,0.06)"
+    >
+      <Text fontSize="2xs" color="gray.500" fontWeight={500} textTransform="uppercase" letterSpacing="0.05em">
+        {label}
+      </Text>
+      <Text fontSize="xs" color="gray.200" fontFamily="mono" mt={0.5} wordBreak="break-all">
+        {value}
+      </Text>
+    </Box>
+  );
+}
+
 export function ContractDeserializerTool() {
   const [result, setResult] = useState<unknown>(null);
-  const [meta, setMeta] = useState<{ id?: string; ownerId?: string; version?: string; docTypes: string[]; tokens: string[] } | null>(null);
+  const [meta, setMeta] = useState<ContractMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleDecode = useCallback(async (bytes: Uint8Array | null) => {
@@ -43,50 +71,27 @@ export function ContractDeserializerTool() {
   return (
     <InfoBlock>
       <VStack align="stretch" spacing={4}>
-        <VStack align="flex-start" spacing={1}>
-          <Text fontSize="md" fontWeight={600} color="gray.100">
-            Contract Deserializer
-          </Text>
-          <Text fontSize="sm" color="gray.400">
-            Decode a data contract from its serialized bytes.
-          </Text>
-        </VStack>
+        <Text fontSize="xs" color="gray.400" lineHeight="1.6">
+          Paste the raw bytes of a data contract to inspect its document schemas, tokens, and groups.
+        </Text>
 
-        <DeserializerInput onDecode={handleDecode} />
+        <DeserializerInput label="Contract bytes" onDecode={handleDecode} />
 
         {error ? <DeserializerError message={error} /> : null}
 
         {meta ? (
-          <VStack align="stretch" spacing={1}>
-            <Text fontSize="xs" color="gray.400" textTransform="uppercase">
-              Metadata
-            </Text>
-            <HStack spacing={4} flexWrap="wrap">
-              {meta.id ? (
-                <Text fontSize="xs" color="gray.300">
-                  <Text as="span" color="gray.500">ID:</Text> {meta.id}
-                </Text>
-              ) : null}
-              {meta.ownerId ? (
-                <Text fontSize="xs" color="gray.300">
-                  <Text as="span" color="gray.500">Owner:</Text> {meta.ownerId}
-                </Text>
-              ) : null}
-              {meta.version ? (
-                <Text fontSize="xs" color="gray.300">
-                  <Text as="span" color="gray.500">Version:</Text> {meta.version}
-                </Text>
-              ) : null}
-              <Text fontSize="xs" color="gray.300">
-                <Text as="span" color="gray.500">Document types:</Text> {meta.docTypes.length > 0 ? meta.docTypes.join(', ') : 'none'}
-              </Text>
-              {meta.tokens.length > 0 ? (
-                <Text fontSize="xs" color="gray.300">
-                  <Text as="span" color="gray.500">Tokens:</Text> {meta.tokens.join(', ')}
-                </Text>
-              ) : null}
-            </HStack>
-          </VStack>
+          <HStack spacing={2} flexWrap="wrap">
+            {meta.id ? <MetaChip label="ID" value={meta.id} /> : null}
+            {meta.ownerId ? <MetaChip label="Owner" value={meta.ownerId} /> : null}
+            {meta.version ? <MetaChip label="Version" value={meta.version} /> : null}
+            <MetaChip
+              label="Document types"
+              value={meta.docTypes.length > 0 ? meta.docTypes.join(', ') : 'none'}
+            />
+            {meta.tokens.length > 0 ? (
+              <MetaChip label="Tokens" value={meta.tokens.join(', ')} />
+            ) : null}
+          </HStack>
         ) : null}
 
         {result ? <DeserializerResult value={result} /> : null}
