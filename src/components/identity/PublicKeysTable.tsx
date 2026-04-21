@@ -21,12 +21,6 @@ interface Key {
   isReadOnly?: boolean;
 }
 
-function u8ToHex(u8: Uint8Array): string {
-  return Array.from(u8)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
 export function PublicKeysTable({ keys }: { keys: Key[] | null | undefined }) {
   if (!keys || keys.length === 0) {
     return (
@@ -55,12 +49,6 @@ export function PublicKeysTable({ keys }: { keys: Key[] | null | undefined }) {
             const disabledAt = k.disabledAt ?? null;
             const isDisabled = Boolean(k.disabled) || disabledAt !== null;
             const isReadOnly = Boolean(k.isReadOnly ?? k.readOnly);
-            const data =
-              k.data instanceof Uint8Array
-                ? u8ToHex(k.data)
-                : typeof k.data === 'string'
-                  ? k.data
-                  : JSON.stringify(k.data);
             return (
               <Tr key={id} _hover={{ bg: 'gray.800' }}>
                 <Td borderColor="gray.750" fontFamily="mono">
@@ -70,7 +58,7 @@ export function PublicKeysTable({ keys }: { keys: Key[] | null | undefined }) {
                 <Td borderColor="gray.750">{keyType !== undefined ? String(keyType) : '—'}</Td>
                 <Td borderColor="gray.750">{String(k.securityLevel ?? '—')}</Td>
                 <Td borderColor="gray.750" maxW="320px">
-                  <CodeBlock value={data} collapsedHeight={60} />
+                  <CodeBlock value={k.data} collapsedHeight={60} />
                 </Td>
                 <Td borderColor="gray.750">
                   <HStack spacing={1} flexWrap="wrap">

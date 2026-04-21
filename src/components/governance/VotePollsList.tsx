@@ -7,6 +7,7 @@ import { CodeBlock } from '@components/data/CodeBlock';
 import { Identifier } from '@components/data/Identifier';
 import { readProp } from '@util/sdk-shape';
 import { toPlain } from '@util/contract';
+import { safeStringify } from '@util/wasm-json';
 
 interface PollRowProps {
   entry: unknown;
@@ -73,7 +74,7 @@ function PollEntryRow({ entry }: PollRowProps) {
                   d.contractId!,
                 )}&docType=${encodeURIComponent(d.docType!)}&indexName=${encodeURIComponent(
                   d.indexName!,
-                )}&indexValues=${encodeURIComponent(JSON.stringify(d.indexValues))}`
+                )}&indexValues=${encodeURIComponent(safeStringify(d.indexValues, 0))}`
               : null;
             const label =
               d.indexValues && d.indexValues.length > 0

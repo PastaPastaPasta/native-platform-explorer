@@ -181,7 +181,7 @@ export default function Page() {
                         />
                       </Td>
                       <Td borderColor="gray.750" fontFamily="mono" fontSize="xs" color="gray.250">
-                        {typeof row.vote === 'object' ? JSON.stringify(row.vote) : String(row.vote)}
+                        {String(readProp<number | bigint>(row.vote, 'version') ?? '—')}
                       </Td>
                     </Tr>
                   ))}

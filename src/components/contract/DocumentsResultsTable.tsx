@@ -17,6 +17,7 @@ import { IdentityLink } from '@components/data/IdentityLink';
 import { NotActive } from '@components/data/NotActive';
 import type { HeuristicColumn } from '@util/schema';
 import { idToString, readProp } from '@util/sdk-shape';
+import { safeStringify } from '@util/wasm-json';
 
 export interface DocumentsResultsTableProps {
   columns: HeuristicColumn[];
@@ -59,7 +60,7 @@ function renderCell(row: Record<string, unknown>, col: HeuristicColumn) {
         display="inline-block"
         verticalAlign="middle"
       >
-        {JSON.stringify(value)}
+        {safeStringify(value, 0)}
       </Text>
     );
   }

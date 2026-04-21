@@ -28,6 +28,8 @@ import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContestedResources, useContract } from '@sdk/queries';
 import { WELL_KNOWN, findWellKnown } from '@constants/well-known';
 import { documentTypeNames, normaliseContract } from '@util/contract';
+import { readProp } from '@util/sdk-shape';
+import { safeStringify } from '@util/wasm-json';
 
 function decodeIndexValues(raw: unknown): string {
   try {
@@ -209,8 +211,8 @@ function Content() {
                 {resources.map((r, i) => {
                   const values = Array.isArray(r)
                     ? r
-                    : (r as { indexValues?: unknown })?.indexValues ?? r;
-                  const encoded = encodeURIComponent(JSON.stringify(values));
+                    : readProp<unknown[]>(r, 'indexValues') ?? r;
+                  const encoded = encodeURIComponent(safeStringify(values, 0));
                   const label = decodeIndexValues(values);
                   return (
                     <WrapItem key={i}>

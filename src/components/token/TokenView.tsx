@@ -26,6 +26,7 @@ import {
   useTokenTotalSupply,
 } from '@sdk/queries';
 import { shortId } from '@util/identifier';
+import { readProp } from '@util/sdk-shape';
 
 function flagsFromStatus(status: unknown): TokenFlags {
   const s = status as Record<string, unknown> | undefined;
@@ -88,7 +89,11 @@ export function TokenView({ tokenId }: { tokenId: string }) {
               baseSupply={supply?.baseSupply ?? null}
               price={
                 priceForToken
-                  ? String(priceForToken.price ?? priceForToken.baseCurrencyPrice ?? JSON.stringify(priceForToken))
+                  ? String(
+                      readProp<bigint | number>(priceForToken, 'price') ??
+                      readProp<bigint | number>(priceForToken, 'baseCurrencyPrice') ??
+                      '—',
+                    )
                   : null
               }
               flags={flagsFromStatus(statusForToken)}
