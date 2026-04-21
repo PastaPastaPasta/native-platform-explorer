@@ -15,6 +15,7 @@ import { StateTransitionTool } from './StateTransitionTool';
 import { ContractDeserializerTool } from './ContractDeserializerTool';
 import { IdentityDeserializerTool } from './IdentityDeserializerTool';
 import { DocumentDeserializerTool } from './DocumentDeserializerTool';
+import { ProofDeserializerTool } from './ProofDeserializerTool';
 
 interface ToolDef {
   key: string;
@@ -62,6 +63,15 @@ function IconIdentity() {
   );
 }
 
+function IconProof() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <path d="M14 3L5 7v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V7l-9-4z" stroke="rgba(0,141,228,0.7)" strokeWidth="1.5" strokeLinejoin="round" />
+      <path d="M10 14l3 3 5-6" stroke="rgba(44,187,255,0.9)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 const TOOLS: ToolDef[] = [
   {
     key: 'state-transition',
@@ -94,6 +104,14 @@ const TOOLS: ToolDef[] = [
     icon: <IconIdentity />,
     offline: true,
     component: IdentityDeserializerTool,
+  },
+  {
+    key: 'proof',
+    label: 'GroveDB Proof',
+    description: 'Decode a GroveDB proof to inspect its merkle tree structure.',
+    icon: <IconProof />,
+    offline: true,
+    component: ProofDeserializerTool,
   },
 ];
 
