@@ -78,12 +78,12 @@ function Content() {
     ?? wellKnown?.contested?.indexName
     ?? 'parentNameAndLabel';
 
-  const indexValuePrefix = wellKnown?.contested?.indexValuePrefix;
+  // NOTE: startIndexValues is broken on Platform — causes proof verification
+  // errors (GroveDB bug). Omit it until the platform fix lands.
   const resourcesQ = useContestedResources(
     contractFromUrl || undefined,
     docTypeFromUrl || undefined,
     effectiveIndex,
-    indexValuePrefix,
   );
   const resources = useMemo(() => {
     const raw = resourcesQ.data;
@@ -238,7 +238,6 @@ await sdk.group.contestedResources(${JSON.stringify({
                     dataContractId: contractFromUrl,
                     documentTypeName: docTypeFromUrl,
                     indexName: effectiveIndex,
-                    ...(indexValuePrefix ? { startIndexValues: indexValuePrefix } : {}),
                   }, null, 2)});`}
                 />
               </>
