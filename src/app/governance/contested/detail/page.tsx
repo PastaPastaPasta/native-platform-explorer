@@ -165,7 +165,7 @@ function Content() {
               />
             </HStack>
             {data ? (
-              <HStack spacing={6} flexWrap="wrap">
+              <HStack spacing={6} flexWrap="wrap" align="flex-start">
                 {isFinished && resolvedAtMs ? (
                   <InfoLine
                     label="Resolved"
