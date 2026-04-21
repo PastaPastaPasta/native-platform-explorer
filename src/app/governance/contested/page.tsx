@@ -150,28 +150,42 @@ function Content() {
               {contractQ.isLoading ? (
                 <LoadingCard lines={1} />
               ) : contract ? (
-                <HStack>
-                  <Text fontSize="xs" color="gray.400">
-                    Document type:
-                  </Text>
-                  <Menu>
-                    <MenuButton as={Button} rightIcon={<ChevronDownIcon />} size="xs" variant="outline">
-                      {docTypeFromUrl || 'choose…'}
-                    </MenuButton>
-                    <MenuList bg="gray.800" borderColor="gray.700">
-                      {docTypes.map((t) => (
-                        <MenuItem
-                          key={t}
-                          bg="transparent"
-                          _hover={{ bg: 'gray.750' }}
-                          onClick={() => pushUrl(contractFromUrl, t)}
-                        >
-                          {t}
-                        </MenuItem>
-                      ))}
-                    </MenuList>
-                  </Menu>
-                </HStack>
+                wellKnown?.contested ? (
+                  <HStack>
+                    <Text fontSize="xs" color="gray.400">
+                      Document type:
+                    </Text>
+                    <Text fontSize="xs" color="gray.100" fontFamily="mono">
+                      {wellKnown.contested.docType}
+                    </Text>
+                    <Text fontSize="xs" color="gray.500">
+                      (index: {wellKnown.contested.indexName})
+                    </Text>
+                  </HStack>
+                ) : (
+                  <HStack>
+                    <Text fontSize="xs" color="gray.400">
+                      Document type:
+                    </Text>
+                    <Menu>
+                      <MenuButton as={Button} rightIcon={<ChevronDownIcon />} size="xs" variant="outline">
+                        {docTypeFromUrl || 'choose…'}
+                      </MenuButton>
+                      <MenuList bg="gray.800" borderColor="gray.700">
+                        {docTypes.map((t) => (
+                          <MenuItem
+                            key={t}
+                            bg="transparent"
+                            _hover={{ bg: 'gray.750' }}
+                            onClick={() => pushUrl(contractFromUrl, t)}
+                          >
+                            {t}
+                          </MenuItem>
+                        ))}
+                      </MenuList>
+                    </Menu>
+                  </HStack>
+                )
               ) : null}
             </VStack>
           </InfoBlock>
