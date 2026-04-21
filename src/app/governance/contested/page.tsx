@@ -25,6 +25,7 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { useSdk } from '@sdk/hooks';
 import { useContestedResources, useContract } from '@sdk/queries';
 import { WELL_KNOWN, findWellKnown } from '@constants/well-known';
 import { normaliseContract, contestedIndexes } from '@util/contract';
@@ -43,6 +44,7 @@ function decodeIndexValues(raw: unknown): string {
 function Content() {
   const router = useRouter();
   const params = useSearchParams();
+  const { network } = useSdk();
   const contractFromUrl = params.get('contract') ?? '';
   const docTypeFromUrl = params.get('docType') ?? '';
 
@@ -230,7 +232,7 @@ function Content() {
                 <ErrorCard error={resourcesQ.error} onRetry={() => resourcesQ.refetch()} />
                 <CodeBlock
                   value={`// Reproduce with @dashevo/evo-sdk
-const sdk = await EvoSDK.testnet();
+const sdk = await EvoSDK.${network}();
 await sdk.connect();
 await sdk.group.contestedResources(${JSON.stringify({
                     dataContractId: contractFromUrl,
