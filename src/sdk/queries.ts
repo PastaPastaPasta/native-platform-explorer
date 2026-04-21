@@ -581,6 +581,7 @@ export function useContestedResources(
         documentTypeName: documentTypeName!,
         indexName: indexName!,
         ...(startIndexValues ? { startIndexValues } : {}),
+        limit: 100,
       }) as Promise<unknown>,
     {
       enabled: !!contractId && !!documentTypeName && !!indexName,
