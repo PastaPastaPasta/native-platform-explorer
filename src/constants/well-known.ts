@@ -7,6 +7,7 @@ export interface WellKnown {
   description?: string;
   url?: string;
   tags?: string[];
+  contested?: boolean;
 }
 
 // Curated registry — the only way we give names to otherwise anonymous contract
@@ -18,6 +19,7 @@ export const WELL_KNOWN: WellKnown[] = SYSTEM_DATA_CONTRACTS.filter((c) => c.tes
     name: c.name,
     description: c.description,
     tags: ['system'],
+    contested: c.contested,
   }),
 );
 

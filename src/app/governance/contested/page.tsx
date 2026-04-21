@@ -110,7 +110,7 @@ function Content() {
               <Text fontSize="xs" color="gray.400">
                 Quick-pick:
               </Text>
-              {WELL_KNOWN.filter((w) => w.kind === 'contract').map((w) => (
+              {WELL_KNOWN.filter((w) => w.kind === 'contract' && w.contested).map((w) => (
                 <Button
                   key={w.id}
                   as={NextLink}
