@@ -1,5 +1,6 @@
 'use client';
 
+import NextLink from 'next/link';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
@@ -73,6 +74,25 @@ export default function Page() {
             contract, epochs by index, DPNS labels by prefix, protocol votes,
             contested resources, groups in a contract), we show a real, paginated
             browser.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            The raw GroveDB read that would fix this —{' '}
+            <Link as={NextLink} href="/tools/?tool=path-elements" color="brand.light">
+              <code>system.pathElements</code>
+            </Link>
+            , which the explorer exposes on the Tools page — is a <code>KeysInPath</code>{' '}
+            batched point-get, not a range scan. You must already know the keys you want;
+            there is no subtree enumeration exposed in{' '}
+            <code>@dashevo/wasm-sdk</code> today. Full findings are in{' '}
+            <code>docs/research/2026-04-22-path-query-and-token-lookup.md</code>.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            One real win in the same family: looking up a token by its ID alone now works.
+            The SDK&apos;s <code>tokens.contractInfo(tokenId)</code> hits the GroveDB reverse
+            index at <code>[RootTree::Tokens, TOKEN_CONTRACT_INFO_KEY]</code> and returns the
+            owning contract + token position, so <code>/token/?id=…</code> resolves name,
+            decimals, supply limits, and every token rule from the token ID without any
+            prior context.
           </Text>
 
           <Heading as="h2" size="md" color="gray.100" mt={6} mb={2}>

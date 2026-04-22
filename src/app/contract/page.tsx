@@ -24,13 +24,13 @@ import { NotFoundCard } from '@ui/NotFoundCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { DataContractDigestCard } from '@components/contract/DataContractDigestCard';
 import { ContractLanding } from '@components/contract/ContractLanding';
+import { ContractTokensTab } from '@components/contract/ContractTokensTab';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useContract,
   useContractHistory,
   useGroupsDataContracts,
-  useTokenContractInfo,
 } from '@sdk/queries';
 import { shortId } from '@util/identifier';
 import {
@@ -51,7 +51,6 @@ function Content() {
   ]);
 
   const contractQ = useContract(id || undefined);
-  const tokenInfoQ = useTokenContractInfo(id || undefined);
   const groupsQ = useGroupsDataContracts(id ? [id] : undefined);
 
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
@@ -145,27 +144,7 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       Tokens
                     </Heading>
-                    <HStack spacing={3} flexWrap="wrap">
-                      {tokens.length === 0 ? (
-                        <Text color="gray.400" fontSize="sm">
-                          This contract does not define any tokens.
-                        </Text>
-                      ) : (
-                        tokens.map((pos) => (
-                          <Button
-                            key={pos}
-                            as={NextLink}
-                            href={`/contract/token/?id=${encodeURIComponent(id)}&position=${pos}`}
-                            size="sm"
-                            variant="outline"
-                            colorScheme="orange"
-                          >
-                            #{pos}
-                          </Button>
-                        ))
-                      )}
-                    </HStack>
-                    {tokenInfoQ.data ? <CodeBlock value={tokenInfoQ.data} /> : null}
+                    <ContractTokensTab contractId={id} contract={contract} />
                   </InfoBlock>
                 </TabPanel>
 
