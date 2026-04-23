@@ -206,10 +206,18 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                       <Heading size="sm" mb={3} color="gray.100">
                         Localizations
                       </Heading>
-                      {contractQ.isLoading && !tokenConfig ? (
+                      {contractQ.isLoading ? (
                         <LoadingCard lines={2} />
-                      ) : (
+                      ) : contractQ.isError ? (
+                        <ErrorCard error={contractQ.error} onRetry={() => contractQ.refetch()} />
+                      ) : contractQ.isSuccess && tokenConfig ? (
                         localizationsBlock(tokenConfig)
+                      ) : (
+                        <Text fontSize="sm" color="gray.400">
+                          {ownerContractId
+                            ? 'Contract loaded but no token configuration at this position.'
+                            : 'Awaiting owning-contract resolution.'}
+                        </Text>
                       )}
                     </InfoBlock>
 
