@@ -6,6 +6,8 @@ import {
   Box,
   Button,
   Code,
+  FormControl,
+  FormLabel,
   HStack,
   Heading,
   Input,
@@ -143,11 +145,12 @@ export function PathElementsTool() {
 
       <InfoBlock>
         <VStack align="stretch" spacing={3}>
-          <Box>
-            <Text fontSize="xs" color="gray.400" mb={1}>
+          <FormControl>
+            <FormLabel htmlFor="path-input-id" fontSize="xs" color="gray.400" mb={1}>
               Path (comma-separated — decimal u8 or ASCII string)
-            </Text>
+            </FormLabel>
             <Input
+              id="path-input-id"
               value={pathInput}
               onChange={(e) => setPathInput(e.target.value)}
               fontFamily="mono"
@@ -155,12 +158,13 @@ export function PathElementsTool() {
               bg="gray.800"
               borderColor="gray.700"
             />
-          </Box>
-          <Box>
-            <Text fontSize="xs" color="gray.400" mb={1}>
+          </FormControl>
+          <FormControl>
+            <FormLabel htmlFor="keys-input-id" fontSize="xs" color="gray.400" mb={1}>
               Keys (comma-separated — UTF-8 bytes)
-            </Text>
+            </FormLabel>
             <Input
+              id="keys-input-id"
               value={keysInput}
               onChange={(e) => setKeysInput(e.target.value)}
               fontFamily="mono"
@@ -168,7 +172,7 @@ export function PathElementsTool() {
               bg="gray.800"
               borderColor="gray.700"
             />
-          </Box>
+          </FormControl>
           <HStack>
             <Button colorScheme="blue" size="sm" onClick={submit}>
               Read

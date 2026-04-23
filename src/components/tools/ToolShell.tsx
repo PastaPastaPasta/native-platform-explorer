@@ -269,7 +269,9 @@ export function ToolShell() {
             </Heading>
             <Text fontSize="sm" color="gray.250">
               Deserialize and inspect raw Dash Platform data structures.
-              All decoding runs locally in the browser via WASM.
+              Most tools decode locally in the browser via WASM; a few
+              (marked <em>network</em>, like Path Elements) query the
+              live network.
             </Text>
           </VStack>
         </InfoBlock>

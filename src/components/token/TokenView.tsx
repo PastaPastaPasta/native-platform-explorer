@@ -127,9 +127,7 @@ export function TokenView({ tokenId }: { tokenId: string }) {
               id={tokenId}
               name={tokenConfig?.primaryName ?? null}
               decimals={tokenConfig?.decimals ?? null}
-              totalSupply={
-                supply?.totalSupply ?? (tokenConfig?.baseSupply as bigint | number | string | null) ?? null
-              }
+              totalSupply={supply?.totalSupply ?? null}
               maxSupply={supply?.maxSupply ?? (tokenConfig?.maxSupply as bigint | number | string | null) ?? null}
               baseSupply={supply?.baseSupply ?? (tokenConfig?.baseSupply as bigint | number | string | null) ?? null}
               price={
