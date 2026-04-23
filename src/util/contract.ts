@@ -78,6 +78,85 @@ export function tokenPositions(c: ContractShape): string[] {
   return Object.keys(c.tokens);
 }
 
+export interface TokenLocalization {
+  singularForm?: string;
+  pluralForm?: string;
+  shouldCapitalize?: boolean;
+}
+
+/**
+ * Projection of the fields we surface in the explorer from a single
+ * `TokenConfiguration` entry inside a data contract. Every field is
+ * optional because the contract-side shape may be either a plain JSON
+ * document or a WASM class with getters, and we stay permissive.
+ */
+export interface TokenConfigShape {
+  position: number;
+  decimals?: number;
+  localizations?: Record<string, TokenLocalization>;
+  /** Convenience: the "en" singular form, or the first localization we find. */
+  primaryName?: string;
+  description?: string;
+  baseSupply?: bigint | number | string;
+  maxSupply?: bigint | number | string;
+  isStartedAsPaused?: boolean;
+  mainControlGroup?: number;
+  /** Untouched raw value for callers who want to drill into full rules. */
+  raw: unknown;
+}
+
+function coerceLocalizations(value: unknown): Record<string, TokenLocalization> | undefined {
+  const plain = toPlain(value);
+  if (!plain || typeof plain !== 'object' || Array.isArray(plain)) return undefined;
+  const out: Record<string, TokenLocalization> = {};
+  for (const [lang, entry] of Object.entries(plain as Record<string, unknown>)) {
+    const flat = toPlain(entry);
+    if (!flat || typeof flat !== 'object') continue;
+    const l = flat as Record<string, unknown>;
+    out[lang] = {
+      singularForm: typeof l.singularForm === 'string' ? l.singularForm : undefined,
+      pluralForm: typeof l.pluralForm === 'string' ? l.pluralForm : undefined,
+      shouldCapitalize: typeof l.shouldCapitalize === 'boolean' ? l.shouldCapitalize : undefined,
+    };
+  }
+  return out;
+}
+
+function pickPrimaryName(locs?: Record<string, TokenLocalization>): string | undefined {
+  if (!locs) return undefined;
+  const english = locs.en?.singularForm ?? locs.en?.pluralForm;
+  if (english) return english;
+  for (const l of Object.values(locs)) {
+    const v = l.singularForm ?? l.pluralForm;
+    if (v) return v;
+  }
+  return undefined;
+}
+
+/** Extract the token-configuration entry at `position` from a contract shape. */
+export function tokenConfigAt(c: ContractShape, position: number): TokenConfigShape | null {
+  if (!c.tokens) return null;
+  const entry = c.tokens[String(position)];
+  if (!entry && entry !== 0) return null;
+  const conventions = toPlain(readProp<unknown>(entry, 'conventions')) as
+    | Record<string, unknown>
+    | undefined;
+  const decimals = readProp<number>(conventions, 'decimals');
+  const localizations = coerceLocalizations(readProp<unknown>(conventions, 'localizations'));
+  return {
+    position,
+    decimals: typeof decimals === 'number' ? decimals : undefined,
+    localizations,
+    primaryName: pickPrimaryName(localizations),
+    description: readProp<string>(entry, 'description'),
+    baseSupply: readProp<bigint | number | string>(entry, 'baseSupply'),
+    maxSupply: readProp<bigint | number | string>(entry, 'maxSupply'),
+    isStartedAsPaused: readProp<boolean>(entry, 'isStartedAsPaused'),
+    mainControlGroup: readProp<number>(entry, 'mainControlGroup'),
+    raw: entry,
+  };
+}
+
 export function groupPositions(c: ContractShape): string[] {
   if (!c.groups) return [];
   return Object.keys(c.groups);

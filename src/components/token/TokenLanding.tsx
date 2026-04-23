@@ -29,8 +29,12 @@ export function TokenLanding() {
               Tokens
             </Heading>
             <Text fontSize="sm" color="gray.250" maxW="70ch">
-              The SDK can&apos;t enumerate every token, but given a token ID we can
-              fetch supply, status, price, and any scoped holders.{' '}
+              The SDK can&apos;t enumerate every token, but a token ID alone is now
+              enough to surface everything: the owning contract, the token&apos;s name
+              and decimals, supply, status, price, and scoped holders. We resolve the
+              owning contract through the GroveDB reverse index at{' '}
+              <code>[RootTree::Tokens, TOKEN_CONTRACT_INFO_KEY]</code>, then read the
+              token configuration out of the contract.{' '}
               <NextLink href="/about/#enumeration" style={{ color: 'var(--chakra-colors-brand-light)' }}>
                 Why no list?
               </NextLink>
@@ -46,7 +50,7 @@ export function TokenLanding() {
             <LookupInput
               label="Token ID"
               placeholder="43–44 char base58 Identifier"
-              description="Calls tokens.totalSupply + tokens.statuses + tokens.directPurchasePrices."
+              description="Resolves the owning contract via tokens.contractInfo, then pulls supply, status, price, and the full token configuration."
               validate={(v) =>
                 isBase58Identifier(v) ? null : 'Expected a 43–44 char base58 string.'
               }

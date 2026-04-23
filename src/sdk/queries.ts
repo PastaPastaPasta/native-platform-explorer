@@ -203,12 +203,31 @@ export function useTokenDirectPurchasePrices(tokenIds: string[] | undefined) {
   );
 }
 
-export function useTokenContractInfo(contractId: string | undefined) {
-  return useSdkQuery(
-    ['tokens', 'contractInfo', contractId],
-    (sdk) => sdk.tokens.contractInfo(contractId!) as Promise<unknown>,
-    { enabled: !!contractId, staleTime: STRUCTURAL },
+/**
+ * Resolve the owning contract + token-contract-position for a given **token ID**.
+ *
+ * The EVO SDK’s `tokens.contractInfo(…)` parameter is named `contractId`, but
+ * the wasm-sdk binding (`packages/wasm-sdk/src/queries/token.rs ::
+ * get_token_contract_info`) forwards the value as the `token_id` field of
+ * `GetTokenContractInfoRequestV0`. The server reads it out of the GroveDB
+ * reverse index at path `[RootTree::Tokens (16), TOKEN_CONTRACT_INFO_KEY (160)]`.
+ * So the correct argument is the token ID, not a contract ID — the SDK’s
+ * parameter name is the bug.
+ *
+ * Returns `{ contractId, tokenContractPosition }` when the token exists, or
+ * null when it doesn’t.
+ */
+export function useTokenContractInfo(tokenId: string | undefined) {
+  return useSdkQuery<TokenContractInfoShape | null>(
+    ['tokens', 'contractInfo', tokenId],
+    (sdk) => sdk.tokens.contractInfo(tokenId!) as Promise<TokenContractInfoShape | null>,
+    { enabled: !!tokenId, staleTime: STRUCTURAL },
   );
+}
+
+export interface TokenContractInfoShape {
+  readonly contractId: unknown;
+  readonly tokenContractPosition: number;
 }
 
 export function useTokenIdentityBalances(
@@ -526,6 +545,32 @@ export function usePrefundedSpecializedBalance(id: string | undefined) {
     ['system', 'prefundedSpecializedBalance', id],
     (sdk) => sdk.system.prefundedSpecializedBalance(id!) as Promise<unknown>,
     { enabled: !!id, staleTime: LIVE },
+  );
+}
+
+/**
+ * Raw GroveDB `KeysInPath` read. The wasm-sdk calls this `getPathElements`
+ * but it is NOT a range-query primitive — you must supply every key you want
+ * up front, and there is no scan / enumeration / subquery mode exposed
+ * (see `docs/research/2026-04-22-path-query-and-token-lookup.md`).
+ *
+ * `path` entries that look like a decimal u8 (`"32"`) are passed as a single
+ * byte; anything else is taken as UTF-8 bytes on the server. `keys` are
+ * UTF-8 bytes too, which means binary 32-byte identifiers can’t round-trip
+ * through this wrapper today — use it for ASCII-safe paths/keys only.
+ *
+ * Returned values arrive base64-encoded.
+ */
+export function usePathElements(
+  path: string[] | undefined,
+  keys: string[] | undefined,
+) {
+  const enabled =
+    Array.isArray(path) && path.length > 0 && Array.isArray(keys) && keys.length > 0;
+  return useSdkQuery(
+    ['system', 'pathElements', JSON.stringify(path ?? []), JSON.stringify(keys ?? [])],
+    (sdk) => sdk.system.pathElements(path!, keys!) as Promise<unknown>,
+    { enabled, staleTime: LIVE },
   );
 }
 

@@ -1,6 +1,7 @@
 'use client';
 
-import { HStack, Heading, VStack, Wrap, WrapItem } from '@chakra-ui/react';
+import NextLink from 'next/link';
+import { HStack, Heading, Link, Text, VStack, Wrap, WrapItem } from '@chakra-ui/react';
 import { Identifier } from '@components/data/Identifier';
 import { InfoLine } from '@components/data/InfoLine';
 import { BigNumberDisplay } from '@components/data/BigNumber';
@@ -10,6 +11,7 @@ import { TokenFlagsPills, type TokenFlags } from './TokenFlagsPills';
 
 export interface TokenDigestCardProps {
   id: string;
+  name?: string | null;
   symbol?: string | null;
   decimals?: number | null;
   totalSupply?: bigint | number | string | null;
@@ -17,10 +19,14 @@ export interface TokenDigestCardProps {
   baseSupply?: bigint | number | string | null;
   price?: string | null;
   flags: TokenFlags;
+  /** Owning contract (resolved from the token ID via tokens.contractInfo). */
+  ownerContractId?: string | null;
+  tokenContractPosition?: number | null;
 }
 
 export function TokenDigestCard({
   id,
+  name,
   symbol,
   decimals,
   totalSupply,
@@ -28,14 +34,24 @@ export function TokenDigestCard({
   baseSupply,
   price,
   flags,
+  ownerContractId,
+  tokenContractPosition,
 }: TokenDigestCardProps) {
+  const title = name ?? symbol ?? 'Token';
+  const subtitle = symbol && name && symbol !== name ? symbol : undefined;
   return (
     <InfoBlock emphasised>
       <VStack align="stretch" spacing={4}>
         <HStack justify="space-between" flexWrap="wrap" gap={3}>
           <VStack align="flex-start" spacing={2}>
             <Heading as="h1" size="md" color="gray.100">
-              Token {symbol ? ` · ${symbol}` : ''}
+              {title}
+              {subtitle ? (
+                <Text as="span" color="gray.400" fontSize="md" fontWeight={500}>
+                  {' · '}
+                  {subtitle}
+                </Text>
+              ) : null}
             </Heading>
             <Identifier value={id} avatar copy highlight="both" />
           </VStack>
@@ -67,6 +83,26 @@ export function TokenDigestCard({
           <WrapItem>
             <InfoLine label="Price" value={price ?? <NotActive />} />
           </WrapItem>
+          {ownerContractId ? (
+            <WrapItem>
+              <InfoLine
+                label={
+                  tokenContractPosition !== null && tokenContractPosition !== undefined
+                    ? `Contract · #${tokenContractPosition}`
+                    : 'Contract'
+                }
+                value={
+                  <Link
+                    as={NextLink}
+                    href={`/contract/?id=${encodeURIComponent(ownerContractId)}`}
+                    color="brand.light"
+                  >
+                    <Identifier value={ownerContractId} dense />
+                  </Link>
+                }
+              />
+            </WrapItem>
+          ) : null}
         </Wrap>
       </VStack>
     </InfoBlock>

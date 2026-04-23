@@ -16,6 +16,7 @@ import { ContractDeserializerTool } from './ContractDeserializerTool';
 import { IdentityDeserializerTool } from './IdentityDeserializerTool';
 import { DocumentDeserializerTool } from './DocumentDeserializerTool';
 import { ProofDeserializerTool } from './ProofDeserializerTool';
+import { PathElementsTool } from './PathElementsTool';
 
 interface ToolDef {
   key: string;
@@ -72,6 +73,18 @@ function IconProof() {
   );
 }
 
+function IconPathQuery() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+      <circle cx="6" cy="8" r="2" stroke="rgba(0,141,228,0.7)" strokeWidth="1.5" />
+      <circle cx="14" cy="14" r="2" stroke="rgba(0,141,228,0.7)" strokeWidth="1.5" />
+      <circle cx="22" cy="20" r="2" stroke="rgba(0,141,228,0.7)" strokeWidth="1.5" />
+      <path d="M8 8h4M16 14h4" stroke="rgba(44,187,255,0.9)" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M14 10v2M22 16v2" stroke="rgba(44,187,255,0.9)" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 const TOOLS: ToolDef[] = [
   {
     key: 'state-transition',
@@ -112,6 +125,15 @@ const TOOLS: ToolDef[] = [
     icon: <IconProof />,
     offline: true,
     component: ProofDeserializerTool,
+  },
+  {
+    key: 'path-elements',
+    label: 'Path Elements',
+    description:
+      'Raw GroveDB KeysInPath read against the live network. Useful for probing the tree, but not an enumerator — see preset notes inside.',
+    icon: <IconPathQuery />,
+    offline: false,
+    component: PathElementsTool,
   },
 ];
 
@@ -247,7 +269,9 @@ export function ToolShell() {
             </Heading>
             <Text fontSize="sm" color="gray.250">
               Deserialize and inspect raw Dash Platform data structures.
-              All decoding runs locally in the browser via WASM.
+              Most tools decode locally in the browser via WASM; a few
+              (marked <em>network</em>, like Path Elements) query the
+              live network.
             </Text>
           </VStack>
         </InfoBlock>
