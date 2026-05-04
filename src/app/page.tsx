@@ -215,7 +215,7 @@ export default function HomePage() {
               View epoch
             </Button>
           </HStack>
-          {evonodesQ.isLoading ? (
+          {epochQ.isLoading || evonodesQ.isLoading ? (
             <LoadingCard lines={5} />
           ) : (
             <EvonodesLeaderboard entries={bars} limit={10} />

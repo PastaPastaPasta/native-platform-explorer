@@ -75,7 +75,17 @@ function useSdkQuery<TData>(
     ...rest,
   });
   const proofState = classifyProof(q, { trusted, hasProofVariant });
-  return Object.assign(q, { proofState });
+  // RQ's stock `isLoading` is `isPending && isFetching`, so it goes false the
+  // moment a query is gated off — including the SDK-boot window when the
+  // internal gate above forces `enabled: false`. The common pattern
+  // `if (isLoading) <Loading /> else if (data.length === 0) <Empty />` would
+  // then flash the empty state before any fetch is attempted. Override to:
+  // "loading whenever the caller asked for data but none has arrived". Queries
+  // the *caller* explicitly disables stay non-loading so they don't spin
+  // forever waiting for a precondition the user hasn't met yet. (Mutating `q`
+  // instead of spreading preserves RQ's discriminated-union narrowing.)
+  const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
+  return Object.assign(q, { proofState, isLoading: q.isPending && userEnabled });
 }
 
 // ----- staleTime conventions from PRD §11.2 -----
