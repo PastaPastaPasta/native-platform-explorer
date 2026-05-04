@@ -122,7 +122,7 @@ function Content() {
             <InfoLine
               label="Blocks proposed (current epoch)"
               value={
-                allBlocksQ.isLoading ? (
+                currentQ.isLoading || allBlocksQ.isLoading ? (
                   <Text fontSize="sm" color="gray.400">
                     Scanning…
                   </Text>

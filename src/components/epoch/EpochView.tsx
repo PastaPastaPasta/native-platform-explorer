@@ -56,8 +56,8 @@ export function EpochView({
         <Heading size="sm" color="gray.100" mb={3}>
           {leaderboardTitle}
         </Heading>
-        {evonodesQ.isLoading ? (
-          <LoadingCard lines={evonodesQ.isLoading ? 6 : 4} />
+        {epochQ.isLoading || evonodesQ.isLoading ? (
+          <LoadingCard lines={6} />
         ) : evonodesQ.isError ? (
           <ErrorCard error={evonodesQ.error} onRetry={() => evonodesQ.refetch()} />
         ) : (
