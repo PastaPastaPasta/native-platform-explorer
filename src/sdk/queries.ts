@@ -232,12 +232,15 @@ function jsonFriendly(value: unknown): unknown {
   if (value instanceof Uint8Array) {
     return Array.from(value).map((b) => b.toString(16).padStart(2, '0')).join('');
   }
+  // Map/Set are passed through walkInstance unchanged (it does not recurse
+  // into Map values), so we walk each entry here to surface WASM getter state
+  // on the values.
   if (value instanceof Map) {
     const obj: Record<string, unknown> = {};
-    value.forEach((v, k) => { obj[String(k)] = jsonFriendly(v); });
+    value.forEach((v, k) => { obj[String(k)] = safeSerialize(v); });
     return obj;
   }
-  if (value instanceof Set) return [...value].map(jsonFriendly);
+  if (value instanceof Set) return [...value].map(safeSerialize);
   if (Array.isArray(value)) return value.map(jsonFriendly);
   if (typeof value === 'object') {
     const plain: Record<string, unknown> = {};
