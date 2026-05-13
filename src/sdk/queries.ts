@@ -15,7 +15,6 @@ import {
   useQueryProofStore,
   type ProofData,
   type ResponseMeta,
-  type QueryProofEntry,
 } from '@/contexts/QueryProofStore';
 
 type Awaited<T> = T extends Promise<infer U> ? U : T;
@@ -31,8 +30,7 @@ interface SdkQueryOpts<TData>
   /** If provided, called instead of `fn` when trusted mode + inspector are on.
    *  Returns ProofMetadataResponse; `.data` is unwrapped as the query result,
    *  `.proof` + `.metadata` are stored in the QueryProofStore. */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  withProofFn?: (sdk: EvoSDK) => Promise<any>;
+  withProofFn?: (sdk: EvoSDK) => Promise<unknown>;
   /** Human-readable SDK method name shown in the inspector (e.g. "identities.fetch"). */
   methodName?: string;
   /** Parameters passed to the SDK method, shown in the inspector. */
@@ -126,16 +124,19 @@ function useSdkQuery<TData>(
       const store = proofStoreRef.current;
       const storeKey = JSON.stringify(fullKey);
       const useProof = trusted && store.enabled && !!withProofFn;
+      const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
       const t0 = performance.now();
 
       if (useProof) {
         try {
-          const response = await withProofFn!(sdkRef.current);
+          const response = (await withProofFn!(sdkRef.current)) as
+            | { data?: unknown; metadata?: unknown; proof?: unknown }
+            | undefined;
           const elapsed = performance.now() - t0;
           const data = response?.data;
-          const entry: QueryProofEntry = {
+          store.record(storeKey, {
             queryKey: fullKey,
-            methodName: methodName ?? key[0] + '.' + key[1],
+            methodName: inspectorMethodName,
             methodParams: methodParams ?? {},
             hasProofVariant: true,
             timestamp: Date.now(),
@@ -144,20 +145,19 @@ function useSdkQuery<TData>(
             result: safeSerialize(data),
             metadata: extractMetadata(response?.metadata),
             proof: extractProof(response?.proof),
-          };
-          store.record(storeKey, entry);
+          });
           return (data ?? null) as TData;
         } catch (err) {
           const proofError = err instanceof Error ? err.message : String(err);
           // Fall back to the non-proof variant so the explorer still works.
           // Record the entry as a success (data was retrieved) but include the
-          // proof-capture error in the `error` field so the inspector can show
-          // both: "data succeeded, but proof was not captured because ...".
+          // proof-capture error so the inspector can show both: "data succeeded,
+          // but proof was not captured because ...".
           const result = await fn(sdkRef.current!);
           const elapsed = performance.now() - t0;
           store.record(storeKey, {
             queryKey: fullKey,
-            methodName: methodName ?? String(key[0]) + '.' + String(key[1]),
+            methodName: inspectorMethodName,
             methodParams: methodParams ?? {},
             hasProofVariant: true,
             timestamp: Date.now(),
@@ -177,7 +177,7 @@ function useSdkQuery<TData>(
       if (store.enabled && methodName) {
         store.record(storeKey, {
           queryKey: fullKey,
-          methodName,
+          methodName: inspectorMethodName,
           methodParams: methodParams ?? {},
           hasProofVariant,
           timestamp: Date.now(),

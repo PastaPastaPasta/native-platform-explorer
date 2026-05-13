@@ -17,6 +17,7 @@ import {
 import { useEffect, useMemo } from 'react';
 import { useQueryProofStore } from '@/contexts/QueryProofStore';
 import { useSdk } from '@sdk/hooks';
+import { safeStringify } from '@util/wasm-json';
 import { QueryEntryCard } from './QueryEntryCard';
 import { OVERVIEW_TEXT } from './annotations';
 
@@ -94,18 +95,7 @@ export function QueryInspectorDrawer() {
                 size="xs"
                 variant="outline"
                 onClick={() => {
-                  try {
-                    const json = JSON.stringify(entries, (_k, v) => {
-                      if (v instanceof Uint8Array) {
-                        return Array.from(v).map((b: number) => b.toString(16).padStart(2, '0')).join('');
-                      }
-                      if (typeof v === 'bigint') return v.toString();
-                      return v;
-                    }, 2);
-                    navigator.clipboard?.writeText(json);
-                  } catch (e) {
-                    console.warn('Failed to serialize query entries:', e);
-                  }
+                  navigator.clipboard?.writeText(safeStringify(entries));
                 }}
               >
                 Copy All
