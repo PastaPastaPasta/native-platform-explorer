@@ -75,7 +75,9 @@ const TOKEN_TREE: Record<string, KeyInfo> = {
 const VOTES_TREE: Record<string, KeyInfo> = {
   '63': { name: "'c' ContestedResource", description: 'Contested DPNS names and other contested document resources.' },
   '64': { name: "'d' VoteDecisions", description: 'Recorded vote decisions from masternodes.' },
+  '65': { name: "'e' EndDateQueries", description: 'Index of vote polls by end date, for querying soon-to-close polls.' },
   '69': { name: "'i' IdentityVotes", description: 'Per-identity vote history.' },
+  '70': { name: "'p' ActivePolls", description: 'Currently active vote polls.' },
 };
 
 /** Normalize a key emitted by the Rust parser to lowercase hex bytes.
@@ -113,35 +115,35 @@ export interface DecodedKey {
   isIdentifier: boolean;
 }
 
+/** Per-context label/next-context for 32-byte identifier keys.
+ *  Contexts not listed fall through to a generic "32-byte identifier" label. */
+const IDENTIFIER_BY_CONTEXT: Partial<Record<GroveContext, { name: string; nextContext?: GroveContext }>> = {
+  tokens: { name: '32-byte token ID', nextContext: 'token-id' },
+  'data-contract': { name: '32-byte contract ID' },
+  identity: { name: '32-byte identity ID' },
+};
+
+/** Single-byte key tables, keyed by context. Contexts without a table have no decodable keys. */
+const TABLE_BY_CONTEXT: Partial<Record<GroveContext, Record<string, KeyInfo>>> = {
+  root: ROOT_TREE,
+  identity: IDENTITY_TREE,
+  tokens: TOKEN_TREE,
+  'token-id': TOKEN_TREE,
+  votes: VOTES_TREE,
+};
+
 export function decodeGroveKey(raw: string, context: GroveContext): DecodedKey {
   const norm = normalizeKey(raw);
   // 32-byte identifiers (identity IDs, contract IDs, token IDs).
   if (norm && norm.length === 64) {
-    let name: string | undefined;
-    let nextContext: GroveContext | undefined;
-    if (context === 'root') {
-      // shouldn't normally happen — root keys are single bytes
-    } else if (context === 'tokens') {
-      name = '32-byte token ID';
-      nextContext = 'token-id';
-    } else if (context === 'data-contract') {
-      name = '32-byte contract ID';
-    } else if (context === 'identity') {
-      name = '32-byte identity ID';
-    } else {
-      name = '32-byte identifier';
-    }
-    return { raw, name, nextContext, isIdentifier: true };
+    // 'root' shouldn't normally happen — root keys are single bytes.
+    const info = IDENTIFIER_BY_CONTEXT[context] ?? { name: '32-byte identifier' };
+    return { raw, name: info.name, nextContext: info.nextContext, isIdentifier: true };
   }
 
   if (!norm) return { raw, isIdentifier: false };
 
-  const table =
-    context === 'root' ? ROOT_TREE :
-    context === 'identity' ? IDENTITY_TREE :
-    context === 'tokens' || context === 'token-id' ? TOKEN_TREE :
-    context === 'votes' ? VOTES_TREE :
-    null;
+  const table = TABLE_BY_CONTEXT[context];
   if (!table) return { raw, isIdentifier: false };
 
   const info = table[norm];

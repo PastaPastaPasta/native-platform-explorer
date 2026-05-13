@@ -99,12 +99,7 @@ function parseProofStats(text: string): ProofStats {
       // Determine this layer's context based on the parent layer's context +
       // the key that opened this block. Layer 1 has no parent and is always
       // the root tree itself.
-      const parentLayer = (() => {
-        for (let i = blockStack.length - 1; i >= 0; i--) {
-          if (blockStack[i]!.isLayer) return blockStack[i]!.layer!;
-        }
-        return undefined;
-      })();
+      const parentLayer = currentLayer();
       let context: GroveContext;
       let decoded: DecodedKey | undefined;
       if (!parentLayer) {
