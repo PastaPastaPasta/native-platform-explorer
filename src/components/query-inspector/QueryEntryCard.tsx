@@ -51,11 +51,12 @@ function FieldRow({ label, value, annotation }: { label: string; value: string; 
   );
 }
 
-function MiniCodeBlock({ value, maxLines = 20 }: { value: string; maxLines?: number }) {
+function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collapsedHeight?: number }) {
   const [expanded, setExpanded] = useState(false);
-  const lines = value.split('\n');
-  const long = lines.length > maxLines;
-  const display = expanded || !long ? value : lines.slice(0, maxLines).join('\n') + '\n…';
+  // ~14px per line at 2xs font; treat anything noticeably taller than the
+  // collapsed box as "long" so we show the expand toggle. The full text is
+  // ALWAYS in the DOM — collapsed just means scrollable within a smaller box.
+  const long = value.length > 600 || value.split('\n').length > 16;
 
   return (
     <Box position="relative" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.750">
@@ -89,10 +90,10 @@ function MiniCodeBlock({ value, maxLines = 20 }: { value: string; maxLines?: num
         color="gray.100"
         fontFamily="mono"
         fontSize="2xs"
-        maxHeight={expanded ? undefined : '300px'}
+        maxHeight={expanded || !long ? undefined : `${collapsedHeight}px`}
         overflow="auto"
       >
-        {display}
+        {value}
       </Code>
     </Box>
   );
@@ -189,11 +190,11 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
         <Text fontSize="2xs" color="gray.500" mb={2}>
           {PROOF_FIELD_ANNOTATIONS.grovedbProof}
         </Text>
-        <MiniCodeBlock value={proofHex} maxLines={6} />
+        <MiniCodeBlock value={proofHex} collapsedHeight={120} />
         {parsedTree ? (
           <Box mt={3}>
             <Text fontSize="xs" fontWeight="600" color="gray.200" mb={1}>Parsed Tree Structure</Text>
-            <MiniCodeBlock value={parsedTree} maxLines={40} />
+            <MiniCodeBlock value={parsedTree} collapsedHeight={400} />
           </Box>
         ) : null}
       </Box>
@@ -255,7 +256,7 @@ export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
                 ) : null}
                 <Box>
                   <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Parameters</Text>
-                  <MiniCodeBlock value={JSON.stringify(entry.methodParams, null, 2)} maxLines={15} />
+                  <MiniCodeBlock value={JSON.stringify(entry.methodParams, null, 2)} collapsedHeight={200} />
                 </Box>
               </VStack>
             </TabPanel>
@@ -266,7 +267,7 @@ export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
                 ) : (
                   <MiniCodeBlock
                     value={typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result, null, 2)}
-                    maxLines={30}
+                    collapsedHeight={400}
                   />
                 )}
               </VStack>
