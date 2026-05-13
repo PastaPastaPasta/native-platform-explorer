@@ -60,14 +60,14 @@ export function QueryInspectorDrawer() {
   }, [entries]);
 
   return (
-    <Drawer isOpen={drawerOpen} placement="right" size="lg" onClose={closeDrawer}>
+    <Drawer isOpen={drawerOpen} placement="right" size="full" onClose={closeDrawer}>
       <DrawerOverlay />
-      <DrawerContent bg="gray.900" borderLeft="1px solid" borderColor="gray.750">
+      <DrawerContent bg="gray.900">
         <DrawerCloseButton />
-        <DrawerHeader color="gray.100" pb={2}>
+        <DrawerHeader color="gray.100" pb={2} maxW="1400px" mx="auto" w="100%">
           <Text fontSize="md">Query Inspector</Text>
         </DrawerHeader>
-        <DrawerBody px={4}>
+        <DrawerBody px={6} maxW="1400px" mx="auto" w="100%">
           <VStack align="stretch" spacing={4}>
             <HStack spacing={4} flexWrap="wrap">
               <Text fontSize="xs" color="gray.400">

@@ -50,6 +50,59 @@ export interface ParsedLayer {
   children: Map<string, ParsedLayer>;
 }
 
+/** A node in the reconstructed binary merkle tree. */
+export interface TreeNode {
+  /** Source op that produced this leaf (undefined for synthetic internal nodes — never happens in practice; every node here comes from a Push op). */
+  op?: OpNode;
+  kind: 'kv' | 'subtree' | 'sibling';
+  left?: TreeNode;
+  right?: TreeNode;
+}
+
+/**
+ * Reconstruct the binary merkle tree by replaying the layer's stack operations.
+ *
+ * Semantics (from merk/src/proofs/tree.rs):
+ *   - Parent          → top is new parent, below becomes its LEFT child
+ *   - Child           → below stays as parent, top becomes its RIGHT child
+ *   - ParentInverted  → top is new parent, below becomes its RIGHT child
+ *   - ChildInverted   → below stays as parent, top becomes its LEFT child
+ *
+ * After running every op, a well-formed proof leaves exactly one node on the
+ * stack — the layer's root. Returns null if the stack was empty or malformed.
+ */
+export function buildLayerTree(layer: ParsedLayer): TreeNode | null {
+  const stack: TreeNode[] = [];
+  for (const op of layer.ops) {
+    if (op.kind === 'combine') {
+      if (stack.length < 2) continue;
+      const top = stack.pop()!;
+      const below = stack.pop()!;
+      if (op.combine === 'Parent') {
+        top.left = below;
+        stack.push(top);
+      } else if (op.combine === 'Child') {
+        below.right = top;
+        stack.push(below);
+      } else if (op.combine === 'ParentInverted') {
+        top.right = below;
+        stack.push(top);
+      } else {
+        // ChildInverted
+        below.left = top;
+        stack.push(below);
+      }
+    } else {
+      const kind: TreeNode['kind'] =
+        op.kind === 'kv' ? 'kv' :
+        op.kind === 'kvValueHash' || op.kind === 'kvRefValueHash' ? 'subtree' :
+        'sibling';
+      stack.push({ op, kind });
+    }
+  }
+  return stack[stack.length - 1] ?? null;
+}
+
 /**
  * Top-level parse. Returns null if no LayerProof was found.
  */
