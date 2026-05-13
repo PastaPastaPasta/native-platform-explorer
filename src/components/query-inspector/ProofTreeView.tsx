@@ -1,6 +1,6 @@
 'use client';
 
-import { Badge, Box, Collapse, HStack, IconButton, Text, VStack } from '@chakra-ui/react';
+import { Badge, Box, Collapse, HStack, Icon, Text, VStack } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import { useMemo, useState } from 'react';
 import { parseProofTree, type OpNode, type ParsedLayer } from './parse-proof-tree';
@@ -135,22 +135,25 @@ function Toggle({
 }) {
   return (
     <HStack
+      as="button"
+      type="button"
       spacing={1.5}
       px={2}
       py={1}
       cursor="pointer"
       onClick={onClick}
       _hover={{ bg: 'whiteAlpha.50' }}
+      _focusVisible={{ outline: '2px solid', outlineColor: 'brand.normal', outlineOffset: '-2px' }}
       borderRadius="sm"
+      bg="transparent"
+      border="none"
+      textAlign="left"
+      aria-expanded={open}
     >
-      <IconButton
-        as="span"
-        aria-label="toggle"
-        icon={open ? <ChevronDownIcon /> : <ChevronRightIcon />}
-        size="xs"
-        variant="ghost"
-        minW="14px"
-        h="14px"
+      <Icon
+        as={open ? ChevronDownIcon : ChevronRightIcon}
+        boxSize="14px"
+        color="gray.400"
       />
       <Text fontSize="2xs" color={accent ?? 'gray.400'} fontWeight="600" textTransform="uppercase">
         {label} ({count})

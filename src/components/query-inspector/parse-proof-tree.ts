@@ -54,7 +54,8 @@ export interface ParsedLayer {
  * Top-level parse. Returns null if no LayerProof was found.
  */
 export function parseProofTree(text: string): ParsedLayer | null {
-  const lines = text.split('\n');
+  // Strip CR so Windows line endings don't leak into op bodies.
+  const lines = text.replace(/\r/g, '').split('\n');
 
   // Each frame is either an open layer (with the under-construction layer) or
   // a non-layer brace block (`lower_layers: {`, `<key> => {`, the outer
@@ -151,60 +152,44 @@ function parseOp(line: string, index: number): OpNode | null {
   if (body === 'ParentInverted') return { kind: 'combine', index, raw: line, combine: 'ParentInverted' };
   if (body === 'ChildInverted') return { kind: 'combine', index, raw: line, combine: 'ChildInverted' };
 
-  // Push(KV(key, value)) — key may contain commas if it's a Tree/SumTree literal, but
-  // for KV ops the key is always a primitive — match up to the first balanced "(".
-  if (body.startsWith('Push(KV(')) {
-    const inner = body.slice('Push(KV('.length, -2); // strip "Push(KV(" and "))"
-    const split = splitFirstTopLevelComma(inner);
-    if (split) {
-      return { kind: 'kv', index, raw: line, key: split[0], value: split[1] };
+  // Anchor on `Push(<Name>(` ... `))` rather than fixed-length suffix stripping,
+  // so trailing whitespace / CR doesn't shift the slice indices.
+  const pushMatch = body.match(/^Push\((\w+)\((.*)\)\)\s*$/);
+  if (pushMatch) {
+    const [, name, inner] = pushMatch as unknown as [string, string, string];
+    switch (name) {
+      case 'KV': {
+        const split = splitFirstTopLevelComma(inner);
+        if (split) return { kind: 'kv', index, raw: line, key: split[0], value: split[1] };
+        break;
+      }
+      case 'KVValueHash':
+      case 'KVRefValueHash': {
+        const parts = splitTopLevelArgs(inner);
+        if (parts.length >= 3) {
+          return {
+            kind: name === 'KVValueHash' ? 'kvValueHash' : 'kvRefValueHash',
+            index,
+            raw: line,
+            key: parts[0],
+            treeValue: parts[1],
+            hash: extractHash(parts[2] ?? ''),
+          };
+        }
+        break;
+      }
+      case 'KVDigest': {
+        const parts = splitTopLevelArgs(inner);
+        if (parts.length >= 2) {
+          return { kind: 'kvDigest', index, raw: line, key: parts[0], hash: extractHash(parts[1] ?? '') };
+        }
+        break;
+      }
+      case 'KVHash':
+        return { kind: 'kvHash', index, raw: line, hash: extractHash(inner) };
+      case 'Hash':
+        return { kind: 'hash', index, raw: line, hash: extractHash(inner) };
     }
-  }
-
-  if (body.startsWith('Push(KVValueHash(')) {
-    const inner = body.slice('Push(KVValueHash('.length, -2);
-    const parts = splitTopLevelArgs(inner);
-    if (parts.length >= 3) {
-      return {
-        kind: 'kvValueHash',
-        index,
-        raw: line,
-        key: parts[0],
-        treeValue: parts[1],
-        hash: extractHash(parts[2] ?? ''),
-      };
-    }
-  }
-
-  if (body.startsWith('Push(KVRefValueHash(')) {
-    const inner = body.slice('Push(KVRefValueHash('.length, -2);
-    const parts = splitTopLevelArgs(inner);
-    if (parts.length >= 3) {
-      return {
-        kind: 'kvRefValueHash',
-        index,
-        raw: line,
-        key: parts[0],
-        treeValue: parts[1],
-        hash: extractHash(parts[2] ?? ''),
-      };
-    }
-  }
-
-  if (body.startsWith('Push(KVDigest(')) {
-    const inner = body.slice('Push(KVDigest('.length, -2);
-    const parts = splitTopLevelArgs(inner);
-    if (parts.length >= 2) {
-      return { kind: 'kvDigest', index, raw: line, key: parts[0], hash: extractHash(parts[1] ?? '') };
-    }
-  }
-
-  if (body.startsWith('Push(KVHash(')) {
-    return { kind: 'kvHash', index, raw: line, hash: extractHash(body) };
-  }
-
-  if (body.startsWith('Push(Hash(')) {
-    return { kind: 'hash', index, raw: line, hash: extractHash(body) };
   }
 
   return null;
@@ -222,21 +207,21 @@ function splitFirstTopLevelComma(s: string): [string, string] | null {
   return [s.slice(0, idx).trim(), s.slice(idx + 1).trim()];
 }
 
-/** Split top-level comma-separated args. */
+/** Split top-level comma-separated args in a single linear pass. */
 function splitTopLevelArgs(s: string): string[] {
   const out: string[] = [];
+  let depth = 0;
   let start = 0;
-  let i = 0;
-  while (i < s.length) {
-    const c = findTopLevelComma(s, i);
-    if (c === -1) {
-      out.push(s.slice(start).trim());
-      break;
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === '(' || c === '[' || c === '{') depth++;
+    else if (c === ')' || c === ']' || c === '}') depth--;
+    else if (c === ',' && depth === 0) {
+      out.push(s.slice(start, i).trim());
+      start = i + 1;
     }
-    out.push(s.slice(start, c).trim());
-    start = c + 1;
-    i = c + 1;
   }
+  out.push(s.slice(start).trim());
   return out;
 }
 
