@@ -11,6 +11,7 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import { useSdk } from './hooks';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
+import { walkInstance } from '@util/wasm-json';
 import {
   useQueryProofStore,
   type ProofData,
@@ -206,25 +207,35 @@ function useSdkQuery<TData>(
   return Object.assign(q, { proofState, isLoading: q.isPending && userEnabled });
 }
 
+/**
+ * Snapshot a query result for the inspector. WASM class instances expose state
+ * via prototype getters (not enumerable own properties), so plain spread/walk
+ * yields `{ __wbg_ptr: N }`. `walkInstance` reads getters + `getFoo()` methods
+ * recursively, surfacing the real data. Maps/Uint8Arrays/BigInts are then
+ * converted to JSON-friendly forms.
+ */
 function safeSerialize(value: unknown): unknown {
+  const walked = walkInstance(value);
+  return jsonFriendly(walked);
+}
+
+function jsonFriendly(value: unknown): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value === 'bigint') return value.toString();
-  if (value instanceof Uint8Array) return Array.from(value).map((b) => b.toString(16).padStart(2, '0')).join('');
+  if (value instanceof Uint8Array) {
+    return Array.from(value).map((b) => b.toString(16).padStart(2, '0')).join('');
+  }
   if (value instanceof Map) {
     const obj: Record<string, unknown> = {};
-    value.forEach((v, k) => { obj[String(k)] = safeSerialize(v); });
+    value.forEach((v, k) => { obj[String(k)] = jsonFriendly(v); });
     return obj;
   }
-  if (Array.isArray(value)) return value.map(safeSerialize);
+  if (value instanceof Set) return [...value].map(jsonFriendly);
+  if (Array.isArray(value)) return value.map(jsonFriendly);
   if (typeof value === 'object') {
-    try {
-      if ('toJSON' in value && typeof (value as Record<string, unknown>).toJSON === 'function') {
-        return (value as { toJSON: () => unknown }).toJSON();
-      }
-    } catch { /* fall through */ }
     const plain: Record<string, unknown> = {};
     for (const k of Object.keys(value)) {
-      plain[k] = safeSerialize((value as Record<string, unknown>)[k]);
+      plain[k] = jsonFriendly((value as Record<string, unknown>)[k]);
     }
     return plain;
   }
