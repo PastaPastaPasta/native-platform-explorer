@@ -38,6 +38,15 @@ interface SdkQueryOpts<TData>
   methodParams?: Record<string, unknown>;
 }
 
+function decodeChainId(raw: unknown): string {
+  if (!(raw instanceof Uint8Array)) return String(raw ?? '');
+  // chainId is a short ASCII identifier (e.g. "evo1"). Decode if printable,
+  // otherwise fall back to hex so non-text bytes still surface.
+  const printable = Array.from(raw).every((b) => b >= 0x20 && b < 0x7f);
+  if (printable) return new TextDecoder('utf-8').decode(raw);
+  return Array.from(raw).map((b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 function extractMetadata(meta: unknown): ResponseMeta | undefined {
   if (!meta || typeof meta !== 'object') return undefined;
   const m = meta as Record<string, unknown>;
@@ -47,9 +56,7 @@ function extractMetadata(meta: unknown): ResponseMeta | undefined {
     epoch: Number(m.epoch ?? 0),
     timeMs: Number(m.timeMs ?? 0),
     protocolVersion: Number(m.protocolVersion ?? 0),
-    chainId: m.chainId instanceof Uint8Array
-      ? Array.from(m.chainId).map((b) => b.toString(16).padStart(2, '0')).join('')
-      : String(m.chainId ?? ''),
+    chainId: decodeChainId(m.chainId),
   };
 }
 

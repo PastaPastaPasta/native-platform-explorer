@@ -53,7 +53,7 @@ export const PROOF_FIELD_ANNOTATIONS: Record<string, string> = {
   epoch: 'Current epoch number. Epochs rotate masternode reward distribution roughly every ~18 hours.',
   coreChainLockedHeight: 'Highest ChainLock-confirmed Dash Core block height known to Platform.',
   protocolVersion: 'Active Platform protocol version number.',
-  chainId: 'Unique identifier for this Platform chain instance (e.g., "dash-mainnet-1").',
+  chainId: 'Short ASCII identifier for this Platform chain (e.g. "evo1" for mainnet).',
   timeMs: 'Block timestamp in milliseconds since Unix epoch.',
   quorumHash: 'Hash of the LLMQ quorum that signed this proof. Verifiable against the quorum public key on the Dash Core chain.',
   quorumType: 'LLMQ quorum type (e.g., 106 = platform quorum). Different quorum types have different sizes and thresholds.',
