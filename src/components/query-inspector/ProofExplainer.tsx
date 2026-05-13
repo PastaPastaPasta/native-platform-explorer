@@ -2,11 +2,16 @@
 
 import { Box, HStack, Text, VStack } from '@chakra-ui/react';
 import { useMemo } from 'react';
+import { contextLabel, decodeGroveKey, type DecodedKey, type GroveContext } from './grovedb-schema';
 
 interface LayerStats {
   depth: number;
   /** parent key that opens this layer, hex-encoded (empty for the root layer) */
   parentKey: string;
+  /** Decoded form of `parentKey`, resolved against the parent layer's context. */
+  decodedParentKey?: DecodedKey;
+  /** What GroveDB context this layer IS — used to decode the *next* layer's parent key. */
+  context: GroveContext;
   kv: number;
   kvValueHash: number;
   kvHash: number;
@@ -59,9 +64,16 @@ function parseProofStats(text: string): ProofStats {
   const blockStack: Array<{ isLayer: boolean; layer?: LayerStats }> = [];
   const all: LayerStats[] = [];
 
-  const makeLayer = (depth: number, parentKey: string): LayerStats => ({
+  const makeLayer = (
+    depth: number,
+    parentKey: string,
+    decodedParentKey: DecodedKey | undefined,
+    context: GroveContext,
+  ): LayerStats => ({
     depth,
     parentKey,
+    decodedParentKey,
+    context,
     kv: 0,
     kvValueHash: 0,
     kvHash: 0,
@@ -84,7 +96,24 @@ function parseProofStats(text: string): ProofStats {
     const line = raw.trim();
 
     if (line.startsWith('LayerProof {')) {
-      const layer = makeLayer(all.length, nextParentKey);
+      // Determine this layer's context based on the parent layer's context +
+      // the key that opened this block. Layer 1 has no parent and is always
+      // the root tree itself.
+      const parentLayer = (() => {
+        for (let i = blockStack.length - 1; i >= 0; i--) {
+          if (blockStack[i]!.isLayer) return blockStack[i]!.layer!;
+        }
+        return undefined;
+      })();
+      let context: GroveContext;
+      let decoded: DecodedKey | undefined;
+      if (!parentLayer) {
+        context = 'root';
+      } else {
+        decoded = decodeGroveKey(nextParentKey, parentLayer.context);
+        context = decoded.nextContext ?? 'unknown';
+      }
+      const layer = makeLayer(all.length, nextParentKey, decoded, context);
       blockStack.push({ isLayer: true, layer });
       all.push(layer);
       nextParentKey = '';
@@ -258,16 +287,27 @@ export function ProofExplainer({ text }: { text: string }) {
                 <Text fontSize="xs" color="gray.200" fontWeight="600">
                   Layer {i + 1}
                 </Text>
-                {layer.parentKey ? (
+                <Text fontSize="2xs" color="brand.light" fontWeight="600">
+                  {contextLabel(layer.context)}
+                </Text>
+                {layer.decodedParentKey?.name ? (
+                  <Text fontSize="2xs" color="gray.300">
+                    via{' '}
+                    <Text as="span" fontFamily="mono">{layer.decodedParentKey.raw}</Text>
+                    {' '}
+                    <Text as="span" color="gray.500">({layer.decodedParentKey.name})</Text>
+                  </Text>
+                ) : layer.parentKey ? (
                   <Text fontSize="2xs" color="gray.500" fontFamily="mono">
-                    entered via key {layer.parentKey}
+                    via {layer.parentKey}
                   </Text>
-                ) : (
-                  <Text fontSize="2xs" color="gray.500">
-                    root tree
-                  </Text>
-                )}
+                ) : null}
               </HStack>
+              {layer.decodedParentKey?.description ? (
+                <Text fontSize="2xs" color="gray.500" mt={0.5} lineHeight="1.5">
+                  {layer.decodedParentKey.description}
+                </Text>
+              ) : null}
               <Text fontSize="2xs" color="gray.400" mt={0.5}>
                 {layerSummary(layer)}
               </Text>
