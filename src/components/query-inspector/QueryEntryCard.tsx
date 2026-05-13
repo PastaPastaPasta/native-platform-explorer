@@ -24,6 +24,7 @@ import { useCallback, useState } from 'react';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 import { METHOD_ANNOTATIONS, PROOF_FIELD_ANNOTATIONS } from './annotations';
 import { ProofExplainer } from './ProofExplainer';
+import { ProofTreeView } from './ProofTreeView';
 
 function toHex(bytes: Uint8Array): string {
   return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
@@ -196,7 +197,11 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
           <Box mt={3}>
             <Text fontSize="xs" fontWeight="600" color="gray.200" mb={2}>What this proof contains</Text>
             <ProofExplainer text={parsedTree} />
-            <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={3} mb={1}>
+            <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={4} mb={2}>
+              Proof tree
+            </Text>
+            <ProofTreeView text={parsedTree} />
+            <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={4} mb={1}>
               Raw parser output
             </Text>
             <MiniCodeBlock value={parsedTree} collapsedHeight={400} />
