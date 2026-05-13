@@ -59,46 +59,59 @@ export interface TreeNode {
   right?: TreeNode;
 }
 
+type CombineOp = NonNullable<OpNode['combine']>;
+
+/**
+ * Combine semantics from merk/src/proofs/tree.rs. For each op, identify which
+ * of the two popped nodes is the parent (top vs below) and which slot the
+ * other one fills (left vs right).
+ */
+const COMBINE_RULES: Record<CombineOp, { topIsParent: boolean; childGoesLeft: boolean }> = {
+  Parent:         { topIsParent: true,  childGoesLeft: true  },
+  Child:          { topIsParent: false, childGoesLeft: false },
+  ParentInverted: { topIsParent: true,  childGoesLeft: false },
+  ChildInverted:  { topIsParent: false, childGoesLeft: true  },
+};
+
+function leafKind(op: OpNode): TreeNode['kind'] {
+  if (op.kind === 'kv') return 'kv';
+  if (op.kind === 'kvValueHash' || op.kind === 'kvRefValueHash') return 'subtree';
+  return 'sibling';
+}
+
 /**
  * Reconstruct the binary merkle tree by replaying the layer's stack operations.
- *
- * Semantics (from merk/src/proofs/tree.rs):
- *   - Parent          → top is new parent, below becomes its LEFT child
- *   - Child           → below stays as parent, top becomes its RIGHT child
- *   - ParentInverted  → top is new parent, below becomes its RIGHT child
- *   - ChildInverted   → below stays as parent, top becomes its LEFT child
- *
  * After running every op, a well-formed proof leaves exactly one node on the
  * stack — the layer's root. Returns null if the stack was empty or malformed.
  */
 export function buildLayerTree(layer: ParsedLayer): TreeNode | null {
   const stack: TreeNode[] = [];
   for (const op of layer.ops) {
-    if (op.kind === 'combine') {
-      if (stack.length < 2) continue;
-      const top = stack.pop()!;
-      const below = stack.pop()!;
-      if (op.combine === 'Parent') {
-        top.left = below;
-        stack.push(top);
-      } else if (op.combine === 'Child') {
-        below.right = top;
-        stack.push(below);
-      } else if (op.combine === 'ParentInverted') {
-        top.right = below;
-        stack.push(top);
-      } else {
-        // ChildInverted
-        below.left = top;
-        stack.push(below);
-      }
-    } else {
-      const kind: TreeNode['kind'] =
-        op.kind === 'kv' ? 'kv' :
-        op.kind === 'kvValueHash' || op.kind === 'kvRefValueHash' ? 'subtree' :
-        'sibling';
-      stack.push({ op, kind });
+    if (op.kind !== 'combine') {
+      stack.push({ op, kind: leafKind(op) });
+      continue;
     }
+    if (!op.combine) continue;
+    if (stack.length < 2) {
+      // Malformed proof: combine op with <2 stack items. Merk treats this as
+      // a hard error; we're a read-only viewer, so warn and skip — but flag it
+      // so a developer staring at a half-built tree knows why.
+      if (typeof console !== 'undefined') {
+        console.warn(
+          `[proof-tree] stack underflow at op ${op.index} (${op.combine}); ` +
+          `proof may be malformed. Render will continue with partial tree.`,
+        );
+      }
+      continue;
+    }
+    const top = stack.pop()!;
+    const below = stack.pop()!;
+    const rule = COMBINE_RULES[op.combine];
+    const parent = rule.topIsParent ? top : below;
+    const child = rule.topIsParent ? below : top;
+    if (rule.childGoesLeft) parent.left = child;
+    else parent.right = child;
+    stack.push(parent);
   }
   return stack[stack.length - 1] ?? null;
 }

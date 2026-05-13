@@ -11,17 +11,14 @@ import {
 } from './parse-proof-tree';
 import { contextLabel } from './grovedb-schema';
 
-function shortHash(hex: string | undefined, head = 6, tail = 4): string {
-  if (!hex) return '';
-  if (hex.length <= head + tail + 1) return hex;
-  return `${hex.slice(0, head)}…${hex.slice(-tail)}`;
+function ellipsize(s: string | undefined, head: number, tail: number): string {
+  if (!s) return '';
+  if (s.length <= head + tail + 1) return s;
+  return `${s.slice(0, head)}…${s.slice(-tail)}`;
 }
 
-function shortKey(key: string | undefined, head = 10, tail = 6): string {
-  if (!key) return '';
-  if (key.length <= head + tail + 3) return key;
-  return `${key.slice(0, head)}…${key.slice(-tail)}`;
-}
+const shortHash = (hex: string | undefined): string => ellipsize(hex, 6, 4);
+const shortKey = (key: string | undefined): string => ellipsize(key, 10, 6);
 
 /* ----- Node card ------------------------------------------------------ */
 
@@ -123,11 +120,51 @@ function NodeCard({ node, onSubtreeClick, subtreeOpen }: {
 }
 
 /* ----- Recursive binary tree renderer --------------------------------- */
+
+/** L-shaped connector drawn from a child node back to its parent's row. */
+function BranchConnector({ isLeft }: { isLeft: boolean }) {
+  return (
+    <>
+      <Box
+        position="absolute"
+        left={0}
+        top={0}
+        width="22px"
+        height="14px"
+        borderLeft="1px solid"
+        borderBottom="1px solid"
+        borderColor="gray.700"
+        borderBottomLeftRadius="md"
+      />
+      <Text
+        position="absolute"
+        left="6px"
+        top="-3px"
+        fontSize="3xs"
+        color="gray.600"
+        fontFamily="mono"
+        pointerEvents="none"
+      >
+        {isLeft ? 'L' : 'R'}
+      </Text>
+    </>
+  );
+}
+
+function LayerHeader({ layer }: { layer: ParsedLayer }) {
+  if (!layer.decodedParentKey?.description) return null;
+  return (
+    <Text fontSize="2xs" color="gray.500" mb={1.5} lineHeight="1.5">
+      {layer.decodedParentKey.description}
+    </Text>
+  );
+}
+
 /**
  * Walks the reconstructed merkle tree, wiring up child-layer lookups at
  * every subtree ref so a single click expands the nested layer inline.
  * Indentation expresses tree depth; each child row draws an L-shaped
- * connector back to its parent via absolutely-positioned borders.
+ * connector back to its parent.
  */
 function RenderTree({
   node,
@@ -147,40 +184,17 @@ function RenderTree({
   const childLayer = node.kind === 'subtree' && node.op?.key
     ? childrenMap.get(node.op.key)
     : undefined;
+  const subtreeKey = childLayer ? node.op!.key! : undefined;
+  const subtreeOpen = subtreeKey ? expandedSubtrees.has(subtreeKey) : false;
 
   return (
     <Box position="relative" pl={isRoot ? 0 : 6} mt={isRoot ? 0 : 1}>
-      {!isRoot ? (
-        <>
-          <Box
-            position="absolute"
-            left={0}
-            top={0}
-            width="22px"
-            height="14px"
-            borderLeft="1px solid"
-            borderBottom="1px solid"
-            borderColor="gray.700"
-            borderBottomLeftRadius="md"
-          />
-          <Text
-            position="absolute"
-            left="6px"
-            top="-3px"
-            fontSize="3xs"
-            color="gray.600"
-            fontFamily="mono"
-            pointerEvents="none"
-          >
-            {isLeft ? 'L' : 'R'}
-          </Text>
-        </>
-      ) : null}
+      {!isRoot ? <BranchConnector isLeft={isLeft ?? false} /> : null}
 
       <NodeCard
         node={node}
-        onSubtreeClick={childLayer ? () => onToggleSubtree(node.op!.key!) : undefined}
-        subtreeOpen={childLayer ? expandedSubtrees.has(node.op!.key!) : undefined}
+        onSubtreeClick={subtreeKey ? () => onToggleSubtree(subtreeKey) : undefined}
+        subtreeOpen={subtreeKey ? subtreeOpen : undefined}
       />
 
       {node.left ? (
@@ -202,31 +216,32 @@ function RenderTree({
         />
       ) : null}
 
-      {childLayer && expandedSubtrees.has(node.op!.key!) ? (
+      {childLayer && subtreeOpen ? (
         <Box mt={2} ml={6} pl={3} borderLeft="2px dashed" borderColor="blue.700">
           <Text fontSize="2xs" color="blue.300" mb={1} fontWeight="600">
             ↓ Layer {childLayer.layerIndex} ({contextLabel(childLayer.context)})
           </Text>
           <LayerHeader layer={childLayer} />
-          <RenderTreeWrapper layer={childLayer} />
+          <LayerTree layer={childLayer} autoExpand={false} />
         </Box>
       ) : null}
     </Box>
   );
 }
 
-function LayerHeader({ layer }: { layer: ParsedLayer }) {
-  if (!layer.decodedParentKey?.description) return null;
-  return (
-    <Text fontSize="2xs" color="gray.500" mb={1.5} lineHeight="1.5">
-      {layer.decodedParentKey.description}
-    </Text>
-  );
-}
-
-function RenderTreeWrapper({ layer }: { layer: ParsedLayer }) {
+/**
+ * Hosts per-layer expansion state and renders the layer's reconstructed tree.
+ *
+ * `autoExpand` controls whether known child layers are open on mount. Only the
+ * top-level proof opens its children automatically; deeper layers stay
+ * collapsed so a 5-layer proof with hundreds of siblings per layer doesn't
+ * try to mount thousands of node cards on the initial render.
+ */
+function LayerTree({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpand?: boolean }) {
   const tree = useMemo(() => buildLayerTree(layer), [layer]);
-  const [expanded, setExpanded] = useState<Set<string>>(() => new Set(layer.children.keys()));
+  const [expanded, setExpanded] = useState<Set<string>>(
+    () => (autoExpand ? new Set(layer.children.keys()) : new Set()),
+  );
   const toggle = (k: string) => {
     setExpanded((prev) => {
       const next = new Set(prev);
@@ -273,7 +288,7 @@ export function ProofTreeView({ text }: { text: string }) {
             </Text>
           </HStack>
           <LayerHeader layer={root} />
-          <RenderTreeWrapper layer={root} />
+          <LayerTree layer={root} />
         </VStack>
       </Box>
     </Box>
