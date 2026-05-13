@@ -121,9 +121,11 @@ function parseProofStats(text: string): ProofStats {
     }
 
     // `<key> => {` opens a non-layer block; remember the key for the next
-    // LayerProof we open inside it. (The regex's `[0-9a-fA-Fx]+` already
-    // covers the literal `x` placeholder the parser uses for unprintable keys.)
-    const childMatch = line.match(/^([0-9a-fA-Fx]+)\s*=>\s*\{/);
+    // LayerProof we open inside it. The grovedb parser emits keys as either
+    // a single printable ASCII char (e.g. `@` for 0x40, `c` for the Votes
+    // ContestedResource tree), `0x...` hex, or `x` placeholder for unprintable
+    // single bytes — so match any non-whitespace run before `=>`.
+    const childMatch = line.match(/^(\S+)\s*=>\s*\{/);
     if (childMatch) {
       nextParentKey = childMatch[1] ?? '';
       blockStack.push({ isLayer: false });
