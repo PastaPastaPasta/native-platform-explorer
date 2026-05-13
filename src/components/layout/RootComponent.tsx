@@ -7,6 +7,7 @@ import { Footer } from './Footer';
 import { Container } from '@ui/Container';
 import { Breadcrumbs } from '@components/breadcrumbs/Breadcrumbs';
 import { DiagnosticsDrawer } from '@components/diagnostics/DiagnosticsDrawer';
+import { QueryInspectorDrawer } from '@components/query-inspector/QueryInspectorDrawer';
 import { useSdk } from '@sdk/hooks';
 
 export function RootComponent({ children }: { children: ReactNode }) {
@@ -27,6 +28,7 @@ export function RootComponent({ children }: { children: ReactNode }) {
       </Box>
       <Footer />
       <DiagnosticsDrawer />
+      <QueryInspectorDrawer />
     </Flex>
   );
 }

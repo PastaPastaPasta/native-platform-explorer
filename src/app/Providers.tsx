@@ -7,6 +7,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import { useState, type ReactNode } from 'react';
 import { theme } from '@styles/theme';
 import { SdkProvider } from '@sdk/SdkProvider';
+import { QueryProofStoreProvider } from '@contexts/QueryProofStore';
 import { BreadcrumbsProvider } from '@contexts/BreadcrumbsContext';
 import { ErrorBoundary } from '@components/layout/ErrorBoundary';
 import { SignerProvider } from '@/signer/SignerProvider';
@@ -32,11 +33,13 @@ export function Providers({ children }: { children: ReactNode }) {
         <QueryClientProvider client={queryClient}>
           <NuqsAdapter>
             <SdkProvider>
-              <SignerProvider>
-                <BreadcrumbsProvider>
-                  <ErrorBoundary>{children}</ErrorBoundary>
-                </BreadcrumbsProvider>
-              </SignerProvider>
+              <QueryProofStoreProvider>
+                <SignerProvider>
+                  <BreadcrumbsProvider>
+                    <ErrorBoundary>{children}</ErrorBoundary>
+                  </BreadcrumbsProvider>
+                </SignerProvider>
+              </QueryProofStoreProvider>
             </SdkProvider>
           </NuqsAdapter>
         </QueryClientProvider>

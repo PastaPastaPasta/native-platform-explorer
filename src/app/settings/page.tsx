@@ -17,6 +17,7 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { InfoLine } from '@components/data/InfoLine';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useSdk } from '@sdk/hooks';
+import { useQueryProofStore } from '@/contexts/QueryProofStore';
 import type { Network } from '@sdk/networks';
 
 const DIAG_KEY = 'npe:diagnosticsEnabled';
@@ -44,6 +45,7 @@ function useLocalStorageBool(key: string, fallback: boolean) {
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Settings' }]);
   const { network, trusted, setNetwork, setTrusted, reconnect, status } = useSdk();
+  const { enabled: inspectorEnabled, setEnabled: setInspectorEnabled } = useQueryProofStore();
   const [diagEnabled, setDiagEnabled] = useLocalStorageBool(DIAG_KEY, false);
 
   return (
@@ -112,6 +114,29 @@ export default function Page() {
               />
               <Text fontSize="sm" color={trusted ? 'success' : 'warning'}>
                 {trusted ? 'On (proofs verified)' : 'Off (unverified)'}
+              </Text>
+            </HStack>
+          </VStack>
+        </InfoBlock>
+
+        <InfoBlock>
+          <VStack align="stretch" spacing={3}>
+            <Heading size="sm" color="gray.100">
+              Query Inspector
+            </Heading>
+            <Text fontSize="sm" color="gray.250">
+              Captures proof data from every SDK query and displays it in an
+              educational drawer. Open with <kbd>⌘⇧P</kbd> on macOS or <kbd>Ctrl+Shift+P</kbd>,
+              or click the query count in the footer.
+            </Text>
+            <HStack>
+              <Switch
+                isChecked={inspectorEnabled}
+                onChange={(e) => setInspectorEnabled(e.target.checked)}
+                colorScheme="blue"
+              />
+              <Text fontSize="sm" color="gray.250">
+                {inspectorEnabled ? 'Enabled' : 'Disabled'}
               </Text>
             </HStack>
           </VStack>

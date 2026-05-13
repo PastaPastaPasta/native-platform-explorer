@@ -5,6 +5,7 @@ import NextLink from 'next/link';
 import { useEffect, useState } from 'react';
 import { Container } from '@ui/Container';
 import { useSdk } from '@sdk/hooks';
+import { useQueryProofStore } from '@/contexts/QueryProofStore';
 import { APP_VERSION } from '@/version';
 
 function LocalClock() {
@@ -23,6 +24,7 @@ function LocalClock() {
 
 export function Footer() {
   const { trusted, status } = useSdk();
+  const { entries, enabled: inspectorEnabled, openDrawer } = useQueryProofStore();
   const proofsOn = trusted && status === 'ready';
 
   return (
@@ -56,6 +58,18 @@ export function Footer() {
             <Text fontSize="xs" color={proofsOn ? 'success' : 'gray.400'}>
               {proofsOn ? 'Proofs ON' : 'Proofs OFF'}
             </Text>
+            {inspectorEnabled ? (
+              <Text
+                fontSize="xs"
+                color="gray.250"
+                cursor="pointer"
+                _hover={{ color: 'brand.light' }}
+                onClick={openDrawer}
+                title="Open Query Inspector (Cmd+Shift+P)"
+              >
+                {entries.length} {entries.length === 1 ? 'query' : 'queries'}
+              </Text>
+            ) : null}
             <Text fontSize="xs" color="gray.400">
               Dash Platform · SDK-only
             </Text>
