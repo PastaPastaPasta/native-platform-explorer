@@ -51,10 +51,12 @@ interface ProofStats {
  */
 function parseProofStats(text: string): ProofStats {
   const lines = text.split('\n');
-  // Stack of layers currently open; the last entry is the layer the current
-  // line's ops belong to. A new layer is pushed whenever we see "LayerProof {",
-  // and popped whenever indentation closes back out.
-  const stack: { layer: LayerStats; pendingParentKey: string }[] = [];
+  // Track ALL open `{` blocks, tagging which ones are LayerProof blocks. A
+  // single `}` line could close any of: the outer GroveDBProofV0 wrapper,
+  // a `lower_layers: {` block, a `<key> => {` opener, or an actual LayerProof.
+  // Popping the layer stack on every `}` (as a previous implementation did)
+  // misattributes ops to the wrong layer in multi-layer proofs.
+  const blockStack: Array<{ isLayer: boolean; layer?: LayerStats }> = [];
   const all: LayerStats[] = [];
 
   const makeLayer = (depth: number, parentKey: string): LayerStats => ({
@@ -68,47 +70,61 @@ function parseProofStats(text: string): ProofStats {
     sampleKeys: [],
   });
 
+  const currentLayer = (): LayerStats | undefined => {
+    for (let i = blockStack.length - 1; i >= 0; i--) {
+      const frame = blockStack[i]!;
+      if (frame.isLayer) return frame.layer;
+    }
+    return undefined;
+  };
+
   let nextParentKey = '';
 
   for (const raw of lines) {
     const line = raw.trim();
 
     if (line.startsWith('LayerProof {')) {
-      const layer = makeLayer(stack.length, nextParentKey);
-      stack.push({ layer, pendingParentKey: nextParentKey });
+      const layer = makeLayer(all.length, nextParentKey);
+      blockStack.push({ isLayer: true, layer });
       all.push(layer);
       nextParentKey = '';
       continue;
     }
 
     if (line === '}') {
-      stack.pop();
+      blockStack.pop();
       continue;
     }
 
-    // `0x.. => {` opens a nested layer block; capture the key as the
-    // parent-key annotation for the next LayerProof we open.
-    const childMatch = line.match(/^([0-9a-fA-Fx]+|x)\s*=>\s*\{/);
+    // `<key> => {` opens a non-layer block; remember the key for the next
+    // LayerProof we open inside it. (The regex's `[0-9a-fA-Fx]+` already
+    // covers the literal `x` placeholder the parser uses for unprintable keys.)
+    const childMatch = line.match(/^([0-9a-fA-Fx]+)\s*=>\s*\{/);
     if (childMatch) {
       nextParentKey = childMatch[1] ?? '';
+      blockStack.push({ isLayer: false });
       continue;
     }
 
-    if (stack.length === 0) continue;
-    const cur = stack[stack.length - 1]!.layer;
+    // Any other line that opens a `{` block (GroveDBProofV0, lower_layers,
+    // etc.) — push a non-layer frame so the matching `}` doesn't pop a real
+    // layer.
+    if (line.endsWith('{')) {
+      blockStack.push({ isLayer: false });
+      continue;
+    }
+
+    const cur = currentLayer();
+    if (!cur) continue;
 
     if (line.includes('Push(KV(')) {
       cur.kv++;
       // Extract the key (hex string between Push(KV( and ,).
       const m = line.match(/Push\(KV\(([^,]+),/);
       if (m && cur.sampleKeys.length < 3) cur.sampleKeys.push(m[1]!);
-    } else if (line.includes('Push(KVValueHash(')) {
+    } else if (line.includes('Push(KVValueHash(') || line.includes('Push(KVRefValueHash(')) {
       cur.kvValueHash++;
-    } else if (line.includes('Push(KVRefValueHash(')) {
-      cur.kvValueHash++;
-    } else if (line.includes('Push(KVDigest(')) {
-      cur.kvHash++;
-    } else if (line.includes('Push(KVHash(')) {
+    } else if (line.includes('Push(KVDigest(') || line.includes('Push(KVHash(')) {
       cur.kvHash++;
     } else if (line.includes('Push(Hash(')) {
       cur.hash++;
@@ -129,6 +145,24 @@ function parseProofStats(text: string): ProofStats {
   );
 
   return { layers: all, totals };
+}
+
+function plural(count: number, singular: string, pluralForm = singular + 's'): string {
+  return `${count} ${count === 1 ? singular : pluralForm}`;
+}
+
+function layerSummary(layer: LayerStats): string {
+  const siblings = layer.kvHash + layer.hash;
+  const parts: string[] = [];
+  if (layer.kv > 0) parts.push(plural(layer.kv, 'data item'));
+  if (layer.kvValueHash > 0) parts.push(plural(layer.kvValueHash, 'subtree ref'));
+  if (siblings > 0) parts.push(plural(siblings, 'sibling hash', 'sibling hashes'));
+  parts.push(plural(layer.combine, 'combine op'));
+  let suffix = '';
+  if (layer.kv > 0 && layer.kvValueHash > 0) suffix = ' — holds data and navigates further';
+  else if (layer.kv > 0) suffix = ' — leaf data lives here';
+  else if (layer.kvValueHash > 0) suffix = ' — navigates to the next layer';
+  return parts.join(' · ') + suffix;
 }
 
 function Stat({ label, value, hint }: { label: string; value: number; hint: string }) {
@@ -235,12 +269,7 @@ export function ProofExplainer({ text }: { text: string }) {
                 )}
               </HStack>
               <Text fontSize="2xs" color="gray.400" mt={0.5}>
-                {layer.kv > 0 ? `${layer.kv} data item${layer.kv === 1 ? '' : 's'} · ` : ''}
-                {layer.kvValueHash > 0 ? `${layer.kvValueHash} subtree ref${layer.kvValueHash === 1 ? '' : 's'} · ` : ''}
-                {layer.kvHash + layer.hash > 0 ? `${layer.kvHash + layer.hash} sibling hash${layer.kvHash + layer.hash === 1 ? '' : 'es'} · ` : ''}
-                {layer.combine} combine op{layer.combine === 1 ? '' : 's'}
-                {layer.kv === 0 && layer.kvValueHash > 0 ? ' — navigates to the next layer' : ''}
-                {layer.kv > 0 ? ' — leaf data lives here' : ''}
+                {layerSummary(layer)}
               </Text>
               {layer.sampleKeys.length > 0 ? (
                 <Text fontSize="2xs" color="gray.500" mt={0.5} fontFamily="mono" lineHeight="1.5" wordBreak="break-all">
