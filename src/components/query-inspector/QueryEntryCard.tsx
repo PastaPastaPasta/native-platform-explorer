@@ -15,12 +15,12 @@ import {
   Tabs,
   Text,
   VStack,
-  Button,
   IconButton,
+  Spinner,
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronUpIcon, CopyIcon } from '@chakra-ui/icons';
-import { useCallback, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 import { METHOD_ANNOTATIONS, PROOF_FIELD_ANNOTATIONS } from './annotations';
 import { ProofExplainer } from './ProofExplainer';
@@ -105,18 +105,26 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
   const [parsedTree, setParsedTree] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
 
-  const handleParse = useCallback(async () => {
-    if (!entry.proof?.grovedbProof) return;
+  // Auto-parse on mount. The Proof tab itself only mounts when the user opens
+  // it (Chakra TabPanel is lazy), so the ~146KB WASM module is still fetched
+  // on demand — no upfront cost for query entries the user never expands.
+  useEffect(() => {
+    const proof = entry.proof?.grovedbProof;
+    if (!proof) return;
+    let cancelled = false;
     setParsing(true);
-    try {
-      const { parseGrovedbProof } = await import('@/lib/grovedb-proof-parser');
-      const text = await parseGrovedbProof(entry.proof.grovedbProof);
-      setParsedTree(text);
-    } catch (e) {
-      setParsedTree(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
-    } finally {
-      setParsing(false);
-    }
+    (async () => {
+      try {
+        const { parseGrovedbProof } = await import('@/lib/grovedb-proof-parser');
+        const text = await parseGrovedbProof(proof);
+        if (!cancelled) setParsedTree(text);
+      } catch (e) {
+        if (!cancelled) setParsedTree(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        if (!cancelled) setParsing(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, [entry.proof]);
 
   if (!entry.hasProofVariant) {
@@ -179,20 +187,16 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
           <Text fontSize="xs" fontWeight="600" color="gray.200">
             GroveDB Proof ({formatBytes(proof.grovedbProof.length)})
           </Text>
-          <Button
-            size="xs"
-            variant="outline"
-            isLoading={parsing}
-            onClick={handleParse}
-            isDisabled={!!parsedTree}
-          >
-            Parse proof tree
-          </Button>
+          {parsing ? (
+            <HStack spacing={2}>
+              <Spinner size="xs" color="gray.500" />
+              <Text fontSize="2xs" color="gray.500">Parsing…</Text>
+            </HStack>
+          ) : null}
         </HStack>
         <Text fontSize="2xs" color="gray.500" mb={2}>
           {PROOF_FIELD_ANNOTATIONS.grovedbProof}
         </Text>
-        <MiniCodeBlock value={proofHex} collapsedHeight={120} />
         {parsedTree ? (
           <Box mt={3}>
             <Text fontSize="xs" fontWeight="600" color="gray.200" mb={2}>What this proof contains</Text>
@@ -202,10 +206,16 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
             </Text>
             <ProofTreeView text={parsedTree} />
             <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={4} mb={1}>
+              Raw bytes ({formatBytes(proof.grovedbProof.length)})
+            </Text>
+            <MiniCodeBlock value={proofHex} collapsedHeight={120} />
+            <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={4} mb={1}>
               Raw parser output
             </Text>
             <MiniCodeBlock value={parsedTree} collapsedHeight={400} />
           </Box>
+        ) : !parsing ? (
+          <MiniCodeBlock value={proofHex} collapsedHeight={120} />
         ) : null}
       </Box>
     </VStack>
