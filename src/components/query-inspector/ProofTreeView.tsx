@@ -144,12 +144,17 @@ function MerkTreeSVG({
   expandedSubtrees: Set<string>;
   onToggleSubtree: (key: string) => void;
 }) {
+  // Render the SVG at its natural intrinsic size, but let it scale down to
+  // fit narrower containers. `maxWidth: 100%` + `height: auto` + `viewBox`
+  // makes the browser proportionally shrink wide trees so they fit on screen
+  // — no horizontal scroll needed. Tiny trees still render at full size.
   return (
     <svg
       width={layout.width}
       height={layout.height}
       viewBox={`0 0 ${layout.width} ${layout.height}`}
-      style={{ display: 'block', maxWidth: 'none' }}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
     >
       {/* Edges first so node rects layer over them */}
       <g stroke="#484f58" strokeWidth={1.5} fill="none">
@@ -302,7 +307,7 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
             {layer.decodedParentKey.description}
           </Text>
         ) : null}
-        <Box overflowX="auto" overflowY="hidden" px={3} py={3}>
+        <Box px={3} py={3}>
           <MerkTreeSVG
             layout={layout}
             childrenMap={layer.children}
