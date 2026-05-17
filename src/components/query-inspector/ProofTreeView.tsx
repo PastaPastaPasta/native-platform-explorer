@@ -5,7 +5,6 @@ import { useMemo, useState } from 'react';
 import {
   buildLayerTree,
   parseProofTree,
-  type OpNode,
   type ParsedLayer,
   type TreeNode,
 } from './parse-proof-tree';
@@ -261,7 +260,7 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
     });
   };
 
-  if (!layout || !tree) {
+  if (!layout) {
     return <Text fontSize="2xs" color="gray.500">Could not reconstruct this layer&apos;s tree.</Text>;
   }
 
@@ -315,7 +314,12 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
 
       {expandedChildren.map(({ key, child }) => (
         <Box key={key} ml={6}>
-          <LayerPanel layer={child} autoExpand={false} />
+          {/* Cascade auto-expand through every layer so the user sees the
+              actual data (TARGET nodes) without having to click DESCEND
+              through each navigation layer. Matches the auto-parse principle:
+              show the proof end-to-end by default; user can collapse what
+              they don't want. */}
+          <LayerPanel layer={child} autoExpand />
         </Box>
       ))}
     </VStack>
@@ -341,6 +345,3 @@ export function ProofTreeView({ text }: { text: string }) {
     </Box>
   );
 }
-
-// Help bundlers / TS treat OpNode import as intentional even if unused directly.
-export type { OpNode };
