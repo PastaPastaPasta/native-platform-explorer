@@ -30,6 +30,7 @@ const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
   { href: '/epoch', label: 'Epoch' },
   { href: '/governance/contested', label: 'Governance' },
   { href: '/network/status', label: 'Network' },
+  { href: '/query/', label: 'Query' },
   { href: '/tools/', label: 'Tools' },
   { href: '/about', label: 'About' },
 ];
