@@ -17,7 +17,6 @@ function ellipsize(s: string | undefined, head: number, tail: number): string {
   return `${s.slice(0, head)}…${s.slice(-tail)}`;
 }
 
-const shortHash = (hex: string | undefined): string => ellipsize(hex, 6, 4);
 const shortKey = (key: string | undefined): string => ellipsize(key, 10, 6);
 
 /* ----- Node card ------------------------------------------------------ */
@@ -36,120 +35,81 @@ function NodeCard({ node, onSubtreeClick, subtreeOpen }: {
   const op = node.op!;
   const accent = ACCENT[node.kind];
 
+  // Compact single-line primary label for the tree view; full detail is in
+  // the tooltip. Keeps each node small enough that a wide binary tree fits
+  // on screen.
   let primary: ReactNode = null;
-  let secondary: ReactNode = null;
-  let tooltip = '';
+  let tooltipText = '';
 
   if (node.kind === 'kv') {
     primary = (
-      <>
-        <Text as="span" color="gray.100" fontFamily="mono">{shortKey(op.key)}</Text>
-        <Text as="span" color="gray.500" mx={1}>→</Text>
-        <Text as="span" color="gray.300" fontFamily="mono">{op.value ?? ''}</Text>
-      </>
-    );
-    tooltip = `${op.key}\n${op.value ?? ''}`;
-  } else if (node.kind === 'subtree') {
-    primary = (
-      <>
-        <Text as="span" color="gray.100" fontFamily="mono">key {shortKey(op.key)}</Text>
-        <Text as="span" color="gray.500" mx={1}>→</Text>
-        <Text as="span" color="brand.light" fontFamily="mono">{op.treeValue ?? 'Tree'}</Text>
-      </>
-    );
-    secondary = (
-      <Text fontSize="2xs" color="gray.500" fontFamily="mono">
-        root hash {shortHash(op.hash)}
+      <Text as="span" color="gray.100" fontFamily="mono" fontSize="2xs">
+        {shortKey(op.key)}
       </Text>
     );
-    tooltip = `${op.key}\nroot hash: ${op.hash ?? '?'}`;
+    tooltipText = `DATA  #${op.index}\nkey:   ${op.key ?? '?'}\nvalue: ${op.value ?? '?'}`;
+  } else if (node.kind === 'subtree') {
+    primary = (
+      <Text as="span" color="gray.100" fontFamily="mono" fontSize="2xs">
+        {shortKey(op.key)}
+      </Text>
+    );
+    tooltipText =
+      `SUBTREE  #${op.index}\nkey:        ${op.key ?? '?'}\n` +
+      `value:      ${op.treeValue ?? '?'}\nroot hash:  ${op.hash ?? '?'}`;
   } else {
     const kindLabel =
       op.kind === 'kvDigest' ? 'kv-digest' :
       op.kind === 'kvHash' ? 'kv-hash' :
       'hash';
     primary = (
-      <>
-        <Text as="span" color="gray.400" fontFamily="mono">{kindLabel}</Text>
-        {op.key ? (
-          <>
-            <Text as="span" color="gray.500" mx={1}>at</Text>
-            <Text as="span" color="gray.300" fontFamily="mono">{shortKey(op.key)}</Text>
-          </>
-        ) : null}
-      </>
-    );
-    secondary = (
-      <Text fontSize="2xs" color="gray.500" fontFamily="mono">
-        {shortHash(op.hash)}
+      <Text as="span" color="gray.500" fontFamily="mono" fontSize="2xs">
+        {ellipsize(op.hash, 4, 3)}
       </Text>
     );
-    tooltip = `${kindLabel}: ${op.hash ?? '?'}`;
+    tooltipText = `SIBLING  #${op.index} (${kindLabel})\n${op.key ? `key:  ${op.key}\n` : ''}hash: ${op.hash ?? '?'}`;
   }
 
   return (
-    <Tooltip label={<Box whiteSpace="pre" fontFamily="mono" fontSize="2xs">{tooltip}</Box>} hasArrow placement="top">
+    <Tooltip
+      label={<Box whiteSpace="pre" fontFamily="mono" fontSize="2xs">{tooltipText}</Box>}
+      hasArrow
+      placement="top"
+      openDelay={300}
+    >
       <Box
-        display="inline-block"
+        display="inline-flex"
+        flexDirection="column"
         bg={accent.bg}
-        borderLeft="3px solid"
+        border="1px solid"
         borderColor={accent.border}
-        borderRadius="sm"
+        borderRadius="md"
         px={2}
         py={1}
-        fontSize="2xs"
-        lineHeight="1.4"
         cursor={onSubtreeClick ? 'pointer' : 'default'}
         onClick={onSubtreeClick}
-        _hover={onSubtreeClick ? { bg: 'whiteAlpha.100' } : undefined}
+        _hover={onSubtreeClick ? { bg: 'whiteAlpha.100', borderColor: 'blue.500' } : undefined}
+        minW="92px"
+        maxW="160px"
+        textAlign="center"
+        transition="background-color 0.1s"
       >
-        <HStack spacing={1.5} align="baseline">
-          <Text fontSize="2xs" fontWeight="700" color={accent.color} letterSpacing="0.05em">
+        <HStack spacing={1} align="center" justify="center">
+          <Text fontSize="3xs" fontWeight="700" color={accent.color} letterSpacing="0.06em" lineHeight="1.1">
             {accent.label}
           </Text>
+          <Text fontSize="3xs" color="gray.600" fontFamily="mono" lineHeight="1.1">#{op.index}</Text>
           {onSubtreeClick ? (
-            <Icon as={subtreeOpen ? ChevronDownIcon : ChevronRightIcon} boxSize="10px" color="blue.300" />
+            <Icon as={subtreeOpen ? ChevronDownIcon : ChevronRightIcon} boxSize="9px" color="blue.300" />
           ) : null}
-          <Text fontSize="2xs" color="gray.500" fontFamily="mono">#{op.index}</Text>
         </HStack>
         <Box mt={0.5}>{primary}</Box>
-        {secondary ? <Box mt={0.5}>{secondary}</Box> : null}
       </Box>
     </Tooltip>
   );
 }
 
 /* ----- Recursive binary tree renderer --------------------------------- */
-
-/** L-shaped connector drawn from a child node back to its parent's row. */
-function BranchConnector({ isLeft }: { isLeft: boolean }) {
-  return (
-    <>
-      <Box
-        position="absolute"
-        left={0}
-        top={0}
-        width="22px"
-        height="14px"
-        borderLeft="1px solid"
-        borderBottom="1px solid"
-        borderColor="gray.700"
-        borderBottomLeftRadius="md"
-      />
-      <Text
-        position="absolute"
-        left="6px"
-        top="-3px"
-        fontSize="3xs"
-        color="gray.600"
-        fontFamily="mono"
-        pointerEvents="none"
-      >
-        {isLeft ? 'L' : 'R'}
-      </Text>
-    </>
-  );
-}
 
 function LayerHeader({ layer }: { layer: ParsedLayer }) {
   if (!layer.decodedParentKey?.description) return null;
@@ -161,70 +121,147 @@ function LayerHeader({ layer }: { layer: ParsedLayer }) {
 }
 
 /**
- * Walks the reconstructed merkle tree, wiring up child-layer lookups at
- * every subtree ref so a single click expands the nested layer inline.
- * Indentation expresses tree depth; each child row draws an L-shaped
- * connector back to its parent.
+ * Top-down binary tree renderer.
+ *
+ * Layout strategy: each node renders as a centered column —
+ *   [ NodeCard ]
+ *      |
+ *   [ left | right ]   ← flex row of two child columns
+ *
+ * Connector lines are drawn with the `_before` and `_after` pseudo-elements:
+ *   - A short vertical line drops from each parent's bottom to the row below.
+ *   - Each child column has a half-width top border (right half for left
+ *     children, left half for right children), so the two halves together
+ *     form a single horizontal line under the parent connecting both children.
+ *   - A vertical stub then drops from that horizontal line into the child card.
+ *
+ * For a single-child node, the layout still works (the row has only one
+ * column, and the half-borders still align under the parent).
+ *
+ * `gap` between siblings widens with the larger subtree below; we set a
+ * generous default so deep narrow trees stay readable and wide shallow trees
+ * don't visually collide.
  */
 function RenderTree({
   node,
   childrenMap,
   expandedSubtrees,
   onToggleSubtree,
-  isRoot,
-  isLeft,
 }: {
   node: TreeNode;
   childrenMap: Map<string, ParsedLayer>;
   expandedSubtrees: Set<string>;
   onToggleSubtree: (k: string) => void;
-  isRoot?: boolean;
-  isLeft?: boolean;
 }) {
   const childLayer = node.kind === 'subtree' && node.op?.key
     ? childrenMap.get(node.op.key)
     : undefined;
   const subtreeKey = childLayer ? node.op!.key! : undefined;
   const subtreeOpen = subtreeKey ? expandedSubtrees.has(subtreeKey) : false;
+  const hasLeft = !!node.left;
+  const hasRight = !!node.right;
+  const hasAnyChild = hasLeft || hasRight;
 
   return (
-    <Box position="relative" pl={isRoot ? 0 : 6} mt={isRoot ? 0 : 1}>
-      {!isRoot ? <BranchConnector isLeft={isLeft ?? false} /> : null}
-
+    <Box display="flex" flexDirection="column" alignItems="center">
+      {/* Self */}
       <NodeCard
         node={node}
         onSubtreeClick={subtreeKey ? () => onToggleSubtree(subtreeKey) : undefined}
         subtreeOpen={subtreeKey ? subtreeOpen : undefined}
       />
 
-      {node.left ? (
-        <RenderTree
-          node={node.left}
-          childrenMap={childrenMap}
-          expandedSubtrees={expandedSubtrees}
-          onToggleSubtree={onToggleSubtree}
-          isLeft
-        />
-      ) : null}
-      {node.right ? (
-        <RenderTree
-          node={node.right}
-          childrenMap={childrenMap}
-          expandedSubtrees={expandedSubtrees}
-          onToggleSubtree={onToggleSubtree}
-          isLeft={false}
-        />
+      {/* Drop line from this node into the children row */}
+      {hasAnyChild ? (
+        <Box width="1px" height="12px" bg="gray.700" />
       ) : null}
 
-      {childLayer && subtreeOpen ? (
-        <Box mt={2} ml={6} pl={3} borderLeft="2px dashed" borderColor="blue.700">
-          <Text fontSize="2xs" color="blue.300" mb={1} fontWeight="600">
-            ↓ Layer {childLayer.layerIndex} ({contextLabel(childLayer.context)})
-          </Text>
-          <LayerHeader layer={childLayer} />
-          <LayerTree layer={childLayer} autoExpand={false} />
+      {/* Children row */}
+      {hasAnyChild ? (
+        <Box display="flex" alignItems="flex-start" gap={6} position="relative">
+          {hasLeft ? (
+            <ChildSlot label="L">
+              <RenderTree
+                node={node.left!}
+                childrenMap={childrenMap}
+                expandedSubtrees={expandedSubtrees}
+                onToggleSubtree={onToggleSubtree}
+              />
+            </ChildSlot>
+          ) : null}
+          {hasRight ? (
+            <ChildSlot label="R">
+              <RenderTree
+                node={node.right!}
+                childrenMap={childrenMap}
+                expandedSubtrees={expandedSubtrees}
+                onToggleSubtree={onToggleSubtree}
+              />
+            </ChildSlot>
+          ) : null}
         </Box>
       ) : null}
+
+      {/* Nested layer (subtree expansion) */}
+      {childLayer && subtreeOpen ? (
+        <Box
+          mt={3}
+          p={3}
+          bg="rgba(49,130,206,0.06)"
+          border="1px solid"
+          borderColor="blue.800"
+          borderRadius="md"
+          alignSelf="stretch"
+          minW="280px"
+        >
+          <Text fontSize="2xs" color="blue.300" mb={1} fontWeight="700" textAlign="center">
+            ↓ Layer {childLayer.layerIndex} · {contextLabel(childLayer.context)}
+          </Text>
+          <LayerHeader layer={childLayer} />
+          <Box display="flex" justifyContent="center" mt={2}>
+            <LayerTree layer={childLayer} autoExpand={false} />
+          </Box>
+        </Box>
+      ) : null}
+    </Box>
+  );
+}
+
+/**
+ * Wraps a child of a binary node, drawing the connector arm from the parent's
+ * dropline down into this child. The L/R label sits in the arm so it's easy
+ * to see at a glance which slot the child fills.
+ */
+function ChildSlot({ label, children }: { label: 'L' | 'R'; children: ReactNode }) {
+  return (
+    <Box display="flex" flexDirection="column" alignItems="center" position="relative" pt="14px">
+      {/* short vertical arm */}
+      <Box
+        position="absolute"
+        top={0}
+        left="50%"
+        width="1px"
+        height="14px"
+        bg="gray.700"
+        transform="translateX(-0.5px)"
+      />
+      <Text
+        position="absolute"
+        top="-2px"
+        left="50%"
+        transform="translateX(-50%)"
+        fontSize="3xs"
+        color={label === 'L' ? 'gray.500' : 'gray.500'}
+        fontFamily="mono"
+        fontWeight="700"
+        bg="gray.900"
+        px={1}
+        lineHeight="1"
+        pointerEvents="none"
+      >
+        {label}
+      </Text>
+      {children}
     </Box>
   );
 }
@@ -257,7 +294,6 @@ function LayerTree({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpan
       childrenMap={layer.children}
       expandedSubtrees={expanded}
       onToggleSubtree={toggle}
-      isRoot
     />
   );
 }
