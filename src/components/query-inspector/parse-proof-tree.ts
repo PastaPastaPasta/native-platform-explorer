@@ -223,39 +223,77 @@ function parseOp(line: string, index: number): OpNode | null {
   const pushMatch = body.match(/^Push\((\w+)\((.*)\)\)\s*$/);
   if (pushMatch) {
     const [, name, inner] = pushMatch as unknown as [string, string, string];
+    // Reference: grovedb-query/src/proofs/mod.rs `enum Node` — 11 variants.
+    // Variants we recognize, mapped to our OpKind classification. The trailing
+    // *Count* variants carry an extra u64 count we don't visualize but still
+    // need to consume so the stack count stays in sync with merk's verifier
+    // (otherwise later combine ops underflow).
     switch (name) {
+      // KV(key, value)
       case 'KV': {
         const split = splitFirstTopLevelComma(inner);
         if (split) return { kind: 'kv', index, raw: line, key: split[0], value: split[1] };
         break;
       }
-      case 'KVValueHash':
-      case 'KVRefValueHash': {
+      // KVCount(key, value, count) — same shape + trailing count
+      case 'KVCount': {
         const parts = splitTopLevelArgs(inner);
         if (parts.length >= 3) {
+          return { kind: 'kv', index, raw: line, key: parts[0], value: `${parts[1]} (count=${parts[2]})` };
+        }
+        break;
+      }
+      // KVValueHash(key, value, hash)
+      // KVRefValueHash(key, value, hash)
+      // KVValueHashFeatureType(key, value, hash, feature_type) — trailing feature
+      // KVRefValueHashCount(key, value, hash, count) — trailing count
+      case 'KVValueHash':
+      case 'KVRefValueHash':
+      case 'KVValueHashFeatureType':
+      case 'KVRefValueHashCount': {
+        const parts = splitTopLevelArgs(inner);
+        if (parts.length >= 3) {
+          const isRef = name === 'KVRefValueHash' || name === 'KVRefValueHashCount';
+          const extra =
+            name === 'KVValueHashFeatureType' && parts[3] ? ` ${parts[3]}` :
+            name === 'KVRefValueHashCount' && parts[3] ? ` (count=${parts[3]})` :
+            '';
           return {
-            kind: name === 'KVValueHash' ? 'kvValueHash' : 'kvRefValueHash',
+            kind: isRef ? 'kvRefValueHash' : 'kvValueHash',
             index,
             raw: line,
             key: parts[0],
-            treeValue: parts[1],
+            treeValue: (parts[1] ?? '') + extra,
             hash: extractHash(parts[2] ?? ''),
           };
         }
         break;
       }
-      case 'KVDigest': {
+      // KVDigest(key, hash)
+      // KVDigestCount(key, hash, count) — trailing count
+      case 'KVDigest':
+      case 'KVDigestCount': {
         const parts = splitTopLevelArgs(inner);
         if (parts.length >= 2) {
           return { kind: 'kvDigest', index, raw: line, key: parts[0], hash: extractHash(parts[1] ?? '') };
         }
         break;
       }
+      // KVHash(hash)
+      // KVHashCount(hash, count) — trailing count
       case 'KVHash':
+      case 'KVHashCount':
         return { kind: 'kvHash', index, raw: line, hash: extractHash(inner) };
+      // Hash(hash)
       case 'Hash':
         return { kind: 'hash', index, raw: line, hash: extractHash(inner) };
     }
+    // Unknown Push variant — log so we notice rather than silently dropping
+    // (which would cause stack underflow on subsequent combine ops).
+    if (typeof console !== 'undefined') {
+      console.warn(`[proof-tree] unknown Push variant '${name}' at op ${index}; treating as opaque sibling so the stack stays in sync.`);
+    }
+    return { kind: 'hash', index, raw: line };
   }
 
   return null;
