@@ -1,7 +1,8 @@
 'use client';
 
-import { Box, Text, VStack, HStack } from '@chakra-ui/react';
-import { useMemo, useState } from 'react';
+import { Box, IconButton, Text, Tooltip, VStack, HStack } from '@chakra-ui/react';
+import { AddIcon, MinusIcon, RepeatIcon } from '@chakra-ui/icons';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   buildLayerTree,
   parseProofTree,
@@ -133,6 +134,8 @@ function centerXY(p: Placement): { cx: number; cy: number } {
 
 /* ----- SVG rendering ------------------------------------------------- */
 
+interface ViewBox { x: number; y: number; w: number; h: number }
+
 function MerkTreeSVG({
   layout,
   childrenMap,
@@ -144,18 +147,146 @@ function MerkTreeSVG({
   expandedSubtrees: Set<string>;
   onToggleSubtree: (key: string) => void;
 }) {
-  // Render the SVG at its natural intrinsic size, but let it scale down to
-  // fit narrower containers. `maxWidth: 100%` + `height: auto` + `viewBox`
-  // makes the browser proportionally shrink wide trees so they fit on screen
-  // — no horizontal scroll needed. Tiny trees still render at full size.
+  // The natural viewBox shows the whole tree at fit-to-width. Zoom/pan
+  // mutate this viewBox so the underlying SVG element keeps its layout size
+  // (no reflow as the user zooms), and the browser handles the scaling.
+  const fitBox: ViewBox = { x: 0, y: 0, w: layout.width, h: layout.height };
+  const [viewBox, setViewBox] = useState(fitBox);
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  type DragState = { startClientX: number; startClientY: number; startBox: ViewBox; moved: boolean };
+  const dragRef = useRef<DragState | null>(null);
+  const [isPanning, setIsPanning] = useState(false);
+
+  // Reset to fit-to-width whenever the tree changes shape.
+  const fitBoxKey = `${layout.width}x${layout.height}`;
+  const lastFitKeyRef = useRef(fitBoxKey);
+  if (lastFitKeyRef.current !== fitBoxKey) {
+    lastFitKeyRef.current = fitBoxKey;
+    // Run after current render tick to avoid setState-in-render warning.
+    queueMicrotask(() => setViewBox({ x: 0, y: 0, w: layout.width, h: layout.height }));
+  }
+
+  const reset = useCallback(() => {
+    setViewBox({ x: 0, y: 0, w: layout.width, h: layout.height });
+  }, [layout.width, layout.height]);
+
+  // Zoom toward a specific cursor point so the spot under the mouse stays
+  // anchored. Without anchoring, repeated scrolls drift the centerpoint.
+  const zoomAtPoint = useCallback((factor: number, clientX?: number, clientY?: number) => {
+    const svg = svgRef.current;
+    if (!svg) return;
+    setViewBox((vb) => {
+      const rect = svg.getBoundingClientRect();
+      const cx = clientX ?? rect.left + rect.width / 2;
+      const cy = clientY ?? rect.top + rect.height / 2;
+      // Cursor position in viewBox coordinates BEFORE zoom.
+      const px = vb.x + ((cx - rect.left) / rect.width) * vb.w;
+      const py = vb.y + ((cy - rect.top) / rect.height) * vb.h;
+      const newW = vb.w * factor;
+      const newH = vb.h * factor;
+      // Cap zoom: don't zoom out beyond 5× fit (no point); don't zoom in
+      // beyond a single node filling the viewport.
+      if (newW > layout.width * 5 || newW < NODE_W * 0.5) return vb;
+      // Reposition so the cursor maps to the same SVG point as before.
+      return {
+        x: px - ((cx - rect.left) / rect.width) * newW,
+        y: py - ((cy - rect.top) / rect.height) * newH,
+        w: newW,
+        h: newH,
+      };
+    });
+  }, [layout.width]);
+
+  const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+    e.preventDefault();
+    // deltaY < 0 = scroll up = zoom in
+    const factor = e.deltaY < 0 ? 0.85 : 1 / 0.85;
+    zoomAtPoint(factor, e.clientX, e.clientY);
+  }, [zoomAtPoint]);
+
+  const handleMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    // Only left-mouse pans; let middle/right click pass through.
+    if (e.button !== 0) return;
+    dragRef.current = {
+      startClientX: e.clientX,
+      startClientY: e.clientY,
+      startBox: viewBox,
+      moved: false,
+    };
+    setIsPanning(true);
+  }, [viewBox]);
+
+  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+    const drag = dragRef.current;
+    if (!drag) return;
+    const dxPx = e.clientX - drag.startClientX;
+    const dyPx = e.clientY - drag.startClientY;
+    // Tiny movements stay clicks (so subtree-toggle clicks still register).
+    if (!drag.moved && Math.abs(dxPx) < 4 && Math.abs(dyPx) < 4) return;
+    drag.moved = true;
+    const svg = svgRef.current;
+    if (!svg) return;
+    const rect = svg.getBoundingClientRect();
+    // Translate pixel delta into viewBox-coordinate delta.
+    const dx = (dxPx / rect.width) * drag.startBox.w;
+    const dy = (dyPx / rect.height) * drag.startBox.h;
+    setViewBox({
+      x: drag.startBox.x - dx,
+      y: drag.startBox.y - dy,
+      w: drag.startBox.w,
+      h: drag.startBox.h,
+    });
+  }, []);
+
+  const handleMouseUp = useCallback(() => {
+    dragRef.current = null;
+    setIsPanning(false);
+  }, []);
+
+  // Stop node onClick from firing after a real pan drag (otherwise letting
+  // go of a drag over a SUBTREE node would accidentally toggle it).
+  const wrapNodeClick = (cb: () => void) => (e: React.MouseEvent) => {
+    if (dragRef.current?.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      return;
+    }
+    cb();
+  };
+
   return (
-    <svg
-      width={layout.width}
-      height={layout.height}
-      viewBox={`0 0 ${layout.width} ${layout.height}`}
-      preserveAspectRatio="xMidYMid meet"
-      style={{ display: 'block', maxWidth: '100%', height: 'auto' }}
-    >
+    <Box position="relative">
+      <HStack position="absolute" top={2} right={2} zIndex={1} spacing={1} bg="rgba(13,17,23,0.7)" borderRadius="md" p={1}>
+        <Tooltip label="Zoom in" hasArrow openDelay={400}>
+          <IconButton aria-label="Zoom in" icon={<AddIcon />} size="xs" variant="ghost" onClick={() => zoomAtPoint(0.85)} />
+        </Tooltip>
+        <Tooltip label="Zoom out" hasArrow openDelay={400}>
+          <IconButton aria-label="Zoom out" icon={<MinusIcon />} size="xs" variant="ghost" onClick={() => zoomAtPoint(1 / 0.85)} />
+        </Tooltip>
+        <Tooltip label="Fit to width" hasArrow openDelay={400}>
+          <IconButton aria-label="Fit to width" icon={<RepeatIcon />} size="xs" variant="ghost" onClick={reset} />
+        </Tooltip>
+      </HStack>
+      <svg
+        ref={svgRef}
+        width={layout.width}
+        height={layout.height}
+        viewBox={`${viewBox.x} ${viewBox.y} ${viewBox.w} ${viewBox.h}`}
+        preserveAspectRatio="xMidYMid meet"
+        style={{
+          display: 'block',
+          maxWidth: '100%',
+          height: 'auto',
+          cursor: isPanning ? 'grabbing' : 'grab',
+          userSelect: 'none',
+          touchAction: 'none',
+        }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
       {/* Edges first so node rects layer over them */}
       <g stroke="#484f58" strokeWidth={1.5} fill="none">
         {layout.placements.map((p) => {
@@ -190,8 +321,8 @@ function MerkTreeSVG({
         return (
           <g
             key={p.col}
-            style={{ cursor: clickable ? 'pointer' : 'default' }}
-            onClick={clickable ? () => onToggleSubtree(op.key!) : undefined}
+            style={{ cursor: clickable ? 'pointer' : isPanning ? 'grabbing' : 'grab' }}
+            onClick={clickable ? wrapNodeClick(() => onToggleSubtree(op.key!)) : undefined}
           >
             <title>{nodeTooltip(p.node)}</title>
             <rect
@@ -244,7 +375,8 @@ function MerkTreeSVG({
           </g>
         );
       })}
-    </svg>
+      </svg>
+    </Box>
   );
 }
 
