@@ -2,7 +2,7 @@
 
 import { Box, IconButton, Text, Tooltip, VStack, HStack } from '@chakra-ui/react';
 import { AddIcon, MinusIcon, RepeatIcon } from '@chakra-ui/icons';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildLayerTree,
   parseProofTree,
@@ -157,56 +157,46 @@ function MerkTreeSVG({
   const dragRef = useRef<DragState | null>(null);
   const [isPanning, setIsPanning] = useState(false);
 
-  // Reset to fit-to-width whenever the tree changes shape.
-  const fitBoxKey = `${layout.width}x${layout.height}`;
-  const lastFitKeyRef = useRef(fitBoxKey);
-  if (lastFitKeyRef.current !== fitBoxKey) {
-    lastFitKeyRef.current = fitBoxKey;
-    // Run after current render tick to avoid setState-in-render warning.
-    queueMicrotask(() => setViewBox({ x: 0, y: 0, w: layout.width, h: layout.height }));
-  }
-
-  const reset = useCallback(() => {
+  // Reset zoom whenever the tree's natural dimensions change.
+  useEffect(() => {
     setViewBox({ x: 0, y: 0, w: layout.width, h: layout.height });
   }, [layout.width, layout.height]);
 
+  const reset = () => setViewBox({ x: 0, y: 0, w: layout.width, h: layout.height });
+
   // Zoom toward a specific cursor point so the spot under the mouse stays
-  // anchored. Without anchoring, repeated scrolls drift the centerpoint.
-  const zoomAtPoint = useCallback((factor: number, clientX?: number, clientY?: number) => {
+  // anchored across repeated scrolls (otherwise the view drifts).
+  function zoomAtPoint(factor: number, clientX?: number, clientY?: number) {
     const svg = svgRef.current;
     if (!svg) return;
     setViewBox((vb) => {
       const rect = svg.getBoundingClientRect();
       const cx = clientX ?? rect.left + rect.width / 2;
       const cy = clientY ?? rect.top + rect.height / 2;
-      // Cursor position in viewBox coordinates BEFORE zoom.
-      const px = vb.x + ((cx - rect.left) / rect.width) * vb.w;
-      const py = vb.y + ((cy - rect.top) / rect.height) * vb.h;
+      // Cursor position as a fraction of the SVG's rendered size.
+      const fx = (cx - rect.left) / rect.width;
+      const fy = (cy - rect.top) / rect.height;
+      // Same fraction translated into viewBox coordinates BEFORE the zoom.
+      const px = vb.x + fx * vb.w;
+      const py = vb.y + fy * vb.h;
       const newW = vb.w * factor;
       const newH = vb.h * factor;
-      // Cap zoom: don't zoom out beyond 5× fit (no point); don't zoom in
-      // beyond a single node filling the viewport.
+      // Cap zoom: don't zoom out beyond 5× fit; don't zoom in past where a
+      // single node would fill more than the viewport.
       if (newW > layout.width * 5 || newW < NODE_W * 0.5) return vb;
-      // Reposition so the cursor maps to the same SVG point as before.
-      return {
-        x: px - ((cx - rect.left) / rect.width) * newW,
-        y: py - ((cy - rect.top) / rect.height) * newH,
-        w: newW,
-        h: newH,
-      };
+      // Reposition so the same fraction maps to the same viewBox point.
+      return { x: px - fx * newW, y: py - fy * newH, w: newW, h: newH };
     });
-  }, [layout.width]);
+  }
 
-  const handleWheel = useCallback((e: React.WheelEvent<SVGSVGElement>) => {
+  const handleWheel = (e: React.WheelEvent<SVGSVGElement>) => {
     e.preventDefault();
     // deltaY < 0 = scroll up = zoom in
-    const factor = e.deltaY < 0 ? 0.85 : 1 / 0.85;
-    zoomAtPoint(factor, e.clientX, e.clientY);
-  }, [zoomAtPoint]);
+    zoomAtPoint(e.deltaY < 0 ? 0.85 : 1 / 0.85, e.clientX, e.clientY);
+  };
 
-  const handleMouseDown = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
-    // Only left-mouse pans; let middle/right click pass through.
-    if (e.button !== 0) return;
+  const handleMouseDown = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (e.button !== 0) return; // only left-mouse pans
     dragRef.current = {
       startClientX: e.clientX,
       startClientY: e.clientY,
@@ -214,9 +204,9 @@ function MerkTreeSVG({
       moved: false,
     };
     setIsPanning(true);
-  }, [viewBox]);
+  };
 
-  const handleMouseMove = useCallback((e: React.MouseEvent<SVGSVGElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<SVGSVGElement>) => {
     const drag = dragRef.current;
     if (!drag) return;
     const dxPx = e.clientX - drag.startClientX;
@@ -236,22 +226,11 @@ function MerkTreeSVG({
       w: drag.startBox.w,
       h: drag.startBox.h,
     });
-  }, []);
+  };
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseUp = () => {
     dragRef.current = null;
     setIsPanning(false);
-  }, []);
-
-  // Stop node onClick from firing after a real pan drag (otherwise letting
-  // go of a drag over a SUBTREE node would accidentally toggle it).
-  const wrapNodeClick = (cb: () => void) => (e: React.MouseEvent) => {
-    if (dragRef.current?.moved) {
-      e.preventDefault();
-      e.stopPropagation();
-      return;
-    }
-    cb();
   };
 
   return (
@@ -322,7 +301,20 @@ function MerkTreeSVG({
           <g
             key={p.col}
             style={{ cursor: clickable ? 'pointer' : isPanning ? 'grabbing' : 'grab' }}
-            onClick={clickable ? wrapNodeClick(() => onToggleSubtree(op.key!)) : undefined}
+            onClick={
+              clickable
+                ? (e) => {
+                    // Suppress click after a real pan drag (releasing over a
+                    // SUBTREE node would otherwise accidentally toggle it).
+                    if (dragRef.current?.moved) {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      return;
+                    }
+                    onToggleSubtree(op.key!);
+                  }
+                : undefined
+            }
           >
             <title>{nodeTooltip(p.node)}</title>
             <rect
