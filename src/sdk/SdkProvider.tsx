@@ -61,8 +61,8 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   // agree (otherwise hydration mismatches: server sees window=undefined and
   // returns the fallback, client reads localStorage and may return the other
   // choice). After hydration the useEffect below pulls the stored values in.
-  const defaultNetwork: Network = config.defaultNetwork ?? DEFAULT_NETWORK;
-  const defaultTrusted = config.trustedMode;
+  const defaultNetwork: Network = config?.defaultNetwork ?? DEFAULT_NETWORK;
+  const defaultTrusted = config?.trustedMode ?? true;
   const [network, setNetworkState] = useState<Network>(defaultNetwork);
   const [trusted, setTrustedState] = useState<boolean>(defaultTrusted);
   const [sdk, setSdk] = useState<EvoSDKType | null>(null);
