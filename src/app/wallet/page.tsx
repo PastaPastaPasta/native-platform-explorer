@@ -23,6 +23,7 @@ import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
 import { useSigner } from '@/signer/SignerProvider';
 import { useSdk } from '@sdk/hooks';
+import { getDerivationNetwork } from '@sdk/networks';
 import { createExtensionSigner, detectExtension } from '@/signer/extension';
 import { createMnemonicSigner } from '@/signer/mnemonic';
 import { createWifSigner } from '@/signer/wif';
@@ -112,7 +113,12 @@ function MnemonicPane() {
     setBusy(true);
     setError(null);
     try {
-      const signer = await createMnemonicSigner(sdk, mnemonic.trim(), identityId.trim(), network);
+      const signer = await createMnemonicSigner(
+        sdk,
+        mnemonic.trim(),
+        identityId.trim(),
+        getDerivationNetwork(network),
+      );
       setMnemonic(''); // blank the controlled input once the signer captured the seed
       connect(signer);
     } catch (e) {

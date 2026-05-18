@@ -10,7 +10,13 @@ import {
   type ReactNode,
 } from 'react';
 import type { EvoSDK as EvoSDKType } from '@dashevo/evo-sdk';
-import { DEFAULT_NETWORK, type Network } from './networks';
+import {
+  DEFAULT_NETWORK,
+  getNetwork,
+  hasNetwork,
+  initNetworkRegistry,
+  type Network,
+} from './networks';
 import { getConfig } from '@/config';
 
 export type SdkStatus = 'idle' | 'connecting' | 'ready' | 'error';
@@ -34,7 +40,17 @@ const TRUSTED_KEY = 'npe:trusted';
 function readStoredNetwork(fallback: Network): Network {
   if (typeof window === 'undefined') return fallback;
   const raw = window.localStorage.getItem(NETWORK_KEY);
-  return raw === 'mainnet' || raw === 'testnet' ? raw : fallback;
+  return raw && hasNetwork(raw) ? raw : fallback;
+}
+
+function readUrlNetwork(): Network | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const param = new URL(window.location.href).searchParams.get('network');
+    return param && hasNetwork(param) ? param : null;
+  } catch {
+    return null;
+  }
 }
 
 function readStoredTrusted(fallback: boolean): boolean {
@@ -49,10 +65,23 @@ async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKT
   // Dynamically import so the heavy WASM module does not block the initial app paint.
   const mod = await import('@dashevo/evo-sdk');
   const EvoSDK = mod.EvoSDK;
-  if (network === 'mainnet') {
+  const cfg = getNetwork(network);
+  if (cfg.type === 'mainnet') {
     return trusted ? EvoSDK.mainnetTrusted() : EvoSDK.mainnet();
   }
-  return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
+  if (cfg.type === 'testnet') {
+    return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
+  }
+  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
+    throw new Error(`Devnet "${cfg.name}" has no DAPI addresses configured`);
+  }
+  // Devnets share testnet derivation/HRP; force trusted because devnet responses
+  // can't be proof-verified against a known quorum set.
+  return new EvoSDK({
+    addresses: cfg.dapiAddresses,
+    network: 'testnet',
+    trusted: true,
+  });
 }
 
 export function SdkProvider({ children }: { children: ReactNode }) {
@@ -70,12 +99,17 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<Error | null>(null);
   const connectSeq = useRef(0);
 
-  // Hydrate the stored preferences after mount. Both writes fire synchronously
-  // in a single render cycle, so the SDK connect useEffect below sees the
-  // final (network, trusted) pair.
+  // Hydrate the stored preferences after mount. Registry must be loaded first
+  // so URL-param / localStorage validation can see custom devnets.
   useEffect(() => {
-    const storedNet = readStoredNetwork(defaultNetwork);
+    initNetworkRegistry();
+    const urlNet = readUrlNetwork();
+    const storedNet = urlNet ?? readStoredNetwork(defaultNetwork);
     const storedTrust = readStoredTrusted(defaultTrusted);
+    if (urlNet) {
+      // Persist the URL-param choice so a reload without the param keeps it.
+      window.localStorage.setItem(NETWORK_KEY, urlNet);
+    }
     if (storedNet !== defaultNetwork) setNetworkState(storedNet);
     if (storedTrust !== defaultTrusted) setTrustedState(storedTrust);
     // eslint-disable-next-line react-hooks/exhaustive-deps
