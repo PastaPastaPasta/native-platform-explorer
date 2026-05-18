@@ -31,6 +31,7 @@ import {
 import { shortId } from '@util/identifier';
 import { normaliseEpoch } from '@util/epoch';
 import { useSdk } from '@sdk/hooks';
+import { getNetwork } from '@sdk/networks';
 
 function Content() {
   const params = useSearchParams();
@@ -77,9 +78,8 @@ function Content() {
     : undefined;
 
   const l1InsightBase =
-    network === 'mainnet'
-      ? 'https://insight.dash.org/insight'
-      : 'http://insight.testnet.networks.dash.org/insight';
+    getNetwork(network).l1ExplorerBaseUrl ??
+    'http://insight.testnet.networks.dash.org/insight';
 
   if (!proTxHash) {
     return (

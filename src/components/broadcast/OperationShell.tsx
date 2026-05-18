@@ -27,6 +27,7 @@ import { CodeBlock } from '@components/data/CodeBlock';
 import { SignerStatusCard } from './SignerStatusCard';
 import { useSigner } from '@/signer/SignerProvider';
 import { useSdk } from '@sdk/hooks';
+import { getDerivationNetwork } from '@sdk/networks';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import type { ExplorerSigner } from '@/signer/types';
 
@@ -149,7 +150,11 @@ export function OperationShell<TOptions, TResult>({
 
       {activeStep === 0 ? (
         <InfoBlock>
-          <Form signer={signer} network={network} onOptionsChange={setOptions} />
+          <Form
+            signer={signer}
+            network={getDerivationNetwork(network)}
+            onOptionsChange={setOptions}
+          />
           <HStack justify="flex-end" mt={4}>
             <Button
               size="sm"
