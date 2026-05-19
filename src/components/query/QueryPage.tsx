@@ -109,11 +109,10 @@ export function QueryPage() {
   const handleRun = useCallback(() => {
     setSubmittedSql(sqlText);
     setCursorStack([undefined]);
-    // sync URL
-    const url = new URL(window.location.href);
-    url.searchParams.set('q', sqlText);
-    url.searchParams.set('contract', pickerContractId);
-    router.replace(url.pathname + url.search, { scroll: false });
+    const qp = new URLSearchParams();
+    qp.set('q', sqlText);
+    qp.set('contract', pickerContractId);
+    router.replace(`/query/?${qp.toString()}`, { scroll: false });
   }, [sqlText, pickerContractId, router]);
 
   const handlePreset = useCallback((sql: string, contractId: string) => {
@@ -121,10 +120,10 @@ export function QueryPage() {
     setPickerContractId(contractId);
     setSubmittedSql(sql);
     setCursorStack([undefined]);
-    const url = new URL(window.location.href);
-    url.searchParams.set('q', sql);
-    url.searchParams.set('contract', contractId);
-    router.replace(url.pathname + url.search, { scroll: false });
+    const qp = new URLSearchParams();
+    qp.set('q', sql);
+    qp.set('contract', contractId);
+    router.replace(`/query/?${qp.toString()}`, { scroll: false });
   }, [router]);
 
   const handleContractChange = useCallback((id: string) => {
