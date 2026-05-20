@@ -19,6 +19,27 @@ import {
 } from './networks';
 import { getConfig } from '@/config';
 
+type DevnetSdkOptions = {
+  addresses: string[];
+  network: 'testnet';
+  trusted: false;
+};
+
+export function getDevnetSdkOptions(network: Network): DevnetSdkOptions {
+  const cfg = getNetwork(network);
+  if (cfg.type !== 'devnet') {
+    throw new Error(`Network "${network}" is not a devnet`);
+  }
+  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
+    throw new Error(`Devnet "${cfg.name}" has no DAPI addresses configured`);
+  }
+  return {
+    addresses: cfg.dapiAddresses,
+    network: 'testnet',
+    trusted: false,
+  };
+}
+
 export type SdkStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
 export interface SdkContextValue {
@@ -72,16 +93,14 @@ async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKT
   if (cfg.type === 'testnet') {
     return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
   }
-  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
-    throw new Error(`Devnet "${cfg.name}" has no DAPI addresses configured`);
-  }
-  // Devnets share testnet derivation/HRP; force trusted because devnet responses
-  // can't be proof-verified against a known quorum set.
-  return new EvoSDK({
-    addresses: cfg.dapiAddresses,
-    network: 'testnet',
-    trusted: true,
-  });
+  // Devnets share testnet derivation/HRP, but must not attach the testnet
+  // trusted context: the WASM SDK replaces custom addresses with context
+  // addresses, which would route devnet queries back to public testnet.
+  return new EvoSDK(getDevnetSdkOptions(network));
+}
+
+export function getEffectiveTrusted(network: Network, requestedTrusted: boolean): boolean {
+  return getNetwork(network).type === 'devnet' ? false : requestedTrusted;
 }
 
 export function SdkProvider({ children }: { children: ReactNode }) {
@@ -158,9 +177,20 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     void connect(network, trusted);
   }, [connect, network, trusted]);
 
+  const effectiveTrusted = getEffectiveTrusted(network, trusted);
+
   const value = useMemo<SdkContextValue>(
-    () => ({ sdk, status, network, trusted, error, setNetwork, setTrusted, reconnect }),
-    [sdk, status, network, trusted, error, setNetwork, setTrusted, reconnect],
+    () => ({
+      sdk,
+      status,
+      network,
+      trusted: effectiveTrusted,
+      error,
+      setNetwork,
+      setTrusted,
+      reconnect,
+    }),
+    [sdk, status, network, effectiveTrusted, error, setNetwork, setTrusted, reconnect],
   );
 
   return <SdkContext.Provider value={value}>{children}</SdkContext.Provider>;

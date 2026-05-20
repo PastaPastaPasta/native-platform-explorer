@@ -9,6 +9,7 @@ import {
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { useSdk } from './hooks';
+import { getNetwork } from './networks';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
@@ -23,6 +24,14 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 export type SdkQueryResult<TData> = UseQueryResult<TData, Error> & {
   proofState: ProofState;
 };
+
+export function shouldUseProofTransport(
+  network: string,
+  trusted: boolean,
+  hasProofFn: boolean,
+): boolean {
+  return hasProofFn && (trusted || getNetwork(network).type === 'devnet');
+}
 
 interface SdkQueryOpts<TData>
   extends Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'> {
@@ -84,10 +93,9 @@ function extractProof(proof: unknown): ProofData | undefined {
  * When the Query Inspector is enabled and trusted mode is on, this hook
  * REPLACES the regular `fn` call with `withProofFn` (the `*WithProof`
  * facade variant) and stores the returned proof + metadata in the
- * QueryProofStore. The regular `fn` is only called when the inspector
- * is disabled, trusted mode is off, the hook has no proof variant, or
- * the proof variant errored (fallback path). It is never called in
- * addition to `withProofFn` — the two are mutually exclusive per query.
+ * QueryProofStore. Devnets also use the proof-returning SDK methods because
+ * the current WASM SDK does not implement no-proof query transport; devnet
+ * results still classify as unverified because no trusted context is attached.
  */
 function useSdkQuery<TData>(
   key: readonly unknown[],
@@ -131,49 +139,70 @@ function useSdkQuery<TData>(
 
       const store = proofStoreRef.current;
       const storeKey = JSON.stringify(fullKey);
-      const useProof = trusted && store.enabled && !!withProofFn;
+      const isDevnet = getNetwork(network).type === 'devnet';
+      const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
       const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
       const t0 = performance.now();
 
-      if (useProof) {
+      if (useProofTransport) {
         try {
           const response = (await withProofFn!(sdkRef.current)) as
             | { data?: unknown; metadata?: unknown; proof?: unknown }
             | undefined;
           const elapsed = performance.now() - t0;
           const data = response?.data;
-          store.record(storeKey, {
-            queryKey: fullKey,
-            methodName: inspectorMethodName,
-            methodParams: methodParams ?? {},
-            hasProofVariant: true,
-            timestamp: Date.now(),
-            durationMs: Math.round(elapsed),
-            status: 'success',
-            result: safeSerialize(data),
-            metadata: extractMetadata(response?.metadata),
-            proof: extractProof(response?.proof),
-          });
+          if (store.enabled) {
+            store.record(storeKey, {
+              queryKey: fullKey,
+              methodName: inspectorMethodName,
+              methodParams: methodParams ?? {},
+              hasProofVariant: true,
+              timestamp: Date.now(),
+              durationMs: Math.round(elapsed),
+              status: 'success',
+              result: safeSerialize(data),
+              metadata: extractMetadata(response?.metadata),
+              proof: extractProof(response?.proof),
+            });
+          }
           return (data ?? null) as TData;
         } catch (err) {
           const proofError = err instanceof Error ? err.message : String(err);
+          if (isDevnet) {
+            if (store.enabled) {
+              const elapsed = performance.now() - t0;
+              store.record(storeKey, {
+                queryKey: fullKey,
+                methodName: inspectorMethodName,
+                methodParams: methodParams ?? {},
+                hasProofVariant: true,
+                timestamp: Date.now(),
+                durationMs: Math.round(elapsed),
+                status: 'error',
+                error: proofError,
+              });
+            }
+            throw err;
+          }
           // Fall back to the non-proof variant so the explorer still works.
           // Record the entry as a success (data was retrieved) but include the
           // proof-capture error so the inspector can show both: "data succeeded,
           // but proof was not captured because ...".
           const result = await fn(sdkRef.current!);
           const elapsed = performance.now() - t0;
-          store.record(storeKey, {
-            queryKey: fullKey,
-            methodName: inspectorMethodName,
-            methodParams: methodParams ?? {},
-            hasProofVariant: true,
-            timestamp: Date.now(),
-            durationMs: Math.round(elapsed),
-            status: 'success',
-            result: safeSerialize(result),
-            error: `Proof capture failed: ${proofError}`,
-          });
+          if (store.enabled) {
+            store.record(storeKey, {
+              queryKey: fullKey,
+              methodName: inspectorMethodName,
+              methodParams: methodParams ?? {},
+              hasProofVariant: true,
+              timestamp: Date.now(),
+              durationMs: Math.round(elapsed),
+              status: 'success',
+              result: safeSerialize(result),
+              error: `Proof capture failed: ${proofError}`,
+            });
+          }
           return (result ?? null) as TData;
         }
       }
