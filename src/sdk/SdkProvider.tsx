@@ -19,6 +19,27 @@ import {
 } from './networks';
 import { getConfig } from '@/config';
 
+type DevnetSdkOptions = {
+  addresses: string[];
+  network: 'testnet';
+  trusted: false;
+};
+
+export function getDevnetSdkOptions(network: Network): DevnetSdkOptions {
+  const cfg = getNetwork(network);
+  if (cfg.type !== 'devnet') {
+    throw new Error(`Network "${network}" is not a devnet`);
+  }
+  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
+    throw new Error(`Devnet "${cfg.name}" has no DAPI addresses configured`);
+  }
+  return {
+    addresses: cfg.dapiAddresses,
+    network: 'testnet',
+    trusted: false,
+  };
+}
+
 export type SdkStatus = 'idle' | 'connecting' | 'ready' | 'error';
 
 export interface SdkContextValue {
@@ -72,16 +93,14 @@ async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKT
   if (cfg.type === 'testnet') {
     return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
   }
-  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
-    throw new Error(`Devnet "${cfg.name}" has no DAPI addresses configured`);
-  }
-  // Devnets share testnet derivation/HRP; force trusted because devnet responses
-  // can't be proof-verified against a known quorum set.
-  return new EvoSDK({
-    addresses: cfg.dapiAddresses,
-    network: 'testnet',
-    trusted: true,
-  });
+  // Devnets share testnet derivation/HRP, but must not attach the testnet
+  // trusted context: the WASM SDK replaces custom addresses with context
+  // addresses, which would route devnet queries back to public testnet.
+  return new EvoSDK(getDevnetSdkOptions(network));
+}
+
+export function getEffectiveTrusted(network: Network, requestedTrusted: boolean): boolean {
+  return getNetwork(network).type === 'devnet' ? false : requestedTrusted;
 }
 
 export function SdkProvider({ children }: { children: ReactNode }) {
@@ -97,6 +116,13 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   const [sdk, setSdk] = useState<EvoSDKType | null>(null);
   const [status, setStatus] = useState<SdkStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
+  // Gate the first connect on the URL/localStorage hydration below. Without
+  // this, every mount starts a connect against the SSR-fallback network
+  // (testnet) before the effect can swap it to a devnet, which not only
+  // wastes a build but kicks off the testnet trusted-context prefetch
+  // (`quorums.testnet.networks.dash.org/*`) — making it look like devnet
+  // pages are still talking to testnet.
+  const [hydrated, setHydrated] = useState(false);
   const connectSeq = useRef(0);
 
   // Hydrate the stored preferences after mount. Registry must be loaded first
@@ -112,6 +138,7 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     }
     if (storedNet !== defaultNetwork) setNetworkState(storedNet);
     if (storedTrust !== defaultTrusted) setTrustedState(storedTrust);
+    setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -136,9 +163,10 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (!hydrated) return;
     void connect(network, trusted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, trusted]);
+  }, [network, trusted, hydrated]);
 
   const setNetwork = useCallback((next: Network) => {
     if (typeof window !== 'undefined') {
@@ -158,9 +186,20 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     void connect(network, trusted);
   }, [connect, network, trusted]);
 
+  const effectiveTrusted = getEffectiveTrusted(network, trusted);
+
   const value = useMemo<SdkContextValue>(
-    () => ({ sdk, status, network, trusted, error, setNetwork, setTrusted, reconnect }),
-    [sdk, status, network, trusted, error, setNetwork, setTrusted, reconnect],
+    () => ({
+      sdk,
+      status,
+      network,
+      trusted: effectiveTrusted,
+      error,
+      setNetwork,
+      setTrusted,
+      reconnect,
+    }),
+    [sdk, status, network, effectiveTrusted, error, setNetwork, setTrusted, reconnect],
   );
 
   return <SdkContext.Provider value={value}>{children}</SdkContext.Provider>;

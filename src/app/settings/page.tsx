@@ -111,8 +111,8 @@ export default function Page() {
             </Heading>
             <Text fontSize="sm" color="gray.250">
               Devnets you&apos;ve added are stored in this browser only. They use testnet
-              derivation paths and the trusted-mode SDK (proofs cannot be verified
-              against an unknown quorum set).
+              derivation paths and custom DAPI addresses. Proof verification is disabled
+              because their quorum sets are not known to the built-in trusted context.
             </Text>
             {customDevnets.length === 0 ? (
               <Text fontSize="sm" color="gray.400">
