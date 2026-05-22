@@ -24,15 +24,30 @@ export function Placeholder({ title, description, stage, breadcrumbs, params }: 
       <Intro title={title} description={description} />
       <InfoBlock emphasised={stage === 2}>
         <VStack align="flex-start" spacing={3}>
-          <Text fontSize="sm" color="gray.250">
+          <Text fontSize="sm" color="muted">
             This page will be implemented in <strong>Stage {stage}</strong> of the build plan.
           </Text>
           {params && Object.keys(params).length > 0 ? (
             <Box>
-              <Text fontSize="xs" color="gray.400" mb={2}>
-                Dynamic segments received:
+              <Text
+                fontSize="xs"
+                color="muted"
+                mb={2}
+                textTransform="uppercase"
+                letterSpacing="0.08em"
+              >
+                Dynamic segments received
               </Text>
-              <Code fontFamily="mono" fontSize="xs" p={3} bg="gray.800" color="brand.light" borderRadius="md">
+              <Code
+                fontFamily="mono"
+                fontSize="xs"
+                p={3}
+                bg="sunken"
+                color="ink"
+                borderRadius="card"
+                whiteSpace="pre"
+                display="block"
+              >
                 {JSON.stringify(params, null, 2)}
               </Code>
             </Box>

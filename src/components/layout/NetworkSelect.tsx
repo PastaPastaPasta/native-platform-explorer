@@ -28,7 +28,6 @@ import { CustomDevnetModal } from './CustomDevnetModal';
 export function NetworkSelect() {
   const { network, setNetwork } = useSdk();
   const modal = useDisclosure();
-  // Registry mutations live outside React state; bump a counter to re-render.
   const [, bump] = useReducer((n: number) => n + 1, 0);
 
   const current = getNetwork(network);
@@ -50,10 +49,12 @@ export function NetworkSelect() {
       <MenuItem
         key={name}
         bg="transparent"
-        _hover={{ bg: 'gray.750' }}
+        _hover={{ bg: 'raised' }}
         onClick={() => setNetwork(name)}
-        fontWeight={isActive ? 600 : 400}
-        color={isActive ? 'brand.light' : 'gray.100'}
+        fontWeight={isActive ? 500 : 400}
+        color={isActive ? 'accent' : 'ink'}
+        fontFamily="mono"
+        fontSize="13px"
       >
         <HStack flex="1" justify="space-between" spacing={2}>
           <Text>{label}</Text>
@@ -67,9 +68,9 @@ export function NetworkSelect() {
               alignItems="center"
               justifyContent="center"
               boxSize={5}
-              borderRadius="sm"
-              color="gray.400"
-              _hover={{ color: 'red.300', bg: 'gray.700' }}
+              borderRadius="badge"
+              color="muted"
+              _hover={{ color: 'failed', bg: 'sunken' }}
               onClick={(e: React.MouseEvent) => {
                 e.stopPropagation();
                 handleRemove(name);
@@ -96,27 +97,35 @@ export function NetworkSelect() {
         <MenuButton
           as={Button}
           rightIcon={<ChevronDownIcon />}
-          size="sm"
-          variant="outline"
-          borderColor="gray.700"
-          color="gray.100"
-          _hover={{ borderColor: 'brand.normal', color: 'brand.light' }}
+          size="xs"
+          variant="ghost"
+          fontFamily="mono"
+          fontSize="11px"
+          fontWeight={400}
+          color="ink"
+          border="1px solid"
+          borderColor="hairline"
+          borderRadius="card"
+          px={2}
+          _hover={{ borderColor: 'hairlineStrong', bg: 'transparent' }}
+          _active={{ bg: 'transparent' }}
         >
           {current.label}
         </MenuButton>
-        <MenuList bg="gray.800" borderColor="gray.700">
+        <MenuList bg="surface" borderColor="hairline" borderRadius="card" minW="220px">
           {builtIns.map(renderItem)}
-          {devnets.length > 0 ? <MenuDivider borderColor="gray.700" /> : null}
+          {devnets.length > 0 ? <MenuDivider borderColor="hairline" /> : null}
           {devnets.map(renderItem)}
-          <MenuDivider borderColor="gray.700" />
+          <MenuDivider borderColor="hairline" />
           <MenuItem
             bg="transparent"
-            _hover={{ bg: 'gray.750' }}
+            _hover={{ bg: 'raised' }}
             onClick={modal.onOpen}
-            color="gray.250"
-            fontStyle="italic"
+            color="muted"
+            fontFamily="mono"
+            fontSize="13px"
           >
-            Custom devnet…
+            + Custom devnet…
           </MenuItem>
         </MenuList>
       </Menu>

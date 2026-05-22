@@ -6,21 +6,20 @@ import {
   Grid,
   Heading,
   HStack,
-  Progress,
   SimpleGrid,
   Text,
   VStack,
 } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import { useMemo } from 'react';
-import { Container } from '@ui/Container';
+import { Eyebrow } from '@ui/Eyebrow';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
-import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
 import { VotePollsList } from '@components/governance/VotePollsList';
 import { CreditsBlock } from '@components/data/CreditsBlock';
 import { Identifier } from '@components/data/Identifier';
+import { ProofGlyph } from '@components/proof/ProofGlyph';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useCurrentEpoch,
@@ -36,6 +35,7 @@ import { useSdk } from '@sdk/hooks';
 import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
 import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
+import type { ProofStatus } from '@components/proof/ProofInspectorContext';
 
 function getQuorumsCount(raw: unknown): number | null {
   if (!raw) return null;
@@ -45,28 +45,52 @@ function getQuorumsCount(raw: unknown): number | null {
   return Array.isArray(qt) ? qt.length : null;
 }
 
-function StatCard({ label, children }: { label: string; children: React.ReactNode }) {
+function StatCell({
+  label,
+  value,
+  footnote,
+  proofStatus,
+  proofTitle,
+  loading,
+}: {
+  label: string;
+  value: React.ReactNode;
+  footnote?: React.ReactNode;
+  proofStatus?: ProofStatus;
+  proofTitle?: string;
+  loading?: boolean;
+}) {
   return (
-    <InfoBlock>
-      <VStack align="flex-start" spacing={2}>
-        <Text
-          fontSize="11px"
-          fontWeight={500}
-          color="gray.400"
-          textTransform="uppercase"
-          letterSpacing="0.06em"
-        >
-          {label}
+    <Box
+      px={{ base: 4, md: 5 }}
+      py={4}
+      borderRight={{ base: 'none', lg: '1px solid' }}
+      borderRightColor={{ base: 'transparent', lg: 'hairline' }}
+      borderBottom={{ base: '1px solid', lg: 'none' }}
+      borderBottomColor={{ base: 'hairline', lg: 'transparent' }}
+      _last={{ borderRight: 'none', borderBottom: 'none' }}
+    >
+      <Eyebrow mb={2}>{label}</Eyebrow>
+      <HStack spacing={2} align="baseline">
+        {proofStatus ? (
+          <ProofGlyph status={proofStatus} payload={proofTitle ? { title: proofTitle, status: proofStatus } : undefined} />
+        ) : null}
+        <Box opacity={loading ? 0.4 : 1}>{value}</Box>
+      </HStack>
+      {footnote ? (
+        <Text fontFamily="mono" fontSize="11px" color="muted" mt={1.5}>
+          {footnote}
         </Text>
-        {children}
-      </VStack>
-    </InfoBlock>
+      ) : null}
+    </Box>
   );
 }
 
 export default function HomePage() {
   usePageBreadcrumbs([]);
-  const { network, trusted } = useSdk();
+  const { network, trusted, status } = useSdk();
+  const proofsOn = trusted && status === 'ready';
+  const proofStatus: ProofStatus = proofsOn ? 'verified' : 'trusted';
 
   const statusQ = useSystemStatus();
   const epochQ = useCurrentEpoch();
@@ -78,15 +102,11 @@ export default function HomePage() {
   const evonodesQ = useEvonodesBlocksByRange(epoch?.index, 20);
   const bars = evonodesMapToBars(evonodesQ.data);
 
-  // Round to minute granularity so the queryKey is stable across renders —
-  // otherwise the fresh Date.now() on every render invalidates the cache.
   const nowBucket = Math.floor(Date.now() / 60_000) * 60_000;
   const in30d = nowBucket + 30 * 86_400_000;
   const pollsQ = useVotePollsByEndDate(nowBucket, in30d);
   const polls = (pollsQ.data as unknown[] | undefined) ?? [];
 
-  // system.status() returns a nested WASM class — coerce to plain JSON and
-  // read block height from the `chain` sub-object (same approach as /network/status).
   const statusPlain = useMemo(
     () => (statusQ.data ? ((toPlain(statusQ.data) as Record<string, unknown>) ?? {}) : {}),
     [statusQ.data],
@@ -98,188 +118,223 @@ export default function HomePage() {
     (chain.height as number | bigint | undefined) ??
     readProp<number | bigint>(statusPlain, 'height');
   const statusNetwork = (statusPlain.network as Record<string, unknown> | undefined) ?? {};
-  const chainId = (statusNetwork.chainId as string | undefined) ?? readProp<string>(statusPlain, 'chainId');
+  const chainId =
+    (statusNetwork.chainId as string | undefined) ?? readProp<string>(statusPlain, 'chainId');
   const quorumsCount = getQuorumsCount(quorumsQ.data);
 
   const protocolCurrent = readProp<unknown>(protocolQ.data, 'currentProtocolVersion');
   const protocolPending = readProp<unknown>(protocolQ.data, 'nextProtocolVersion');
 
   return (
-    <Container py={{ base: 2, md: 6 }}>
-      <VStack align="stretch" spacing={6}>
-        {/* Hero */}
-        <InfoBlock emphasised>
-          <VStack align="flex-start" spacing={4}>
-            <Heading as="h1" fontSize={{ base: '2xl', md: '3xl' }} color="gray.100" fontWeight={700}>
-              A proof-verified, client-only Dash Platform explorer.
-            </Heading>
-            <Text color="gray.300" fontSize="md" lineHeight="tall">
-              Every piece of data on this site is fetched live by{' '}
-              <Box as="code" color="brand.light" fontSize="sm" fontWeight={500}>@dashevo/evo-sdk</Box>{' '}
-              running directly in your browser.
-            </Text>
-            <HStack spacing={3}>
-              <Text fontSize="xs" color="gray.500" textTransform="uppercase" fontWeight={500} letterSpacing="0.05em">
-                Network
-              </Text>
-              <Text fontSize="xs" color="brand.light" fontWeight={600}>
-                {network}
-              </Text>
-              {trusted ? (
-                <Text fontSize="xs" color="success" fontWeight={600}>
-                  · proofs on
-                </Text>
-              ) : (
-                <Text fontSize="xs" color="gray.400" fontWeight={600}>
-                  · proofs off
-                </Text>
-              )}
-            </HStack>
-            <GlobalSearchInput width="100%" />
-          </VStack>
-        </InfoBlock>
+    <VStack align="stretch" spacing={8} py={{ base: 4, md: 8 }}>
+      {/* Hero — type on bare page, no card */}
+      <VStack align="flex-start" spacing={3} maxW="64ch">
+        <Eyebrow tracking="0.18em">Native Platform Explorer · {network}</Eyebrow>
+        <Heading
+          as="h1"
+          fontSize={{ base: '3xl', md: '4xl', lg: '5xl' }}
+          color="ink"
+          fontWeight={400}
+          lineHeight={1.05}
+          letterSpacing="-0.02em"
+        >
+          A proof-verified, client-only Dash Platform explorer.
+        </Heading>
+        <Text color="muted" fontSize="md" maxW="60ch">
+          Every value below is fetched live by{' '}
+          <Box as="code" color="ink" fontFamily="mono" fontSize="sm">
+            @dashevo/evo-sdk
+          </Box>{' '}
+          running in your browser. Proofs are verified locally; click any{' '}
+          <Box as="span" color={proofsOn ? 'verified' : 'trusted'} fontSize="10px">
+            ●
+          </Box>{' '}
+          to inspect.
+        </Text>
+      </VStack>
 
-        {/* Stat cards */}
-        <SimpleGrid columns={{ base: 1, md: 2, lg: 5 }} spacing={3}>
-          <StatCard label="Block height">
-            {statusQ.isLoading ? (
-              <Progress size="xs" isIndeterminate colorScheme="blue" borderRadius="full" />
-            ) : (
-              <Text fontFamily="mono" fontSize="xl" fontWeight={500} color="gray.100">
+      {/* Stat strip — five cells in a single hairline-divided row */}
+      <Box border="1px solid" borderColor="hairline" borderRadius="card" bg="surface">
+        <SimpleGrid columns={{ base: 1, lg: 5 }} spacing={0}>
+          <StatCell
+            label="Block height"
+            proofStatus={proofStatus}
+            proofTitle="Block height proof"
+            loading={statusQ.isLoading}
+            value={
+              <Text
+                fontFamily="heading"
+                fontSize="3xl"
+                color="ink"
+                fontWeight={500}
+                sx={{ fontVariantNumeric: 'tabular-nums' }}
+              >
                 {blockHeight !== undefined ? String(blockHeight) : '—'}
               </Text>
-            )}
-          </StatCard>
+            }
+            footnote={statusQ.isLoading ? 'fetching…' : 'live'}
+          />
 
-          <StatCard label="Current epoch">
-            {epochQ.isLoading ? (
-              <Progress size="xs" isIndeterminate colorScheme="blue" borderRadius="full" />
-            ) : (
-              <VStack align="flex-start" spacing={1} w="full">
-                <Text
-                  as={NextLink}
-                  href="/epoch/"
-                  fontFamily="mono"
-                  fontSize="xl"
-                  fontWeight={500}
-                  color="brand.light"
-                  _hover={{ color: 'brand.light' }}
-                >
-                  #{epoch?.index ?? '—'}
-                </Text>
-                {epoch?.progressPct != null ? (
-                  <Progress
-                    value={epoch.progressPct}
-                    colorScheme="blue"
-                    size="xs"
-                    width="100%"
-                    borderRadius="full"
-                    bg="whiteAlpha.100"
-                  />
-                ) : null}
-              </VStack>
-            )}
-          </StatCard>
-
-          <StatCard label="Total credits">
-            <CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />
-          </StatCard>
-
-          <StatCard label="Protocol version">
-            <VStack align="flex-start" spacing={1}>
-              <Text fontFamily="mono" fontSize="xl" fontWeight={500} color="gray.100">
-                {protocolCurrent !== undefined ? String(protocolCurrent) : '—'}
+          <StatCell
+            label="Current epoch"
+            proofStatus={proofStatus}
+            proofTitle="Epoch proof"
+            loading={epochQ.isLoading}
+            value={
+              <Text
+                as={NextLink}
+                href="/epoch/"
+                fontFamily="heading"
+                fontSize="3xl"
+                color="ink"
+                fontWeight={500}
+                _hover={{ color: 'accent' }}
+              >
+                #{epoch?.index ?? '—'}
               </Text>
-              {protocolPending ? (
-                <Text fontSize="xs" color="warning" fontWeight={500}>
-                  upgrade → {String(protocolPending)}
+            }
+            footnote={
+              epoch?.progressPct != null ? `${epoch.progressPct.toFixed(1)}% complete` : undefined
+            }
+          />
+
+          <StatCell
+            label="Total credits"
+            proofStatus={proofStatus}
+            proofTitle="Total credits proof"
+            value={<CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />}
+            footnote="platform supply"
+          />
+
+          <StatCell
+            label="Protocol version"
+            proofStatus={proofStatus}
+            proofTitle="Protocol version proof"
+            value={
+              <Text
+                fontFamily="heading"
+                fontSize="3xl"
+                color="ink"
+                fontWeight={500}
+                sx={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {protocolCurrent !== undefined ? `v${String(protocolCurrent)}` : '—'}
+              </Text>
+            }
+            footnote={
+              protocolPending ? (
+                <Text as="span" color="warning">
+                  upgrade → v{String(protocolPending)}
                 </Text>
-              ) : null}
-            </VStack>
-          </StatCard>
+              ) : (
+                'no pending upgrade'
+              )
+            }
+          />
 
-          <StatCard label="Active quorums">
-            <Text fontFamily="mono" fontSize="xl" fontWeight={500} color="gray.100">
-              {quorumsCount ?? '—'}
-            </Text>
-          </StatCard>
+          <StatCell
+            label="Active quorums"
+            proofStatus={proofStatus}
+            proofTitle="Active quorums proof"
+            value={
+              <Text
+                fontFamily="heading"
+                fontSize="3xl"
+                color="ink"
+                fontWeight={500}
+                sx={{ fontVariantNumeric: 'tabular-nums' }}
+              >
+                {quorumsCount ?? '—'}
+              </Text>
+            }
+            footnote="signing this height"
+          />
         </SimpleGrid>
+      </Box>
 
-        {/* Top proposers */}
+      {/* Top proposers */}
+      <InfoBlock>
+        <HStack justify="space-between" mb={3}>
+          <Eyebrow size="11px">
+            Top proposers · epoch {epoch ? `#${epoch.index}` : '—'}
+          </Eyebrow>
+          <Button
+            as={NextLink}
+            href="/epoch/"
+            size="xs"
+            variant="ghost"
+            color="accent"
+            fontFamily="mono"
+            fontSize="11px"
+          >
+            view epoch →
+          </Button>
+        </HStack>
+        {epochQ.isLoading || evonodesQ.isLoading ? (
+          <LoadingCard lines={5} />
+        ) : (
+          <EvonodesLeaderboard entries={bars} limit={10} />
+        )}
+      </InfoBlock>
+
+      {/* Bottom grid */}
+      <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={4}>
         <InfoBlock>
           <HStack justify="space-between" mb={3}>
-            <Heading size="sm" color="gray.100" fontWeight={600}>
-              Top proposers this epoch
-            </Heading>
-            <Button as={NextLink} href="/epoch/" size="xs" variant="outline" borderColor="whiteAlpha.200" _hover={{ borderColor: 'whiteAlpha.400', bg: 'whiteAlpha.50' }}>
-              View epoch
+            <Eyebrow size="11px">Vote polls ending soon</Eyebrow>
+            <Button
+              as={NextLink}
+              href="/governance/polls/"
+              size="xs"
+              variant="ghost"
+              color="accent"
+              fontFamily="mono"
+              fontSize="11px"
+            >
+              all polls →
             </Button>
           </HStack>
-          {epochQ.isLoading || evonodesQ.isLoading ? (
-            <LoadingCard lines={5} />
+          {pollsQ.isLoading ? (
+            <LoadingCard lines={3} />
+          ) : polls.length === 0 ? (
+            <Text color="muted" fontSize="sm" fontFamily="mono">
+              No polls ending in the next 30 days.
+            </Text>
           ) : (
-            <EvonodesLeaderboard entries={bars} limit={10} />
+            <VotePollsList entries={polls.slice(0, 10)} />
           )}
         </InfoBlock>
 
-        {/* Bottom grid */}
-        <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={4}>
-          <InfoBlock>
-            <HStack justify="space-between" mb={3}>
-              <Heading size="sm" color="gray.100" fontWeight={600}>
-                Vote polls ending soon
-              </Heading>
-              <Button as={NextLink} href="/governance/polls/" size="xs" variant="outline" borderColor="whiteAlpha.200" _hover={{ borderColor: 'whiteAlpha.400', bg: 'whiteAlpha.50' }}>
-                All polls
-              </Button>
-            </HStack>
-            {pollsQ.isLoading ? (
-              <LoadingCard lines={3} />
-            ) : polls.length === 0 ? (
-              <Text color="gray.500" fontSize="sm">
-                No polls ending in the next 30 days.
-              </Text>
-            ) : (
-              <VotePollsList entries={polls.slice(0, 10)} />
-            )}
-          </InfoBlock>
+        <InfoBlock>
+          <Eyebrow size="11px" mb={3}>
+            Well-known contracts
+          </Eyebrow>
+          <VStack align="stretch" spacing={0} divider={<Box h="1px" bg="hairline" />}>
+            {WELL_KNOWN.map((w) => (
+              <Box
+                key={w.id}
+                as={NextLink}
+                href={`/contract/?id=${encodeURIComponent(w.id)}`}
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                py={2.5}
+                _hover={{ color: 'accent' }}
+                transition="color 0.12s ease"
+              >
+                <Text fontSize="13px" color="ink" fontWeight={400}>
+                  {w.name}
+                </Text>
+                <Identifier value={w.id} dense avatar={false} copy={false} />
+              </Box>
+            ))}
+          </VStack>
+        </InfoBlock>
+      </Grid>
 
-          <InfoBlock>
-            <Heading size="sm" color="gray.100" mb={4} fontWeight={600}>
-              Well-known contracts
-            </Heading>
-            <VStack align="stretch" spacing={2}>
-              {WELL_KNOWN.map((w) => (
-                <Box
-                  key={w.id}
-                  as={NextLink}
-                  href={`/contract/?id=${encodeURIComponent(w.id)}`}
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="space-between"
-                  px={4}
-                  py={3}
-                  borderRadius="xl"
-                  border="1px solid"
-                  borderColor="rgba(255,255,255,0.06)"
-                  bg="rgba(46,57,61,0.25)"
-                  _hover={{ borderColor: 'rgba(0,141,228,0.3)', bg: 'rgba(46,57,61,0.4)' }}
-                  transition="all 0.2s ease"
-                >
-                  <Text fontSize="sm" fontWeight={600} color="gray.100">
-                    {w.name}
-                  </Text>
-                  <Identifier value={w.id} dense avatar={false} copy={false} />
-                </Box>
-              ))}
-            </VStack>
-          </InfoBlock>
-        </Grid>
-
-        <Text fontSize="xs" color="gray.500" textAlign="center" fontFamily="mono">
-          {chainId ?? '—'}
-        </Text>
-      </VStack>
-    </Container>
+      <Text fontSize="xs" color="muted" textAlign="center" fontFamily="mono">
+        {chainId ?? '—'}
+      </Text>
+    </VStack>
   );
 }

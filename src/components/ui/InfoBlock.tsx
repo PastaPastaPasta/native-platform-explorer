@@ -3,28 +3,53 @@
 import { Box, type BoxProps } from '@chakra-ui/react';
 import type { ReactNode } from 'react';
 
+export type InfoBlockVariant = 'normal' | 'accent' | 'sunken';
+
 export interface InfoBlockProps extends Omit<BoxProps, 'title'> {
+  /** Backwards-compat for the old API; equivalent to `variant="accent"`. */
   emphasised?: boolean;
+  variant?: InfoBlockVariant;
   children?: ReactNode;
 }
 
-/** Glass card wrapper — matches the `Block()` SCSS mixin. */
-export function InfoBlock({ emphasised, children, ...rest }: InfoBlockProps) {
+const VARIANT_STYLES: Record<InfoBlockVariant, BoxProps> = {
+  normal: {
+    bg: 'surface',
+    borderColor: 'hairline',
+    _hover: { borderColor: 'hairlineStrong' },
+  },
+  accent: {
+    bg: 'surface',
+    borderColor: 'accent',
+    _hover: { borderColor: 'accentHover' },
+  },
+  sunken: {
+    bg: 'sunken',
+    borderColor: 'transparent',
+    _hover: {},
+  },
+};
+
+/**
+ * Field Manual panel. Flat solid surface, hairline border, small radius.
+ * No backdrop blur, no gradient, no shadow.
+ */
+export function InfoBlock({
+  emphasised,
+  variant: variantProp,
+  children,
+  ...rest
+}: InfoBlockProps) {
+  const variant: InfoBlockVariant = variantProp ?? (emphasised ? 'accent' : 'normal');
+  const styles = VARIANT_STYLES[variant];
+
   return (
     <Box
-      borderRadius="block"
+      borderRadius="card"
       border="1px solid"
-      borderColor={emphasised ? 'rgba(0,141,228,0.3)' : 'rgba(255,255,255,0.08)'}
-      bg="linear-gradient(135deg, rgba(24,31,34,0.35) 0%, rgba(24,31,34,0.18) 100%)"
-      sx={{ backdropFilter: 'blur(44px)' }}
-      boxShadow={
-        emphasised
-          ? '0 0 0 1px rgba(0,141,228,0.2), 0 4px 24px rgba(0,141,228,0.08)'
-          : undefined
-      }
-      transition="border-color 0.25s ease, box-shadow 0.25s ease"
-      _hover={{ borderColor: emphasised ? 'rgba(0,141,228,0.4)' : 'rgba(255,255,255,0.14)' }}
-      p={{ base: 5, md: 6 }}
+      transition="border-color 0.15s ease"
+      p={{ base: 4, md: 5 }}
+      {...styles}
       {...rest}
     >
       {children}

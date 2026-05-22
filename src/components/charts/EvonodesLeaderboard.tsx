@@ -85,15 +85,14 @@ export function EvonodesLeaderboard({
             <Box flexShrink={0} minW="140px">
               <Identifier value={e.proTxHash} avatar dense copy={false} />
             </Box>
-            <Box flex="1" position="relative" height="14px" bg="gray.800" borderRadius="md">
+            <Box flex="1" position="relative" height="4px" bg="sunken" borderRadius="badge">
               <Box
                 position="absolute"
                 inset="0"
                 right="auto"
                 width={`${pct}%`}
-                bg="brand.normal"
-                borderRadius="md"
-                opacity={0.85}
+                bg="accent"
+                borderRadius="badge"
               />
             </Box>
             <Text fontSize="xs" fontFamily="mono" color="gray.100" minW="60px" textAlign="right">

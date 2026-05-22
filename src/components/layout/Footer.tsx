@@ -3,7 +3,6 @@
 import { Box, HStack, Text } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import { useEffect, useState } from 'react';
-import { Container } from '@ui/Container';
 import { useSdk } from '@sdk/hooks';
 import { useQueryProofStore } from '@/contexts/QueryProofStore';
 import { APP_VERSION } from '@/version';
@@ -16,7 +15,7 @@ function LocalClock() {
     return () => window.clearInterval(id);
   }, []);
   return (
-    <Text as="span" fontFamily="mono" fontSize="xs" color="gray.250">
+    <Text as="span" fontFamily="mono" fontSize="xs" color="muted">
       {now ? now.toLocaleTimeString([], { hour12: false }) : '—'}
     </Text>
   );
@@ -31,51 +30,61 @@ export function Footer() {
     <Box
       as="footer"
       borderTop="1px solid"
-      borderColor="rgba(255,255,255,0.06)"
-      bg="rgba(24,29,32,0.7)"
-      sx={{ backdropFilter: 'blur(44px)' }}
+      borderColor="hairline"
+      bg="bg"
       mt="auto"
       display={{ base: 'none', md: 'block' }}
+      px={{ base: 4, md: 6, xl: 8 }}
     >
-      <Container py={4}>
-        <HStack justify="space-between" spacing={4} flexWrap="wrap">
-          <HStack spacing={4}>
-            <LocalClock />
-            <Text fontSize="xs" color="gray.400">
-              v{APP_VERSION}
-            </Text>
-            <Text
-              as={NextLink}
-              href="https://github.com/"
-              fontSize="xs"
-              color="gray.250"
-              _hover={{ color: 'brand.light' }}
-            >
-              GitHub
-            </Text>
-          </HStack>
-          <HStack spacing={3}>
-            <Text fontSize="xs" color={proofsOn ? 'success' : 'gray.400'}>
-              {proofsOn ? 'Proofs ON' : 'Proofs OFF'}
-            </Text>
-            {inspectorEnabled ? (
-              <Text
-                fontSize="xs"
-                color="gray.250"
-                cursor="pointer"
-                _hover={{ color: 'brand.light' }}
-                onClick={openDrawer}
-                title="Open Query Inspector (Cmd+Shift+P)"
-              >
-                {entries.length} {entries.length === 1 ? 'query' : 'queries'}
-              </Text>
-            ) : null}
-            <Text fontSize="xs" color="gray.400">
-              Dash Platform · SDK-only
-            </Text>
-          </HStack>
+      <HStack justify="space-between" spacing={4} flexWrap="wrap" py={3}>
+        <HStack spacing={4}>
+          <LocalClock />
+          <Text fontFamily="mono" fontSize="xs" color="muted">
+            v{APP_VERSION}
+          </Text>
+          <Text
+            as={NextLink}
+            href="https://github.com/"
+            fontFamily="mono"
+            fontSize="xs"
+            color="muted"
+            _hover={{ color: 'accent' }}
+          >
+            github
+          </Text>
         </HStack>
-      </Container>
+        <HStack spacing={3}>
+          <HStack spacing={1.5}>
+            <Text
+              as="span"
+              fontSize="9px"
+              color={proofsOn ? 'verified' : 'trusted'}
+              lineHeight={1}
+            >
+              ●
+            </Text>
+            <Text fontFamily="mono" fontSize="xs" color="muted">
+              proofs {proofsOn ? 'on' : 'off'}
+            </Text>
+          </HStack>
+          {inspectorEnabled ? (
+            <Text
+              fontFamily="mono"
+              fontSize="xs"
+              color="muted"
+              cursor="pointer"
+              _hover={{ color: 'accent' }}
+              onClick={openDrawer}
+              title="Open Query Inspector (Cmd+Shift+P)"
+            >
+              {entries.length} {entries.length === 1 ? 'query' : 'queries'}
+            </Text>
+          ) : null}
+          <Text fontFamily="mono" fontSize="xs" color="muted">
+            dash platform · sdk-only
+          </Text>
+        </HStack>
+      </HStack>
     </Box>
   );
 }

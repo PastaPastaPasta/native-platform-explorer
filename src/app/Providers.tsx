@@ -11,6 +11,7 @@ import { QueryProofStoreProvider } from '@contexts/QueryProofStore';
 import { BreadcrumbsProvider } from '@contexts/BreadcrumbsContext';
 import { ErrorBoundary } from '@components/layout/ErrorBoundary';
 import { SignerProvider } from '@/signer/SignerProvider';
+import { ProofInspectorProvider } from '@components/proof/ProofInspectorContext';
 
 function makeQueryClient() {
   return new QueryClient({
@@ -36,7 +37,9 @@ export function Providers({ children }: { children: ReactNode }) {
               <QueryProofStoreProvider>
                 <SignerProvider>
                   <BreadcrumbsProvider>
-                    <ErrorBoundary>{children}</ErrorBoundary>
+                    <ProofInspectorProvider>
+                      <ErrorBoundary>{children}</ErrorBoundary>
+                    </ProofInspectorProvider>
                   </BreadcrumbsProvider>
                 </SignerProvider>
               </QueryProofStoreProvider>

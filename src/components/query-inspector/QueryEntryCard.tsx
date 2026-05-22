@@ -231,8 +231,8 @@ export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
         px={3}
         py={2}
         borderRadius="md"
-        _hover={{ bg: 'whiteAlpha.50' }}
-        _expanded={{ bg: 'whiteAlpha.50' }}
+        _hover={{ bg: 'raised' }}
+        _expanded={{ bg: 'raised' }}
       >
         <HStack flex="1" spacing={2} align="center">
           <Badge
@@ -258,10 +258,10 @@ export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
       <AccordionPanel px={3} pb={4}>
         <Tabs size="sm" variant="soft-rounded" colorScheme="gray">
           <TabList mb={3}>
-            <Tab fontSize="xs" _selected={{ bg: 'whiteAlpha.100', color: 'gray.100' }}>Query</Tab>
-            <Tab fontSize="xs" _selected={{ bg: 'whiteAlpha.100', color: 'gray.100' }}>Result</Tab>
+            <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Query</Tab>
+            <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Result</Tab>
             {entry.hasProofVariant ? (
-              <Tab fontSize="xs" _selected={{ bg: 'whiteAlpha.100', color: 'gray.100' }}>Proof</Tab>
+              <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Proof</Tab>
             ) : null}
           </TabList>
           <TabPanels>

@@ -26,6 +26,7 @@
     "bignumber.js": "^9.1.2",
     "d3": "^7.9.0",
     "framer-motion": "^11.11.0",
+    "geist": "^1.7.1",
     "minidenticons": "^4.2.1",
     "next": "^14.2.15",
     "nuqs": "^2.2.3",

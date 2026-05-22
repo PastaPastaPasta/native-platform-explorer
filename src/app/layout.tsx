@@ -1,4 +1,5 @@
 import type { Metadata } from 'next';
+import { ColorModeScript } from '@chakra-ui/react';
 import { fontClassName } from '@styles/fonts';
 import { Providers } from './Providers';
 import { RootComponent } from '@components/layout/RootComponent';
@@ -12,8 +13,9 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={fontClassName} data-theme="dark" suppressHydrationWarning>
-      <body className="chakra-ui-dark">
+    <html lang="en" className={fontClassName} suppressHydrationWarning>
+      <body>
+        <ColorModeScript initialColorMode="system" />
         <Providers>
           <RootComponent>{children}</RootComponent>
         </Providers>

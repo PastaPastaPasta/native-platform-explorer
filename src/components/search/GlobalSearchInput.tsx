@@ -10,7 +10,7 @@ export interface GlobalSearchInputProps {
   autoFocus?: boolean;
 }
 
-export function GlobalSearchInput({ width = '15rem', autoFocus }: GlobalSearchInputProps) {
+export function GlobalSearchInput({ width = '100%', autoFocus }: GlobalSearchInputProps) {
   const router = useRouter();
   const [value, setValue] = useState('');
 
@@ -22,30 +22,29 @@ export function GlobalSearchInput({ width = '15rem', autoFocus }: GlobalSearchIn
     router.push(`/search/?q=${encodeURIComponent(q)}`);
   };
 
-  // Real <form> element (not Chakra's Box as="form") so React binds onSubmit
-  // to the native form's submit event and preventDefault reliably fires.
-  // action='javascript:void(0)' is an extra safety net for the case where
-  // something prevents React from handling the submit synthetically.
   return (
     <form onSubmit={onSubmit} action="#" style={{ width }} role="search">
       <InputGroup size="sm">
         <InputLeftElement pointerEvents="none">
-          <SearchIcon color="gray.400" boxSize={3} />
+          <SearchIcon color="muted" boxSize={3} />
         </InputLeftElement>
         <Input
           type="search"
           name="q"
           aria-label="Search"
-          placeholder="Identity · contract · token · DPNS …"
+          placeholder="identity · contract · token · DPNS · hash"
           value={value}
           onChange={(e) => setValue(e.target.value)}
           autoFocus={autoFocus}
-          fontSize="sm"
-          borderRadius="full"
-          bg="gray.800"
-          borderColor="gray.700"
-          _hover={{ borderColor: 'gray.600' }}
-          _focus={{ borderColor: 'brand.normal' }}
+          fontFamily="mono"
+          fontSize="12px"
+          borderRadius="card"
+          bg="raised"
+          borderColor="hairline"
+          color="ink"
+          _placeholder={{ color: 'muted' }}
+          _hover={{ borderColor: 'hairlineStrong' }}
+          _focusVisible={{ borderColor: 'accent', boxShadow: 'none' }}
         />
       </InputGroup>
     </form>

@@ -1,63 +1,53 @@
-// Mixins — glassmorphic design system for dark-mode dashboard.
+// Field Manual mixins. Flat surfaces, hairline borders, zero glassmorphism.
 
-$blockBackgroundBlur: blur(44px);
 $font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
 
-// Glassmorphic card. Every "card" in the app uses this mixin.
-@mixin Block($border: false) {
-  backdrop-filter: $blockBackgroundBlur;
-  border-radius: var(--chakra-radii-block);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: linear-gradient(
-    135deg,
-    rgba(24, 31, 34, 0.35) 0%,
-    rgba(24, 31, 34, 0.18) 100%
-  );
-  transition: border-color 0.25s ease, box-shadow 0.25s ease;
+// Solid panel. Used by every `InfoBlock`-style card.
+@mixin Block($emphasis: 'normal') {
+  background: var(--chakra-colors-surface);
+  border: 1px solid var(--chakra-colors-hairline);
+  border-radius: var(--chakra-radii-card);
+  transition: border-color 0.15s ease;
 
   &:hover {
-    border-color: rgba(255, 255, 255, 0.14);
+    border-color: var(--chakra-colors-hairlineStrong);
   }
 
-  @if $border {
-    box-shadow:
-      0 0 0 1px rgba(0, 141, 228, 0.2),
-      0 4px 24px rgba(0, 141, 228, 0.08);
-    border-color: rgba(0, 141, 228, 0.3);
+  @if $emphasis == 'accent' {
+    border-color: var(--chakra-colors-accent);
+    &:hover {
+      border-color: var(--chakra-colors-accentHover);
+    }
+  } @else if $emphasis == 'sunken' {
+    background: var(--chakra-colors-sunken);
+    border-color: transparent;
   }
 }
 
-// Mono-font identifier line style (used in the Identifier component).
+// Mono identifier row. Used inside the Identifier component.
 @mixin DefListItem($clickable: false) {
   display: flex;
-  padding: 7px 12px;
-  margin-bottom: 8px;
+  padding: 6px 10px;
+  margin-bottom: 6px;
   font-family: $font-mono;
-  font-size: 12pt;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  background-color: rgba(46, 57, 61, 0.4);
-  transition: all 0.2s ease;
+  font-size: 12px;
+  border-radius: var(--chakra-radii-badge);
+  border: 1px solid var(--chakra-colors-hairline);
+  background-color: var(--chakra-colors-raised);
+  transition: border-color 0.15s ease;
 
   @if $clickable {
     &:hover {
-      background-color: rgba(46, 57, 61, 0.7);
-      border-color: rgba(255, 255, 255, 0.1);
+      border-color: var(--chakra-colors-hairlineStrong);
     }
   }
 }
 
-// Gradient sweep used to indicate loading on placeholder rows.
+// Loading shimmer — restrained, tuned to accent at very low alpha.
 @mixin LoadingLine($delay: 0s) {
   overflow: hidden;
   position: relative;
-
-  &::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background-color: rgba(255, 255, 255, 0.03);
-  }
+  background-color: var(--chakra-colors-sunken);
 
   &::after {
     content: '';
@@ -69,7 +59,7 @@ $font-mono: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
     background: linear-gradient(
       90deg,
       transparent 0%,
-      rgba(0, 141, 228, 0.06) 50%,
+      var(--chakra-colors-accentMuted) 50%,
       transparent 100%
     );
     animation: LoadingLine 2.5s ease-in-out infinite;

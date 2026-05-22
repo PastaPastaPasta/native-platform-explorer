@@ -34,12 +34,13 @@ function splitId(value: string, ellipsis: IdentifierProps['ellipsis']) {
 
 function render(value: string, h: IdentifierHighlight, ellipsis: IdentifierProps['ellipsis']) {
   const { head, mid, tail } = splitId(value, ellipsis);
-  if (h === 'dim') return <Text as="span" color="gray.250">{value}</Text>;
-  if (h === 'highlight') return <Text as="span" color="gray.100">{value}</Text>;
-  if (!mid) return <Text as="span" color="gray.100">{value}</Text>;
-  const headColor = h === 'last' ? 'gray.250' : 'gray.100';
-  const midColor = 'gray.400';
-  const tailColor = h === 'first' ? 'gray.250' : 'gray.100';
+  if (h === 'dim') return <Text as="span" color="muted">{value}</Text>;
+  if (h === 'highlight') return <Text as="span" color="ink">{value}</Text>;
+  if (!mid) return <Text as="span" color="ink">{value}</Text>;
+  const headColor = h === 'last' ? 'muted' : 'ink';
+  // `muted` (not `faint`) — faint fails WCAG AA against both bg modes for text.
+  const midColor = 'muted';
+  const tailColor = h === 'first' ? 'muted' : 'ink';
   return (
     <>
       <Text as="span" color={headColor}>{head}</Text>
@@ -73,14 +74,17 @@ export function Identifier({
       fontFamily="mono"
       fontSize={dense ? '2xs' : 'xs'}
       alignItems="center"
+      sx={{ fontVariantNumeric: 'tabular-nums' }}
     >
       {svgDataUrl ? (
         <Box
           as="span"
-          width={dense ? '16px' : '24px'}
-          height={dense ? '16px' : '24px'}
-          borderRadius="6px"
-          bg="gray.750"
+          width={dense ? '16px' : '20px'}
+          height={dense ? '16px' : '20px'}
+          borderRadius="badge"
+          bg="raised"
+          border="1px solid"
+          borderColor="hairline"
           backgroundImage={`url("${svgDataUrl}")`}
           backgroundSize="cover"
           flexShrink={0}
@@ -90,11 +94,11 @@ export function Identifier({
       <Box
         as="span"
         px={dense ? 1.5 : 2}
-        py={0.5}
-        bg="gray.800"
-        borderRadius="10px"
+        py="2px"
+        bg="raised"
+        borderRadius="badge"
         border="1px solid"
-        borderColor="gray.750"
+        borderColor="hairline"
       >
         {render(value, highlight, ellipsis)}
       </Box>
@@ -108,7 +112,7 @@ export function Identifier({
         as={NextLink}
         href={href}
         display="inline-flex"
-        _hover={{ filter: 'brightness(1.2)' }}
+        _hover={{ filter: 'brightness(1.08)' }}
       >
         {body}
       </Box>

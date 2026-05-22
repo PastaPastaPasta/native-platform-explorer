@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, Heading, Text, VStack, HStack } from '@chakra-ui/react';
+import { Button, Divider, HStack, Heading, Text, VStack } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import type { ReactNode } from 'react';
 import { InfoBlock } from './InfoBlock';
@@ -19,19 +19,27 @@ export function NotFoundCard({
   return (
     <InfoBlock>
       <VStack align="flex-start" spacing={3}>
-        <Heading as="h2" size="md" color="gray.100">
+        <Text fontFamily="mono" fontSize="xs" color="muted" letterSpacing="0.1em">
+          404 · NOT FOUND
+        </Text>
+        <Heading as="h2" size="md" color="ink">
           {title}
         </Heading>
-        <Text color="gray.250">{description}</Text>
-        <HStack spacing={3} pt={2}>
+        <Text color="muted" maxW="60ch">
+          {description}
+        </Text>
+        <Divider borderColor="hairline" my={1} />
+        <HStack spacing={3}>
           {actions.map((a) => (
             <Button
               key={a.href}
               as={NextLink}
               href={a.href}
-              colorScheme="blue"
               variant="outline"
+              borderColor="hairlineStrong"
+              color="ink"
               size="sm"
+              borderRadius="card"
             >
               {a.label}
             </Button>

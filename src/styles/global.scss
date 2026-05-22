@@ -1,44 +1,15 @@
 @use 'mixins' as *;
 
-:root {
-  --page-bg-gradient: radial-gradient(
-    ellipse 120% 80% at 50% -10%,
-    rgba(0, 141, 228, 0.1) 0%,
-    rgba(14, 117, 181, 0.06) 30%,
-    rgba(24, 29, 32, 1) 70%
-  );
-  --noise-opacity: 0.025;
-}
-
 html,
 body {
   margin: 0;
   padding: 0;
-  background: var(--chakra-colors-gray-900);
-  color: var(--chakra-colors-gray-100);
-  font-family: var(--font-body), 'DM Sans', system-ui, sans-serif;
+  background: var(--chakra-colors-bg);
+  color: var(--chakra-colors-ink);
+  font-family: var(--font-geist-sans), 'Geist', system-ui, sans-serif;
   min-height: 100vh;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  background-image: var(--page-bg-gradient);
-  background-attachment: fixed;
-  position: relative;
-
-  // Subtle grain texture for atmospheric depth
-  &::before {
-    content: '';
-    position: fixed;
-    inset: 0;
-    z-index: 0;
-    pointer-events: none;
-    opacity: var(--noise-opacity);
-    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-repeat: repeat;
-    background-size: 256px 256px;
-  }
 }
 
 *,
@@ -53,38 +24,44 @@ h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-heading), Outfit, system-ui, sans-serif;
-  font-weight: 600;
+  font-family: var(--font-display), 'Fraunces', Georgia, serif;
+  font-weight: 500;
   margin: 0;
-  letter-spacing: -0.01em;
+  letter-spacing: -0.015em;
+  font-optical-sizing: auto;
 }
 
 a {
-  color: var(--chakra-colors-brand-normal);
+  color: var(--chakra-colors-accent);
   text-decoration: none;
-  transition: color 0.2s ease;
+  transition: color 0.15s ease;
   &:hover {
-    color: var(--chakra-colors-brand-light);
+    color: var(--chakra-colors-accentHover);
   }
 }
 
 code,
 pre {
   font-family: var(--font-mono), 'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.tabular,
+[data-mono] {
+  font-variant-numeric: tabular-nums;
 }
 
 .loading-line {
   @include LoadingLine();
   height: 1em;
-  border-radius: 4px;
+  border-radius: var(--chakra-radii-badge);
 }
 
 ::selection {
-  background: rgba(0, 141, 228, 0.3);
-  color: #fff;
+  background: var(--chakra-colors-accent);
+  color: var(--chakra-colors-bg);
 }
 
-// Refined scrollbar for webkit browsers
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -95,16 +72,15 @@ pre {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 3px;
+  background: var(--chakra-colors-hairline);
+  border-radius: var(--chakra-radii-pill);
 
   &:hover {
-    background: rgba(255, 255, 255, 0.14);
+    background: var(--chakra-colors-hairlineStrong);
   }
 }
 
-// Firefox scrollbar
 * {
   scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+  scrollbar-color: var(--chakra-colors-hairline) transparent;
 }
