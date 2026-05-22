@@ -116,6 +116,13 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   const [sdk, setSdk] = useState<EvoSDKType | null>(null);
   const [status, setStatus] = useState<SdkStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
+  // Gate the first connect on the URL/localStorage hydration below. Without
+  // this, every mount starts a connect against the SSR-fallback network
+  // (testnet) before the effect can swap it to a devnet, which not only
+  // wastes a build but kicks off the testnet trusted-context prefetch
+  // (`quorums.testnet.networks.dash.org/*`) — making it look like devnet
+  // pages are still talking to testnet.
+  const [hydrated, setHydrated] = useState(false);
   const connectSeq = useRef(0);
 
   // Hydrate the stored preferences after mount. Registry must be loaded first
@@ -131,6 +138,7 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     }
     if (storedNet !== defaultNetwork) setNetworkState(storedNet);
     if (storedTrust !== defaultTrusted) setTrustedState(storedTrust);
+    setHydrated(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -155,9 +163,10 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   );
 
   useEffect(() => {
+    if (!hydrated) return;
     void connect(network, trusted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, trusted]);
+  }, [network, trusted, hydrated]);
 
   const setNetwork = useCallback((next: Network) => {
     if (typeof window !== 'undefined') {
