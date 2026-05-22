@@ -9,15 +9,15 @@ describe('getEffectiveTrusted', () => {
   });
 
   it('disables trusted mode for devnets', () => {
-    expect(getEffectiveTrusted('devnet-tadi', true)).toBe(false);
-    expect(getEffectiveTrusted('devnet-tadi', false)).toBe(false);
+    expect(getEffectiveTrusted('devnet-porter', true)).toBe(false);
+    expect(getEffectiveTrusted('devnet-porter', false)).toBe(false);
   });
 });
 
 describe('getDevnetSdkOptions', () => {
   it('keeps devnet DAPI addresses while disabling trusted context replacement', () => {
-    expect(getDevnetSdkOptions('devnet-tadi')).toMatchObject({
-      addresses: expect.arrayContaining(['https://35.89.28.18:1443']),
+    expect(getDevnetSdkOptions('devnet-porter')).toMatchObject({
+      addresses: expect.arrayContaining(['https://44.247.149.200:1443']),
       network: 'testnet',
       trusted: false,
     });

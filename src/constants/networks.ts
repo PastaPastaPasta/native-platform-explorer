@@ -2,7 +2,7 @@ export {
   DEFAULT_NETWORK,
   TESTNET,
   MAINNET,
-  DEVNET_TADI,
+  DEVNET_PORTER,
   getNetwork,
   getDerivationNetwork,
   hasNetwork,
