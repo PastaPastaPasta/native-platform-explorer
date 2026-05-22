@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, Flex, HStack, Text, VStack } from '@chakra-ui/react';
+import { Box, Flex, HStack, Skeleton, Text, Tooltip, VStack } from '@chakra-ui/react';
 import { useMemo } from 'react';
 import { Eyebrow } from '@ui/Eyebrow';
 import { useSdk } from '@sdk/hooks';
@@ -66,6 +66,27 @@ export function MeterBar() {
   const quorumsCount = getQuorumsCount(quorumsQ.data);
   const progress = epoch?.progressPct ?? null;
 
+  const renderValue = (
+    isLoading: boolean,
+    error: Error | null,
+    value: React.ReactNode,
+    width = '40px',
+  ): React.ReactNode => {
+    if (isLoading) {
+      return <Skeleton height="13px" width={width} startColor="sunken" endColor="raised" />;
+    }
+    if (error) {
+      return (
+        <Tooltip label={error.message} hasArrow placement="bottom" openDelay={200} bg="failed" color="bg">
+          <Text fontFamily="mono" fontSize="13px" color="failed" cursor="help">
+            error
+          </Text>
+        </Tooltip>
+      );
+    }
+    return value;
+  };
+
   return (
     <Box
       as="div"
@@ -80,16 +101,26 @@ export function MeterBar() {
     >
       <Flex h="100%" align="stretch" justify="flex-start" overflowX="auto">
         <Field label="Block">
-          <Text fontFamily="mono" fontSize="13px" color="ink" data-mono>
-            {blockHeight !== undefined ? String(blockHeight) : '—'}
-          </Text>
+          {renderValue(
+            statusQ.isLoading,
+            statusQ.error,
+            <Text fontFamily="mono" fontSize="13px" color="ink" data-mono>
+              {blockHeight !== undefined ? String(blockHeight) : '—'}
+            </Text>,
+            '60px',
+          )}
         </Field>
 
         <Field label="Epoch">
           <HStack spacing={2}>
-            <Text fontFamily="mono" fontSize="13px" color="ink">
-              #{epoch?.index ?? '—'}
-            </Text>
+            {renderValue(
+              epochQ.isLoading,
+              epochQ.error,
+              <Text fontFamily="mono" fontSize="13px" color="ink">
+                #{epoch?.index ?? '—'}
+              </Text>,
+              '34px',
+            )}
             <Box position="relative" w="80px" h="6px" bg="sunken" borderRadius="badge">
               <Box
                 position="absolute"
@@ -137,9 +168,14 @@ export function MeterBar() {
         </Field>
 
         <Field label="Quorums">
-          <Text fontFamily="mono" fontSize="13px" color="ink">
-            {quorumsCount ?? '—'}
-          </Text>
+          {renderValue(
+            quorumsQ.isLoading,
+            quorumsQ.error,
+            <Text fontFamily="mono" fontSize="13px" color="ink">
+              {quorumsCount ?? '—'}
+            </Text>,
+            '26px',
+          )}
         </Field>
 
         <Field label="Network" divider={false}>

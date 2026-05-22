@@ -7,7 +7,9 @@ import {
   Heading,
   HStack,
   SimpleGrid,
+  Skeleton,
   Text,
+  Tooltip,
   VStack,
 } from '@chakra-ui/react';
 import NextLink from 'next/link';
@@ -52,6 +54,7 @@ function StatCell({
   proofStatus,
   proofTitle,
   loading,
+  error,
 }: {
   label: string;
   value: React.ReactNode;
@@ -59,7 +62,12 @@ function StatCell({
   proofStatus?: ProofStatus;
   proofTitle?: string;
   loading?: boolean;
+  error?: Error | null;
 }) {
+  const errored = !loading && !!error;
+  const effectiveStatus: ProofStatus | undefined = errored
+    ? 'failed'
+    : proofStatus;
   return (
     <Box
       px={{ base: 4, md: 5 }}
@@ -72,10 +80,43 @@ function StatCell({
     >
       <Eyebrow mb={2}>{label}</Eyebrow>
       <HStack spacing={2} align="baseline">
-        {proofStatus ? (
-          <ProofGlyph status={proofStatus} payload={proofTitle ? { title: proofTitle, status: proofStatus } : undefined} />
+        {effectiveStatus ? (
+          <ProofGlyph
+            status={effectiveStatus}
+            label={errored ? `${proofTitle ?? label}: ${error?.message ?? 'failed'}` : undefined}
+            payload={
+              errored
+                ? { title: proofTitle ?? label, status: 'failed', notes: error?.message }
+                : proofTitle
+                  ? { title: proofTitle, status: effectiveStatus }
+                  : undefined
+            }
+          />
         ) : null}
-        <Box opacity={loading ? 0.4 : 1}>{value}</Box>
+        {loading ? (
+          <Skeleton height="22px" width="80px" startColor="sunken" endColor="raised" />
+        ) : errored ? (
+          <Tooltip
+            label={error?.message ?? 'request failed'}
+            hasArrow
+            placement="bottom"
+            openDelay={200}
+            bg="failed"
+            color="bg"
+          >
+            <Text
+              fontFamily="mono"
+              fontSize="sm"
+              color="failed"
+              cursor="help"
+              sx={{ textDecorationLine: 'underline', textDecorationStyle: 'dotted' }}
+            >
+              error
+            </Text>
+          </Tooltip>
+        ) : (
+          value
+        )}
       </HStack>
       {footnote ? (
         <Text fontFamily="mono" fontSize="11px" color="muted" mt={1.5}>
@@ -161,6 +202,7 @@ export default function HomePage() {
             proofStatus={proofStatus}
             proofTitle="Block height proof"
             loading={statusQ.isLoading}
+            error={statusQ.error}
             value={
               <Text
                 fontFamily="heading"
@@ -180,6 +222,7 @@ export default function HomePage() {
             proofStatus={proofStatus}
             proofTitle="Epoch proof"
             loading={epochQ.isLoading}
+            error={epochQ.error}
             value={
               <Text
                 as={NextLink}
@@ -202,6 +245,8 @@ export default function HomePage() {
             label="Total credits"
             proofStatus={proofStatus}
             proofTitle="Total credits proof"
+            loading={creditsQ.isLoading}
+            error={creditsQ.error}
             value={<CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />}
             footnote="platform supply"
           />
@@ -210,6 +255,8 @@ export default function HomePage() {
             label="Protocol version"
             proofStatus={proofStatus}
             proofTitle="Protocol version proof"
+            loading={protocolQ.isLoading}
+            error={protocolQ.error}
             value={
               <Text
                 fontFamily="heading"
@@ -236,6 +283,8 @@ export default function HomePage() {
             label="Active quorums"
             proofStatus={proofStatus}
             proofTitle="Active quorums proof"
+            loading={quorumsQ.isLoading}
+            error={quorumsQ.error}
             value={
               <Text
                 fontFamily="heading"
