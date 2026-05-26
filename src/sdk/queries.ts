@@ -12,7 +12,7 @@ import { useSdk } from './hooks';
 import { getNetwork } from './networks';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
-import { walkInstance } from '@util/wasm-json';
+import { walkInstance, safeStringify } from '@util/wasm-json';
 import {
   useQueryProofStore,
   type ProofData,
@@ -67,6 +67,54 @@ function extractMetadata(meta: unknown): ResponseMeta | undefined {
     protocolVersion: Number(m.protocolVersion ?? 0),
     chainId: decodeChainId(m.chainId),
   };
+}
+
+/**
+ * Pull a human-readable message out of an SDK error. The WASM SDK throws
+ * objects like WasmSdkError / ConsensusError / WasmDppError that are NOT
+ * Error instances and whose state (message, code, kind, name) lives behind
+ * prototype getters. `String(err)` on them returns "[object Object]", which
+ * is why the Query Inspector used to show that for failures. `walkInstance`
+ * reads the getters; we then format the most useful fields into one line.
+ */
+function extractErrorMessage(err: unknown): string {
+  if (err === null || err === undefined) return String(err);
+  if (typeof err === 'string') return err;
+  if (err instanceof Error) return err.message || err.name || 'Error';
+  if (typeof err !== 'object') return String(err);
+  try {
+    const walked = walkInstance(err) as Record<string, unknown>;
+    const ctorName = (err as { constructor?: { name?: string } }).constructor?.name;
+    const name = typeof walked.name === 'string' ? walked.name : undefined;
+    const kind = typeof walked.kind === 'string' ? walked.kind : undefined;
+    const code =
+      walked.code !== undefined && walked.code !== null ? String(walked.code) : undefined;
+    const message = typeof walked.message === 'string' ? walked.message : undefined;
+
+    const label = name ?? (ctorName && ctorName !== 'Object' ? ctorName : undefined);
+    const tagParts: string[] = [];
+    if (label) tagParts.push(label);
+    if (kind && kind !== label) tagParts.push(`(${kind})`);
+    if (code) tagParts.push(`[${code}]`);
+    const tag = tagParts.join(' ');
+
+    if (message) return tag ? `${tag}: ${message}` : message;
+    const dump = safeStringify(walked, 0);
+    if (dump && dump !== '{}') return tag ? `${tag}: ${dump}` : dump;
+    if (tag) return tag;
+  } catch {
+    /* fall through */
+  }
+  return String(err);
+}
+
+/** Wrap a thrown value in a proper Error so React Query and consumers get
+ *  a usable `.message`. Keeps the original on `.cause` for debugging. */
+function normalizeError(err: unknown): Error {
+  if (err instanceof Error) return err;
+  const wrapped = new Error(extractErrorMessage(err));
+  (wrapped as Error & { cause?: unknown }).cause = err;
+  return wrapped;
 }
 
 function extractProof(proof: unknown): ProofData | undefined {
@@ -167,7 +215,8 @@ function useSdkQuery<TData>(
           }
           return (data ?? null) as TData;
         } catch (err) {
-          const proofError = err instanceof Error ? err.message : String(err);
+          const proofError = extractErrorMessage(err);
+          console.error(`[NPE] ${inspectorMethodName} failed:`, proofError, err);
           if (isDevnet) {
             if (store.enabled) {
               const elapsed = performance.now() - t0;
@@ -182,49 +231,91 @@ function useSdkQuery<TData>(
                 error: proofError,
               });
             }
-            throw err;
+            throw normalizeError(err);
           }
           // Fall back to the non-proof variant so the explorer still works.
           // Record the entry as a success (data was retrieved) but include the
           // proof-capture error so the inspector can show both: "data succeeded,
           // but proof was not captured because ...".
-          const result = await fn(sdkRef.current!);
-          const elapsed = performance.now() - t0;
-          if (store.enabled) {
-            store.record(storeKey, {
-              queryKey: fullKey,
-              methodName: inspectorMethodName,
-              methodParams: methodParams ?? {},
-              hasProofVariant: true,
-              timestamp: Date.now(),
-              durationMs: Math.round(elapsed),
-              status: 'success',
-              result: safeSerialize(result),
-              error: `Proof capture failed: ${proofError}`,
-            });
+          try {
+            const result = await fn(sdkRef.current!);
+            const elapsed = performance.now() - t0;
+            if (store.enabled) {
+              store.record(storeKey, {
+                queryKey: fullKey,
+                methodName: inspectorMethodName,
+                methodParams: methodParams ?? {},
+                hasProofVariant: true,
+                timestamp: Date.now(),
+                durationMs: Math.round(elapsed),
+                status: 'success',
+                result: safeSerialize(result),
+                error: `Proof capture failed: ${proofError}`,
+              });
+            }
+            return (result ?? null) as TData;
+          } catch (fallbackErr) {
+            const fallbackMsg = extractErrorMessage(fallbackErr);
+            console.error(
+              `[NPE] ${inspectorMethodName} fallback failed:`,
+              fallbackMsg,
+              fallbackErr,
+            );
+            if (store.enabled) {
+              const elapsed = performance.now() - t0;
+              store.record(storeKey, {
+                queryKey: fullKey,
+                methodName: inspectorMethodName,
+                methodParams: methodParams ?? {},
+                hasProofVariant: true,
+                timestamp: Date.now(),
+                durationMs: Math.round(elapsed),
+                status: 'error',
+                error: `Proof: ${proofError} | Fallback: ${fallbackMsg}`,
+              });
+            }
+            throw normalizeError(fallbackErr);
           }
-          return (result ?? null) as TData;
         }
       }
 
       // Non-proof path (trusted off, inspector disabled, or no withProofFn)
-      const result = await fn(sdkRef.current);
-      const elapsed = performance.now() - t0;
+      try {
+        const result = await fn(sdkRef.current);
+        const elapsed = performance.now() - t0;
 
-      if (store.enabled && methodName) {
-        store.record(storeKey, {
-          queryKey: fullKey,
-          methodName: inspectorMethodName,
-          methodParams: methodParams ?? {},
-          hasProofVariant,
-          timestamp: Date.now(),
-          durationMs: Math.round(elapsed),
-          status: 'success',
-          result: safeSerialize(result),
-        });
+        if (store.enabled && methodName) {
+          store.record(storeKey, {
+            queryKey: fullKey,
+            methodName: inspectorMethodName,
+            methodParams: methodParams ?? {},
+            hasProofVariant,
+            timestamp: Date.now(),
+            durationMs: Math.round(elapsed),
+            status: 'success',
+            result: safeSerialize(result),
+          });
+        }
+
+        return (result ?? null) as TData;
+      } catch (err) {
+        const errMsg = extractErrorMessage(err);
+        console.error(`[NPE] ${inspectorMethodName} failed:`, errMsg, err);
+        if (store.enabled && methodName) {
+          const elapsed = performance.now() - t0;
+          store.record(storeKey, {
+            queryKey: fullKey,
+            methodName: inspectorMethodName,
+            methodParams: methodParams ?? {},
+            hasProofVariant,
+            timestamp: Date.now(),
+            durationMs: Math.round(elapsed),
+            status: 'error',
+            error: errMsg,
+          });
+        }
+        throw normalizeError(err);
       }
-
-      return (result ?? null) as TData;
     },
     enabled: status === 'ready' && !!sdk && (rest.enabled ?? true),
     ...rest,
