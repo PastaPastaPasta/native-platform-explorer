@@ -12,12 +12,12 @@ describe('shouldUseProofTransport', () => {
   });
 
   it('uses proof transport for devnets even though results are unverified', () => {
-    expect(shouldUseProofTransport('devnet-porter', false, true)).toBe(true);
-    expect(shouldUseProofTransport('devnet-porter', true, true)).toBe(true);
+    expect(shouldUseProofTransport('devnet-paloma', false, true)).toBe(true);
+    expect(shouldUseProofTransport('devnet-paloma', true, true)).toBe(true);
   });
 
   it('requires a proof-returning SDK method', () => {
-    expect(shouldUseProofTransport('devnet-porter', false, false)).toBe(false);
+    expect(shouldUseProofTransport('devnet-paloma', false, false)).toBe(false);
     expect(shouldUseProofTransport('testnet', true, false)).toBe(false);
   });
 });

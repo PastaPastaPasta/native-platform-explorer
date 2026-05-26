@@ -38,26 +38,28 @@ export const MAINNET: NetworkConfig = {
   insightApiUrl: 'https://insight.dash.org/insight-api',
 };
 
-export const DEVNET_PORTER: NetworkConfig = {
+export const DEVNET_PALOMA: NetworkConfig = {
   type: 'devnet',
-  name: 'devnet-porter',
-  label: 'Devnet-porter',
+  name: 'devnet-paloma',
+  label: 'Devnet-paloma',
   dapiAddresses: [
-    'https://44.247.149.200:1443',
-    'https://54.70.124.48:1443',
-    'https://34.209.64.250:1443',
-    'https://34.217.209.121:1443',
-    'https://44.255.39.178:1443',
-    'https://35.88.212.218:1443',
-    'https://34.221.172.217:1443',
-    'https://52.89.161.171:1443',
-    'https://35.90.237.76:1443',
-    'https://35.88.158.240:1443',
-    'https://34.221.127.165:1443',
+    'https://68.67.122.198:1443',
+    'https://68.67.122.199:1443',
+    'https://68.67.122.86:1443',
+    'https://68.67.122.197:1443',
+    'https://68.67.122.192:1443',
+    'https://68.67.122.85:1443',
+    'https://68.67.122.88:1443',
+    'https://68.67.122.206:1443',
+    'https://68.67.122.193:1443',
+    'https://68.67.122.195:1443',
+    'https://68.67.122.196:1443',
+    'https://68.67.122.87:1443',
+    'https://68.67.122.207:1443',
   ],
 };
 
-const BUILT_INS: readonly NetworkConfig[] = [TESTNET, MAINNET, DEVNET_PORTER];
+const BUILT_INS: readonly NetworkConfig[] = [TESTNET, MAINNET, DEVNET_PALOMA];
 const BUILT_IN_NAMES: ReadonlySet<string> = new Set(BUILT_INS.map((n) => n.name));
 
 const NETWORK_REGISTRY = new Map<string, NetworkConfig>(BUILT_INS.map((n) => [n.name, n]));

@@ -2,7 +2,7 @@ export {
   DEFAULT_NETWORK,
   TESTNET,
   MAINNET,
-  DEVNET_PORTER,
+  DEVNET_PALOMA,
   getNetwork,
   getDerivationNetwork,
   hasNetwork,
