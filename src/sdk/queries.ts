@@ -831,8 +831,16 @@ export function useProtocolVersionUpgradeVoteStatus(
 }
 
 // ----- voting polls -----
+// SDK >=3.1.0-dev.7 declares startTimeMs/endTimeMs as TS `number` but the
+// underlying Rust struct field is `f64`. serde-wasm-bindgen sends a
+// fractionless JS Number as i64, which the f64 deserializer rejects with
+// `invalid type: integer …, expected f64`. Adding 0.5 forces a float
+// encoding; the SDK truncates to millisecond resolution downstream so this
+// is semantically a no-op for the filter.
+const asF64 = (n: number | undefined): number | undefined =>
+  n === undefined ? undefined : n + 0.5;
 export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number) {
-  const query = { startTimeMs: startDateMs, endTimeMs: endDateMs };
+  const query = { startTimeMs: asF64(startDateMs), endTimeMs: asF64(endDateMs) };
   return useSdkQuery(
     ['voting', 'votePollsByEndDate', startDateMs ?? 0, endDateMs ?? 0],
     (sdk) => sdk.voting.votePollsByEndDate(query) as Promise<unknown>,

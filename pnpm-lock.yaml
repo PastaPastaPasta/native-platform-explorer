@@ -18,8 +18,8 @@ importers:
         specifier: ^2.8.2
         version: 2.10.9(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@emotion/styled@11.14.1(@emotion/react@11.14.0(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(react@18.3.1))(@types/react@18.3.28)(framer-motion@11.18.2(@emotion/is-prop-valid@1.4.0)(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       '@dashevo/evo-sdk':
-        specifier: 3.1.0-dev.1
-        version: 3.1.0-dev.1
+        specifier: 3.1.0-dev.7
+        version: 3.1.0-dev.7
       '@emotion/react':
         specifier: ^11.11.4
         version: 11.14.0(@types/react@18.3.28)(react@18.3.1)
@@ -223,12 +223,12 @@ packages:
     peerDependencies:
       react: '>=16.8.0'
 
-  '@dashevo/evo-sdk@3.1.0-dev.1':
-    resolution: {integrity: sha512-afVJhPXkgrg2vlLgyAgcWqUeugXhA5XkfssQZWQGNXlZkH7/22yB9sd37UX+tWtvoqEjxKzygryzTngt1SI44w==}
+  '@dashevo/evo-sdk@3.1.0-dev.7':
+    resolution: {integrity: sha512-H/wMxqnvhW0xt3qSQqUw+zoIW1HWtG2LcIMsW94cq2/SEuYByUERhH+GYqkAhjPTF7aT6m9+6MIW8I4nEsQMJA==}
     engines: {node: '>=18.18'}
 
-  '@dashevo/wasm-sdk@3.1.0-dev.1':
-    resolution: {integrity: sha512-s4ECro2+zCehfag7XVqbxrsDqOAZN2yMIGhMNjjeFesaOqOl1bUWffs3QMtEeuMZdYtKcZxUrlKsW1KlfLN/WQ==}
+  '@dashevo/wasm-sdk@3.1.0-dev.7':
+    resolution: {integrity: sha512-RBZV0MH1aYyJyDm/jEei63wJToLaQ/la3P98CgVGVNwpBTkJQQlZDasdURoCBGAZp5QFMUVkmgFnK6PYssdMWA==}
     engines: {node: '>=18.18'}
 
   '@emnapi/core@1.10.0':
@@ -3339,11 +3339,11 @@ snapshots:
       lodash.mergewith: 4.6.2
       react: 18.3.1
 
-  '@dashevo/evo-sdk@3.1.0-dev.1':
+  '@dashevo/evo-sdk@3.1.0-dev.7':
     dependencies:
-      '@dashevo/wasm-sdk': 3.1.0-dev.1
+      '@dashevo/wasm-sdk': 3.1.0-dev.7
 
-  '@dashevo/wasm-sdk@3.1.0-dev.1': {}
+  '@dashevo/wasm-sdk@3.1.0-dev.7': {}
 
   '@emnapi/core@1.10.0':
     dependencies:
