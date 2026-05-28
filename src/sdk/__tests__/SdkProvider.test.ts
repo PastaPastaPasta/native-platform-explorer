@@ -10,13 +10,12 @@ describe('getDevnetSdkArgs', () => {
     });
   });
 
-  it('returns the trusted shape with the devnet short name and the configured quorumUrl', () => {
-    // paloma ships an explicit `quorumUrl` override because the conventional
-    // default (https://quorums.paloma.networks.dash.org) has no DNS record yet.
+  it('returns the trusted shape with the devnet short name and no addresses (SDK discovers them)', () => {
+    // No `quorumUrl` override: the SDK derives
+    // https://quorums.paloma.networks.dash.org from `devnetName`.
     expect(getDevnetSdkArgs('devnet-paloma', true)).toEqual({
       trusted: true,
       name: 'paloma',
-      quorumUrl: 'http://44.238.203.84:8080',
     });
   });
 });
