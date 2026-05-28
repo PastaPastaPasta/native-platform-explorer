@@ -43,7 +43,7 @@ export function ContractPicker({ contractId, onChange, resolvedAlias }: Contract
           maxW="280px"
           value={isKnown ? contractId : '__custom__'}
           onChange={(e) => {
-            if (e.target.value !== '__custom__') onChange(e.target.value);
+            onChange(e.target.value === '__custom__' ? '' : e.target.value);
           }}
           _hover={{ borderColor: 'gray.600' }}
         >
