@@ -1,9 +1,11 @@
-import { type DocumentsQueryParams } from '@sdk/queries';
+import { type DocumentsQueryParams, type AggregateKind } from '@sdk/queries';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 
-// ── Types ──────────────────────────────────────────────────────────────
+// Re-export so consumers that already pull aggregate types from the parser
+// don't need to know they originated in the SDK layer.
+export type { AggregateKind };
 
-export type AggregateKind = 'count' | 'sum' | 'avg';
+// ── Types ──────────────────────────────────────────────────────────────
 
 export interface ParsedQuery {
   /** `'documents'` is the regular SELECT *; the others are aggregate queries
@@ -193,18 +195,14 @@ class Parser {
 
   parseMulti(): MultiParseResult {
     try {
-      const queries: ParsedQuery[] = [];
-      // Allow leading whitespace / empty input.
       if (this.peek().type === TT.EOF) {
         return { ok: false, message: 'Empty query.', position: 0 };
       }
+      const queries: ParsedQuery[] = [];
       while (this.peek().type !== TT.EOF) {
         queries.push(this.parseQuery());
         // Statements are `;`-separated; trailing `;` is optional.
         while (this.peek().type === TT.Semicolon) this.advance();
-      }
-      if (queries.length === 0) {
-        return { ok: false, message: 'No queries found.', position: 0 };
       }
       return { ok: true, queries };
     } catch (e) {
@@ -268,7 +266,7 @@ class Parser {
       this.expect(TT.LParen, '(');
       const field = this.expectIdentifier();
       this.expect(TT.RParen, ')');
-      return { select: kw === 'SUM' ? 'sum' : 'avg', aggregateField: field };
+      return { select: kw.toLowerCase() as AggregateKind, aggregateField: field };
     }
     // bare field list — treat as documents select
     // (skip field names until we hit FROM)

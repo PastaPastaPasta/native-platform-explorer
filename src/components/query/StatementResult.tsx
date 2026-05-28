@@ -19,15 +19,15 @@ import { LoadingCard } from '@ui/LoadingCard';
 import {
   useContract,
   useDocumentsQuery,
-  useDocumentsCount,
-  useDocumentsSum,
-  useDocumentsAverage,
+  useDocumentsAggregate,
+  type AggregateKind,
 } from '@sdk/queries';
 import {
   resolveContractId,
   toDocumentsQuery,
   type ParsedQuery,
 } from '@util/sql-parser';
+import { toError } from '@util/errors';
 import {
   getDocumentTypeSchema,
   getIndicesForType,
@@ -100,25 +100,18 @@ export function StatementResult({
     return toDocumentsQuery(parsed, effectiveContractId);
   }, [parsed, effectiveContractId, aliasError]);
 
-  const docsQ = useDocumentsQuery(queryParams);
-  const countQ = useDocumentsCount(parsed.select === 'count' ? aggregateParams : undefined);
-  const sumQ = useDocumentsSum(
-    parsed.select === 'sum' ? aggregateParams : undefined,
-    parsed.select === 'sum' ? parsed.aggregateField : undefined,
-  );
-  const avgQ = useDocumentsAverage(
-    parsed.select === 'avg' ? aggregateParams : undefined,
-    parsed.select === 'avg' ? parsed.aggregateField : undefined,
-  );
+  const aggregateKind: AggregateKind | undefined =
+    parsed.select === 'documents' ? undefined : parsed.select;
+  const isAggregate = aggregateKind !== undefined;
 
-  const activeAggQ =
-    parsed.select === 'count' ? countQ
-    : parsed.select === 'sum' ? sumQ
-    : parsed.select === 'avg' ? avgQ
-    : null;
+  const docsQ = useDocumentsQuery(queryParams);
+  const aggQ = useDocumentsAggregate(
+    isAggregate ? aggregateParams : undefined,
+    aggregateKind,
+    parsed.aggregateField,
+  );
 
   const limit = parsed.limit ?? 25;
-  const isAggregate = parsed.select !== 'documents';
   const previewParams = isAggregate ? aggregateParams : queryParams;
   const resolvedAlias = contractSource === 'alias' ? parsed.contractAlias : undefined;
 
@@ -212,58 +205,37 @@ export function StatementResult({
 
       {contractQ.isLoading && <LoadingCard />}
 
-      {isAggregate && activeAggQ && (
+      {isAggregate && (
         <AggregateResults
           kind={parsed.select as 'count' | 'sum' | 'avg'}
           aggregateField={parsed.aggregateField}
           groupBy={parsed.groupBy}
           groupBySchemas={groupBySchemas}
-          data={activeAggQ.data as AggregateResultMap | undefined}
-          isLoading={activeAggQ.isLoading}
-          isError={activeAggQ.isError}
-          error={
-            activeAggQ.error instanceof Error
-              ? activeAggQ.error
-              : activeAggQ.error
-              ? new Error(String(activeAggQ.error))
-              : null
-          }
-          refetch={() => activeAggQ.refetch()}
+          data={aggQ.data as AggregateResultMap | undefined}
+          isLoading={aggQ.isLoading}
+          isError={aggQ.isError}
+          error={toError(aggQ.error)}
+          refetch={() => aggQ.refetch()}
         />
       )}
 
       {!isAggregate && queryParams && (
-        paginationEnabled ? (
-          <QueryResults
-            data={docsQ.data}
-            isLoading={docsQ.isLoading}
-            isError={docsQ.isError}
-            error={docsQ.error instanceof Error ? docsQ.error : docsQ.error ? new Error(String(docsQ.error)) : null}
-            refetch={() => docsQ.refetch()}
-            columns={columns}
-            contractId={effectiveContractId!}
-            documentType={parsed.from}
-            limit={limit}
-            cursorStack={cursorStack!}
-            onCursorStackChange={onCursorStackChange!}
-          />
-        ) : (
-          // Multi-statement: pagination doesn't make sense across N parallel
-          // document queries, render a single page without prev/next.
-          <QueryResults
-            data={docsQ.data}
-            isLoading={docsQ.isLoading}
-            isError={docsQ.isError}
-            error={docsQ.error instanceof Error ? docsQ.error : docsQ.error ? new Error(String(docsQ.error)) : null}
-            refetch={() => docsQ.refetch()}
-            columns={columns}
-            contractId={effectiveContractId!}
-            documentType={parsed.from}
-            limit={limit}
-            cursorStack={[undefined]}
-            onCursorStackChange={() => { /* noop in multi mode */ }}
-          />
-        )
+        // Multi-statement runs disable pagination — parallel paginated doc
+        // queries don't have a sensible UX. Single-statement mode gets the
+        // real cursor stack from QueryPage.
+        <QueryResults
+          data={docsQ.data}
+          isLoading={docsQ.isLoading}
+          isError={docsQ.isError}
+          error={toError(docsQ.error)}
+          refetch={() => docsQ.refetch()}
+          columns={columns}
+          contractId={effectiveContractId!}
+          documentType={parsed.from}
+          limit={limit}
+          cursorStack={paginationEnabled ? cursorStack! : [undefined]}
+          onCursorStackChange={paginationEnabled ? onCursorStackChange! : () => {}}
+        />
       )}
 
       {/* Light separator between statements when stacked. */}

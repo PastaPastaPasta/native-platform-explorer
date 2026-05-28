@@ -646,92 +646,69 @@ export function useDocumentsQuery(params: DocumentsQueryParams | undefined) {
 //
 // These ride the wasm-sdk's `getDocuments{Count,Sum,Average}` primitives
 // directly — there's no `evo-sdk` facade wrapper for them yet (3.1.0-dev.7).
-// We unwrap `sdk.getWasmSdkConnected()` once inside each `queryFn`. Skipping
+// We unwrap `sdk.getWasmSdkConnected()` once inside the `queryFn`. Skipping
 // the proof variant for now (`hasProofVariant: false`) — the inspector will
 // show these as "unverified, no proof variant available".
 
-function aggregateKey(prefix: string, params: DocumentsQueryParams | undefined, extra?: string) {
-  if (!params) return [prefix];
-  return [
-    prefix,
-    params.dataContractId,
-    params.documentTypeName,
-    JSON.stringify(params.where ?? []),
-    JSON.stringify(params.orderBy ?? []),
-    JSON.stringify(params.groupBy ?? []),
-    params.limit ?? '',
-    params.startAfter ?? '',
-    extra ?? '',
-  ];
-}
-
-export function useDocumentsCount(params: DocumentsQueryParams | undefined) {
-  const key = aggregateKey('count', params);
-  return useSdkQuery(
-    ['documents', 'count', ...key],
-    async (sdk) => {
-      const w = await sdk.getWasmSdkConnected();
-      return (w as unknown as { getDocumentsCount: (q: unknown) => Promise<Map<string, bigint>> })
-        .getDocumentsCount(params);
-    },
-    {
-      enabled: !!params,
-      staleTime: LIVE,
-      hasProofVariant: false,
-      methodName: 'documents.getDocumentsCount',
-      methodParams: (params ?? {}) as Record<string, unknown>,
-    },
-  );
-}
-
-export function useDocumentsSum(
-  params: DocumentsQueryParams | undefined,
-  sumProperty: string | undefined,
-) {
-  const enabled = !!params && !!sumProperty;
-  const key = aggregateKey('sum', params, sumProperty);
-  return useSdkQuery(
-    ['documents', 'sum', ...key],
-    async (sdk) => {
-      const w = await sdk.getWasmSdkConnected();
-      return (w as unknown as { getDocumentsSum: (q: unknown, p: string) => Promise<Map<string, bigint>> })
-        .getDocumentsSum(params, sumProperty!);
-    },
-    {
-      enabled,
-      staleTime: LIVE,
-      hasProofVariant: false,
-      methodName: 'documents.getDocumentsSum',
-      methodParams: { ...((params ?? {}) as Record<string, unknown>), sumProperty },
-    },
-  );
-}
+export type AggregateKind = 'count' | 'sum' | 'avg';
 
 export interface CountSumPair {
   count: bigint;
   sum: bigint;
 }
 
-export function useDocumentsAverage(
+interface WasmAggregateApi {
+  getDocumentsCount(q: unknown): Promise<Map<string, bigint>>;
+  getDocumentsSum(q: unknown, p: string): Promise<Map<string, bigint>>;
+  getDocumentsAverage(q: unknown, p: string): Promise<Map<string, CountSumPair>>;
+}
+
+const WASM_METHODS: Record<AggregateKind, keyof WasmAggregateApi> = {
+  count: 'getDocumentsCount',
+  sum: 'getDocumentsSum',
+  avg: 'getDocumentsAverage',
+};
+
+export type DocumentsAggregateResult = Map<string, bigint | CountSumPair>;
+
+/** Run a count / sum / average aggregate against the new wasm-sdk primitives.
+ *  Pass `undefined` for `params` or `kind` to keep the hook idle. `field`
+ *  names the integer property to aggregate for SUM/AVG and is ignored for
+ *  COUNT. */
+export function useDocumentsAggregate(
   params: DocumentsQueryParams | undefined,
-  sumProperty: string | undefined,
+  kind: AggregateKind | undefined,
+  field: string | undefined,
 ) {
-  const enabled = !!params && !!sumProperty;
-  const key = aggregateKey('avg', params, sumProperty);
-  return useSdkQuery(
-    ['documents', 'average', ...key],
+  const needsField = kind === 'sum' || kind === 'avg';
+  const enabled = !!params && !!kind && (!needsField || !!field);
+  const methodName = kind ? `documents.${WASM_METHODS[kind]}` : 'documents.aggregate';
+  const methodParams = {
+    ...((params ?? {}) as Record<string, unknown>),
+    ...(needsField ? { sumProperty: field } : {}),
+  };
+  return useSdkQuery<DocumentsAggregateResult>(
+    [
+      'documents',
+      'aggregate',
+      kind ?? '',
+      params?.dataContractId ?? '',
+      params?.documentTypeName ?? '',
+      JSON.stringify(params?.where ?? []),
+      JSON.stringify(params?.orderBy ?? []),
+      JSON.stringify(params?.groupBy ?? []),
+      params?.limit ?? '',
+      field ?? '',
+    ],
     async (sdk) => {
-      const w = await sdk.getWasmSdkConnected();
-      return (w as unknown as { getDocumentsAverage: (q: unknown, p: string) => Promise<Map<string, CountSumPair>> })
-        .getDocumentsAverage(params, sumProperty!);
+      const w = (await sdk.getWasmSdkConnected()) as unknown as WasmAggregateApi;
+      switch (kind!) {
+        case 'count': return w.getDocumentsCount(params);
+        case 'sum':   return w.getDocumentsSum(params, field!);
+        case 'avg':   return w.getDocumentsAverage(params, field!);
+      }
     },
-    {
-      enabled,
-      staleTime: LIVE,
-      hasProofVariant: false,
-      methodName: 'documents.getDocumentsAverage',
-      methodParams: { ...((params ?? {}) as Record<string, unknown>), sumProperty },
-    },
+    { enabled, staleTime: LIVE, hasProofVariant: false, methodName, methodParams },
   );
 }
 

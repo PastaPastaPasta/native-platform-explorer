@@ -141,12 +141,15 @@ function fmtBigInt(n: bigint): string {
 function fmtAvg(p: CountSumPair): string {
   if (p.count === 0n) return '—';
   // BigInt arithmetic with a 4-place fractional component, then back to string.
-  // Avoids Number precision loss for large sums.
+  // Avoids Number precision loss for large sums. BigInt `%` keeps the sign of
+  // the dividend, so for negative averages we strip the sign off `frac` and
+  // let the leading `-` on `whole` carry it.
   const SCALE = 10_000n;
   const scaled = (p.sum * SCALE) / p.count;
   const whole = scaled / SCALE;
   const frac = scaled % SCALE;
-  const fracStr = frac.toString().padStart(4, '0').replace(/0+$/, '');
+  const absFrac = frac < 0n ? -frac : frac;
+  const fracStr = absFrac.toString().padStart(4, '0').replace(/0+$/, '');
   return fracStr ? `${whole}.${fracStr}` : whole.toString();
 }
 

@@ -50,10 +50,6 @@ export function QueryPage() {
   const queries: ParsedQuery[] = parseResult?.ok ? parseResult.queries : [];
   const parseError = parseResult && !parseResult.ok ? parseResult : null;
 
-  // The single-statement editor error surface only accepts the single-
-  // statement parser's shape; reuse the same `{ ok, message, position }`.
-  const editorParseError = parseError;
-
   // ── Handlers ───────────────────────────────────────────────────────
   const handleRun = useCallback(() => {
     setSubmittedSql(sqlText);
@@ -116,7 +112,7 @@ export function QueryPage() {
               value={sqlText}
               onChange={setSqlText}
               onRun={handleRun}
-              parseError={editorParseError}
+              parseError={parseError}
               isLoading={false}
             />
             <QueryPresets onSelect={handlePreset} />
