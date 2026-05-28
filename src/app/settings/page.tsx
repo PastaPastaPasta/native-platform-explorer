@@ -110,9 +110,11 @@ export default function Page() {
               Custom devnets
             </Heading>
             <Text fontSize="sm" color="gray.250">
-              Devnets you&apos;ve added are stored in this browser only. They use testnet
-              derivation paths and custom DAPI addresses. Proof verification is disabled
-              because their quorum sets are not known to the built-in trusted context.
+              Devnets you&apos;ve added are stored in this browser only. They share testnet
+              derivation paths. Non-trusted mode uses the DAPI addresses you provide;
+              trusted mode requires a reachable quorums service URL (default:
+              <code> https://quorums.&lt;name&gt;.networks.dash.org</code>) for proof
+              verification.
             </Text>
             {customDevnets.length === 0 ? (
               <Text fontSize="sm" color="gray.400">
@@ -127,8 +129,10 @@ export default function Page() {
                         {n.name}
                       </Text>
                       <Text fontSize="xs" color="gray.400">
-                        {n.dapiAddresses?.length ?? 0} DAPI address
-                        {n.dapiAddresses?.length === 1 ? '' : 'es'}
+                        {n.dapiAddresses?.length
+                          ? `${n.dapiAddresses.length} DAPI address${n.dapiAddresses.length === 1 ? '' : 'es'}`
+                          : 'no DAPI addresses'}
+                        {n.quorumUrl ? ' · custom quorum URL' : null}
                       </Text>
                     </VStack>
                     <Button

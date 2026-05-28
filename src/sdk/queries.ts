@@ -9,7 +9,6 @@ import {
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { useSdk } from './hooks';
-import { getNetwork } from './networks';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
 import { walkInstance, safeStringify } from '@util/wasm-json';
@@ -26,11 +25,15 @@ export type SdkQueryResult<TData> = UseQueryResult<TData, Error> & {
 };
 
 export function shouldUseProofTransport(
-  network: string,
+  _network: string,
   trusted: boolean,
   hasProofFn: boolean,
 ): boolean {
-  return hasProofFn && (trusted || getNetwork(network).type === 'devnet');
+  // Proof transport is gated on trusted mode only. Devnets used to be
+  // force-routed through the proof variants because they had no other way to
+  // attach a context; dev.7's `EvoSDK.devnetTrusted()` makes them the same
+  // as any other network — proof variant iff `trusted` is on.
+  return hasProofFn && trusted;
 }
 
 interface SdkQueryOpts<TData>
@@ -187,7 +190,6 @@ function useSdkQuery<TData>(
 
       const store = proofStoreRef.current;
       const storeKey = JSON.stringify(fullKey);
-      const isDevnet = getNetwork(network).type === 'devnet';
       const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
       const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
       const t0 = performance.now();
@@ -217,22 +219,6 @@ function useSdkQuery<TData>(
         } catch (err) {
           const proofError = extractErrorMessage(err);
           console.error(`[NPE] ${inspectorMethodName} failed:`, proofError, err);
-          if (isDevnet) {
-            if (store.enabled) {
-              const elapsed = performance.now() - t0;
-              store.record(storeKey, {
-                queryKey: fullKey,
-                methodName: inspectorMethodName,
-                methodParams: methodParams ?? {},
-                hasProofVariant: true,
-                timestamp: Date.now(),
-                durationMs: Math.round(elapsed),
-                status: 'error',
-                error: proofError,
-              });
-            }
-            throw normalizeError(err);
-          }
           // Fall back to the non-proof variant so the explorer still works.
           // Record the entry as a success (data was retrieved) but include the
           // proof-capture error so the inspector can show both: "data succeeded,

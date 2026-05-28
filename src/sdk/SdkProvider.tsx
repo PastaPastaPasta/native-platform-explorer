@@ -12,6 +12,7 @@ import {
 import type { EvoSDK as EvoSDKType } from '@dashevo/evo-sdk';
 import {
   DEFAULT_NETWORK,
+  devnetShortName,
   getNetwork,
   hasNetwork,
   initNetworkRegistry,
@@ -19,25 +20,34 @@ import {
 } from './networks';
 import { getConfig } from '@/config';
 
-type DevnetSdkOptions = {
-  addresses: string[];
-  network: 'testnet';
-  trusted: false;
-};
+/** Shape of the devnet args we hand to `EvoSDK.devnet` / `EvoSDK.devnetTrusted`.
+ *  Exported only so the SdkProvider unit test can pin the resolution rules. */
+export type DevnetSdkArgs =
+  | { trusted: false; name: string; addresses: string[] }
+  | { trusted: true; name: string; quorumUrl?: string };
 
-export function getDevnetSdkOptions(network: Network): DevnetSdkOptions {
+export function getDevnetSdkArgs(network: Network, trusted: boolean): DevnetSdkArgs {
   const cfg = getNetwork(network);
   if (cfg.type !== 'devnet') {
     throw new Error(`Network "${network}" is not a devnet`);
   }
-  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
-    throw new Error(`Devnet "${cfg.name}" has no DAPI addresses configured`);
+  const name = devnetShortName(cfg);
+  if (trusted) {
+    // `EvoSDK.devnetTrusted` discovers DAPI addresses via the quorums service,
+    // so explicit `addresses` from the network config are ignored here. Pass a
+    // `quorumUrl` only when overridden; otherwise the SDK derives the default.
+    return cfg.quorumUrl
+      ? { trusted: true, name, quorumUrl: cfg.quorumUrl }
+      : { trusted: true, name };
   }
-  return {
-    addresses: cfg.dapiAddresses,
-    network: 'testnet',
-    trusted: false,
-  };
+  // Non-trusted devnet: SDK has no way to find masternodes without a trusted
+  // context, so explicit `dapiAddresses` are mandatory.
+  if (!cfg.dapiAddresses || cfg.dapiAddresses.length === 0) {
+    throw new Error(
+      `Devnet "${cfg.name}" has no DAPI addresses configured (required for non-trusted mode)`,
+    );
+  }
+  return { trusted: false, name, addresses: cfg.dapiAddresses };
 }
 
 export type SdkStatus = 'idle' | 'connecting' | 'ready' | 'error';
@@ -93,14 +103,13 @@ async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKT
   if (cfg.type === 'testnet') {
     return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
   }
-  // Devnets share testnet derivation/HRP, but must not attach the testnet
-  // trusted context: the WASM SDK replaces custom addresses with context
-  // addresses, which would route devnet queries back to public testnet.
-  return new EvoSDK(getDevnetSdkOptions(network));
-}
-
-export function getEffectiveTrusted(network: Network, requestedTrusted: boolean): boolean {
-  return getNetwork(network).type === 'devnet' ? false : requestedTrusted;
+  // Devnet: dev.7+ SDK has first-class devnet factories. Trusted mode uses
+  // the quorums service for proof verification + masternode discovery;
+  // non-trusted mode requires explicit DAPI addresses.
+  const args = getDevnetSdkArgs(network, trusted);
+  return args.trusted
+    ? EvoSDK.devnetTrusted(args.name, args.quorumUrl ? { quorumUrl: args.quorumUrl } : undefined)
+    : EvoSDK.devnet(args.name, { addresses: args.addresses });
 }
 
 export function SdkProvider({ children }: { children: ReactNode }) {
@@ -186,20 +195,18 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     void connect(network, trusted);
   }, [connect, network, trusted]);
 
-  const effectiveTrusted = getEffectiveTrusted(network, trusted);
-
   const value = useMemo<SdkContextValue>(
     () => ({
       sdk,
       status,
       network,
-      trusted: effectiveTrusted,
+      trusted,
       error,
       setNetwork,
       setTrusted,
       reconnect,
     }),
-    [sdk, status, network, effectiveTrusted, error, setNetwork, setTrusted, reconnect],
+    [sdk, status, network, trusted, error, setNetwork, setTrusted, reconnect],
   );
 
   return <SdkContext.Provider value={value}>{children}</SdkContext.Provider>;
