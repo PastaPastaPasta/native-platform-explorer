@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   parseSql,
+  parseSqlMulti,
   resolveContractAlias,
   toDocumentsQuery,
   type ParsedQuery,
@@ -35,6 +36,51 @@ describe('parseSql', () => {
     if (!r.ok) return;
     expect(r.query.select).toBe('count');
     expect(r.query.from).toBe('domain');
+  });
+
+  it('parses SUM(field)', () => {
+    const r = parseSql('SELECT SUM(score) FROM grade');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.query.select).toBe('sum');
+    expect(r.query.aggregateField).toBe('score');
+    expect(r.query.from).toBe('grade');
+  });
+
+  it('parses AVG(field) with WHERE', () => {
+    const r = parseSql("SELECT AVG(score) FROM grade WHERE class == 'CS101'");
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.query.select).toBe('avg');
+    expect(r.query.aggregateField).toBe('score');
+    expect(r.query.where).toHaveLength(1);
+  });
+
+  it('parses GROUP BY single field', () => {
+    const r = parseSql('SELECT COUNT(*) FROM grade GROUP BY class');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.query.groupBy).toEqual(['class']);
+  });
+
+  it('allows a trailing semicolon on a single statement', () => {
+    const r = parseSql('SELECT * FROM domain;');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.query.from).toBe('domain');
+  });
+
+  it('parses GROUP BY before ORDER BY', () => {
+    const r = parseSql(
+      "SELECT AVG(score) FROM grade WHERE class == 'CS101' AND semester >= 20241 AND semester <= 20262 GROUP BY semester ORDER BY semester ASC",
+    );
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.query.select).toBe('avg');
+    expect(r.query.aggregateField).toBe('score');
+    expect(r.query.groupBy).toEqual(['semester']);
+    expect(r.query.orderBy).toEqual([{ field: 'semester', direction: 'asc' }]);
+    expect(r.query.where).toHaveLength(3);
   });
 
   it('parses FROM with contract alias (dot notation)', () => {
@@ -157,6 +203,11 @@ describe('parseSql', () => {
     expect(r.query.limit).toBe(50);
   });
 
+  it('rejects multi-statement input from parseSql', () => {
+    const r = parseSql('SELECT * FROM a; SELECT * FROM b');
+    expect(r.ok).toBe(false);
+  });
+
   it('parses a full complex query', () => {
     const r = parseSql(
       "SELECT * FROM dpns.domain WHERE normalizedParentDomainName == 'dash' AND normalizedLabel startsWith 'a' ORDER BY normalizedLabel ASC LIMIT 25",
@@ -183,6 +234,49 @@ describe('parseSql', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.query.where[0]!.field).toBe('$ownerId');
+  });
+});
+
+// ── parseSqlMulti ──────────────────────────────────────────────────────
+
+describe('parseSqlMulti', () => {
+  it('parses a single statement', () => {
+    const r = parseSqlMulti('SELECT * FROM domain');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.queries).toHaveLength(1);
+    expect(r.queries[0]!.from).toBe('domain');
+  });
+
+  it('parses three semicolon-separated statements with whitespace', () => {
+    const r = parseSqlMulti(`
+      SELECT AVG(score) FROM grade WHERE class IN ('CS101','CS202') AND semester BETWEEN 20251 AND 20262;
+      SELECT AVG(score) FROM grade WHERE class IN ('MATH150','MATH250') AND semester BETWEEN 20251 AND 20262;
+      SELECT AVG(score) FROM grade WHERE class == 'ENG101' AND semester BETWEEN 20251 AND 20262;
+    `);
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.queries).toHaveLength(3);
+    expect(r.queries.every((q) => q.select === 'avg')).toBe(true);
+    expect(r.queries.every((q) => q.aggregateField === 'score')).toBe(true);
+  });
+
+  it('tolerates trailing semicolons and multiple separators', () => {
+    const r = parseSqlMulti('SELECT * FROM a;; SELECT * FROM b;;;');
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.queries).toHaveLength(2);
+    expect(r.queries.map((q) => q.from)).toEqual(['a', 'b']);
+  });
+
+  it('errors on empty input', () => {
+    const r = parseSqlMulti('');
+    expect(r.ok).toBe(false);
+  });
+
+  it('aborts at the first failed statement', () => {
+    const r = parseSqlMulti('SELECT * FROM a; not valid sql; SELECT * FROM b');
+    expect(r.ok).toBe(false);
   });
 
   it('handles boolean values', () => {

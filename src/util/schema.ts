@@ -41,6 +41,20 @@ export function getDocumentTypeSchema(contractSchema: unknown, type: string): Sc
     : undefined;
 }
 
+/** Return the JSON-schema fragment for a single property on a document type,
+ *  or undefined if the property isn't declared. Used by the aggregate-results
+ *  panel to type-aware-decode GROUP BY keys. */
+export function getPropertySchema(
+  docSchema: Schema,
+  fieldName: string,
+): Schema {
+  if (!docSchema) return undefined;
+  const props = (docSchema.properties as Record<string, unknown> | undefined) ?? {};
+  const entry = props[fieldName];
+  if (!entry || typeof entry !== 'object') return undefined;
+  return entry as Schema;
+}
+
 export function getIndicesForType(docSchema: Schema): SchemaIndex[] {
   if (!docSchema) return [];
   const raw = (docSchema.indices ?? docSchema.$indices ?? []) as unknown;

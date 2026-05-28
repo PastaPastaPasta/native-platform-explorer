@@ -3,8 +3,18 @@ import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
+export type AggregateKind = 'count' | 'sum' | 'avg';
+
 export interface ParsedQuery {
-  select: 'documents' | 'count';
+  /** `'documents'` is the regular SELECT *; the others are aggregate queries
+   *  that hit the new wasm-sdk `getDocuments{Count,Sum,Average}` primitives. */
+  select: 'documents' | AggregateKind;
+  /** For SUM(field) / AVG(field) — the integer property to aggregate. Always
+   *  unset for COUNT / documents. */
+  aggregateField?: string;
+  /** Optional GROUP BY field list. Drives the SDK's `groupBy` knob (Aggregate
+   *  / PerInValue / RangeDistinct / Compound shapes). */
+  groupBy?: string[];
   from: string;
   contractAlias?: string;
   where: ParsedCondition[];
@@ -22,6 +32,10 @@ export type ParseResult =
   | { ok: true; query: ParsedQuery }
   | { ok: false; message: string; position: number };
 
+export type MultiParseResult =
+  | { ok: true; queries: ParsedQuery[] }
+  | { ok: false; message: string; position: number };
+
 // ── Tokenizer ──────────────────────────────────────────────────────────
 
 const TT = {
@@ -35,7 +49,8 @@ const TT = {
   Comma: 7,
   Star: 8,
   Dot: 9,
-  EOF: 10,
+  Semicolon: 10,
+  EOF: 11,
 } as const;
 
 type TT = (typeof TT)[keyof typeof TT];
@@ -49,7 +64,7 @@ interface Token {
 const KEYWORDS = new Set([
   'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'ORDER', 'BY', 'GROUP',
   'LIMIT', 'ASC', 'DESC', 'BETWEEN', 'IN', 'STARTS', 'WITH',
-  'COUNT', 'NOT', 'NULL', 'TRUE', 'FALSE',
+  'COUNT', 'SUM', 'AVG', 'NOT', 'NULL', 'TRUE', 'FALSE',
 ]);
 
 function tokenize(sql: string): Token[] {
@@ -69,6 +84,7 @@ function tokenize(sql: string): Token[] {
     if (ch === ',') { tokens.push({ type: TT.Comma, value: ',', pos }); i++; continue; }
     if (ch === '*') { tokens.push({ type: TT.Star, value: '*', pos }); i++; continue; }
     if (ch === '.') { tokens.push({ type: TT.Dot, value: '.', pos }); i++; continue; }
+    if (ch === ';') { tokens.push({ type: TT.Semicolon, value: ';', pos }); i++; continue; }
 
     // operators: >=, <=, ==, !=, >, <, =
     if (ch === '>' || ch === '<' || ch === '=' || ch === '!') {
@@ -162,6 +178,9 @@ class Parser {
   parse(): ParseResult {
     try {
       const query = this.parseQuery();
+      // Allow a single trailing `;` so users can paste statements that
+      // come from a `;`-terminated multi-statement source.
+      if (this.peek().type === TT.Semicolon) this.advance();
       this.expect(TT.EOF, 'end of query');
       return { ok: true, query };
     } catch (e) {
@@ -172,9 +191,33 @@ class Parser {
     }
   }
 
+  parseMulti(): MultiParseResult {
+    try {
+      const queries: ParsedQuery[] = [];
+      // Allow leading whitespace / empty input.
+      if (this.peek().type === TT.EOF) {
+        return { ok: false, message: 'Empty query.', position: 0 };
+      }
+      while (this.peek().type !== TT.EOF) {
+        queries.push(this.parseQuery());
+        // Statements are `;`-separated; trailing `;` is optional.
+        while (this.peek().type === TT.Semicolon) this.advance();
+      }
+      if (queries.length === 0) {
+        return { ok: false, message: 'No queries found.', position: 0 };
+      }
+      return { ok: true, queries };
+    } catch (e) {
+      if (e instanceof ParseError) {
+        return { ok: false, message: e.message, position: e.position };
+      }
+      throw e;
+    }
+  }
+
   private parseQuery(): ParsedQuery {
     this.expectKeyword('SELECT');
-    const select = this.parseSelectList();
+    const { select, aggregateField } = this.parseSelectList();
 
     this.expectKeyword('FROM');
     const { docType, alias } = this.parseFromClause();
@@ -183,6 +226,13 @@ class Parser {
     if (this.peekKeyword('WHERE')) {
       this.advance();
       where = this.parseConditions();
+    }
+
+    let groupBy: string[] | undefined;
+    if (this.peekKeyword('GROUP')) {
+      this.advance();
+      this.expectKeyword('BY');
+      groupBy = this.parseFieldList();
     }
 
     let orderBy: ParsedQuery['orderBy'] = [];
@@ -198,27 +248,43 @@ class Parser {
       limit = this.expectNumber();
     }
 
-    return { select, from: docType, contractAlias: alias, where, orderBy, limit };
+    return { select, aggregateField, groupBy, from: docType, contractAlias: alias, where, orderBy, limit };
   }
 
-  private parseSelectList(): 'documents' | 'count' {
+  private parseSelectList(): { select: ParsedQuery['select']; aggregateField?: string } {
     if (this.peek().type === TT.Star) {
       this.advance();
-      return 'documents';
+      return { select: 'documents' };
     }
     if (this.peekKeyword('COUNT')) {
       this.advance();
       this.expect(TT.LParen, '(');
       this.expect(TT.Star, '*');
       this.expect(TT.RParen, ')');
-      return 'count';
+      return { select: 'count' };
+    }
+    if (this.peekKeyword('SUM') || this.peekKeyword('AVG')) {
+      const kw = this.advance().value;
+      this.expect(TT.LParen, '(');
+      const field = this.expectIdentifier();
+      this.expect(TT.RParen, ')');
+      return { select: kw === 'SUM' ? 'sum' : 'avg', aggregateField: field };
     }
     // bare field list — treat as documents select
     // (skip field names until we hit FROM)
     while (!this.peekKeyword('FROM') && this.peek().type !== TT.EOF) {
       this.advance();
     }
-    return 'documents';
+    return { select: 'documents' };
+  }
+
+  private parseFieldList(): string[] {
+    const fields = [this.parseFieldPath()];
+    while (this.peek().type === TT.Comma) {
+      this.advance();
+      fields.push(this.parseFieldPath());
+    }
+    return fields;
   }
 
   private parseFromClause(): { docType: string; alias?: string } {
@@ -413,6 +479,14 @@ export function parseSql(sql: string): ParseResult {
   return new Parser(tokens).parse();
 }
 
+/** Parse one or more `;`-separated queries. Trailing `;` is allowed; an
+ *  empty trailing statement is ignored. Errors point at the first failed
+ *  statement and abort parsing — same as multi-statement Postgres input. */
+export function parseSqlMulti(sql: string): MultiParseResult {
+  const tokens = tokenize(sql.trim());
+  return new Parser(tokens).parseMulti();
+}
+
 // ── Contract alias resolution ──────────────────────────────────────────
 
 const ALIAS_MAP = new Map<string, string>(
@@ -452,6 +526,7 @@ export function toDocumentsQuery(
     orderBy: parsed.orderBy.length ? parsed.orderBy.map((o) => [o.field, o.direction]) : undefined,
     limit: parsed.limit,
     startAfter: overrides?.startAfter,
+    groupBy: parsed.groupBy,
   };
 }
 
