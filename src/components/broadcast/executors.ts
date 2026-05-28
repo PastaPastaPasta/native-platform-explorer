@@ -7,7 +7,7 @@ import {
   Document,
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
-import type { EvoSDK } from '@dashevo/evo-sdk';
+import type { EvoSDK, Identity } from '@dashevo/evo-sdk';
 import type { ExplorerSigner, KeySelectionCriteria } from '@/signer/types';
 import type { ContractRegisterOptions } from './forms/ContractRegister';
 import type { ContractUpdateOptions } from './forms/ContractUpdate';
@@ -161,17 +161,14 @@ export async function executeContractUpdate(args: {
 
 // ─── documents ──────────────────────────────────────────────────────────
 
-async function buildDocument(
-  sdk: EvoSDK,
+function buildDocument(
   contractId: string,
   documentType: string,
   ownerId: string,
   properties: Record<string, unknown>,
   documentId?: string,
   revision?: bigint,
-): Promise<Document> {
-  const platformVersion = await getPlatformVersion(sdk);
-  void platformVersion;
+): Document {
   return new Document({
     properties,
     documentTypeName: documentType,
@@ -180,6 +177,23 @@ async function buildDocument(
     id: documentId,
     revision: revision ?? 1n,
   });
+}
+
+async function fetchExistingDocument(
+  sdk: EvoSDK,
+  contractId: string,
+  documentType: string,
+  documentId: string,
+): Promise<Document> {
+  const existing = await sdk.documents.get(contractId, documentType, documentId);
+  if (!existing) throw new Error(`Document ${documentId} not found.`);
+  return existing;
+}
+
+async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<Identity> {
+  const identity = await sdk.identities.fetch(identityId);
+  if (!identity) throw new Error(`Identity ${identityId} not found.`);
+  return identity;
 }
 
 export async function executeDocumentCreate(args: {
@@ -193,8 +207,7 @@ export async function executeDocumentCreate(args: {
     minSecurityLevel: 'HIGH',
   });
 
-  const document = await buildDocument(
-    sdk,
+  const document = buildDocument(
     options.contractId,
     options.documentType,
     material.identityId,
@@ -228,8 +241,7 @@ export async function executeDocumentReplace(args: {
     minSecurityLevel: 'HIGH',
   });
 
-  const document = await buildDocument(
-    sdk,
+  const document = buildDocument(
     options.contractId,
     options.documentType,
     material.identityId,
@@ -297,12 +309,12 @@ export async function executeDocumentTransfer(args: {
     minSecurityLevel: 'HIGH',
   });
 
-  const existing = await sdk.documents.get(
+  const existing = await fetchExistingDocument(
+    sdk,
     options.contractId,
     options.documentType,
     options.documentId,
   );
-  if (!existing) throw new Error(`Document ${options.documentId} not found.`);
 
   await sdk.documents.transfer({
     document: existing,
@@ -334,12 +346,12 @@ export async function executeDocumentSetPrice(args: {
     minSecurityLevel: 'HIGH',
   });
 
-  const existing = await sdk.documents.get(
+  const existing = await fetchExistingDocument(
+    sdk,
     options.contractId,
     options.documentType,
     options.documentId,
   );
-  if (!existing) throw new Error(`Document ${options.documentId} not found.`);
 
   await sdk.documents.setPrice({
     document: existing,
@@ -369,12 +381,12 @@ export async function executeDocumentPurchase(args: {
     minSecurityLevel: 'HIGH',
   });
 
-  const existing = await sdk.documents.get(
+  const existing = await fetchExistingDocument(
+    sdk,
     options.contractId,
     options.documentType,
     options.documentId,
   );
-  if (!existing) throw new Error(`Document ${options.documentId} not found.`);
 
   await sdk.documents.purchase({
     document: existing,
@@ -406,8 +418,7 @@ export async function executeIdentityCreditTransfer(args: {
   const { sdk, signer, options } = args;
   const material = await prepareSigning(signer, { purpose: 'TRANSFER' });
 
-  const identity = await sdk.identities.fetch(material.identityId);
-  if (!identity) throw new Error(`Identity ${material.identityId} not found.`);
+  const identity = await fetchExistingIdentity(sdk, material.identityId);
 
   const result = (await sdk.identities.creditTransfer({
     identity,
@@ -436,8 +447,7 @@ export async function executeIdentityCreditWithdrawal(args: {
   const { sdk, signer, options } = args;
   const material = await prepareSigning(signer, { purpose: 'TRANSFER' });
 
-  const identity = await sdk.identities.fetch(material.identityId);
-  if (!identity) throw new Error(`Identity ${material.identityId} not found.`);
+  const identity = await fetchExistingIdentity(sdk, material.identityId);
 
   const newBalance = await sdk.identities.creditWithdrawal({
     identity,
@@ -467,8 +477,7 @@ export async function executeIdentityUpdateKeys(args: {
     minSecurityLevel: 'MASTER',
   });
 
-  const identity = await sdk.identities.fetch(material.identityId);
-  if (!identity) throw new Error(`Identity ${material.identityId} not found.`);
+  const identity = await fetchExistingIdentity(sdk, material.identityId);
 
   const addPublicKeys: IdentityPublicKeyInCreation[] | undefined =
     options.addPublicKeysJson && options.addPublicKeysJson.length > 0
@@ -526,8 +535,7 @@ export async function executeDpnsRegister(args: {
     minSecurityLevel: 'HIGH',
   });
 
-  const identity = await sdk.identities.fetch(material.identityId);
-  if (!identity) throw new Error(`Identity ${material.identityId} not found.`);
+  const identity = await fetchExistingIdentity(sdk, material.identityId);
 
   await sdk.dpns.registerName({
     label: options.label,

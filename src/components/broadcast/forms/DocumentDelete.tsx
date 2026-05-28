@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Box, Input, Text, VStack } from '@chakra-ui/react';
-import { ContractPicker } from '../ContractPicker';
+import { Text, VStack } from '@chakra-ui/react';
+import { DocumentRefFields } from './DocumentRefFields';
 import type { OperationFormProps } from '../OperationShell';
 import { isBase58Identifier } from '@util/identifier';
 
@@ -39,40 +39,15 @@ export function DocumentDeleteForm({
 
   return (
     <VStack align="stretch" spacing={4}>
-      <Box>
-        <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
-          Contract
-        </Text>
-        <ContractPicker value={contractId} onChange={setContractId} />
-      </Box>
-      <Box>
-        <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
-          Document type
-        </Text>
-        <Input
-          size="sm"
-          value={documentType}
-          onChange={(e) => setDocumentType(e.target.value)}
-          fontFamily="mono"
-          bg="gray.800"
-          borderColor="gray.700"
-        />
-      </Box>
-      <Box>
-        <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
-          Document ID
-        </Text>
-        <Input
-          size="sm"
-          value={documentId}
-          onChange={(e) => setDocumentId(e.target.value)}
-          fontFamily="mono"
-          bg="gray.800"
-          borderColor={
-            documentId && !isBase58Identifier(documentId.trim()) ? 'danger' : 'gray.700'
-          }
-        />
-      </Box>
+      <DocumentRefFields
+        contractId={contractId}
+        documentType={documentType}
+        documentId={documentId}
+        onContractIdChange={setContractId}
+        onDocumentTypeChange={setDocumentType}
+        onDocumentIdChange={setDocumentId}
+        validateDocumentId
+      />
       <Text fontSize="xs" color="warning">
         Deleting a document is permanent — there is no undo.
       </Text>
