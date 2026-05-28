@@ -59,6 +59,11 @@ export const DEVNET_PALOMA: NetworkConfig = {
   name: 'devnet-paloma',
   label: 'Devnet-paloma',
   devnetName: 'paloma',
+  // Plaintext on :8080 — the service does not speak TLS on this port. The
+  // SDK's HTTPS gate explicitly allows http:// for devnet/regtest. The
+  // default `https://quorums.paloma.networks.dash.org` derived by the SDK
+  // does not have a DNS record yet, so we point at the IP directly.
+  quorumUrl: 'http://44.238.203.84:8080',
   dapiAddresses: [
     'https://68.67.122.198:1443',
     'https://68.67.122.199:1443',
