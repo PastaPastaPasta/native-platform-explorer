@@ -9,9 +9,14 @@ import { isBase58Identifier } from '@util/identifier';
 export interface DpnsRegisterOptions {
   label: string;
   identityId: string;
+  network: 'mainnet' | 'testnet';
 }
 
-export function DpnsRegisterForm({ signer, onOptionsChange }: OperationFormProps<DpnsRegisterOptions>) {
+export function DpnsRegisterForm({
+  signer,
+  network,
+  onOptionsChange,
+}: OperationFormProps<DpnsRegisterOptions>) {
   const [identityId, setIdentityId] = useState(signer.identityId);
   const [label, setLabel] = useState('');
 
@@ -23,9 +28,13 @@ export function DpnsRegisterForm({ signer, onOptionsChange }: OperationFormProps
       onOptionsChange(null);
       return;
     }
-    onOptionsChange({ label: label.trim().toLowerCase(), identityId: identityId.trim() });
+    onOptionsChange({
+      label: label.trim().toLowerCase(),
+      identityId: identityId.trim(),
+      network,
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [identityId, label]);
+  }, [identityId, label, network]);
 
   return (
     <VStack align="stretch" spacing={3}>
@@ -44,7 +53,8 @@ export function DpnsRegisterForm({ signer, onOptionsChange }: OperationFormProps
       </FormControl>
       <FormControl>
         <FormLabel fontSize="xs" color="gray.250">
-          Label (will be registered as {label || '…'}.dash)
+          Label (will be registered as {label || '…'}.
+          {network === 'mainnet' ? 'dash' : 'tdash'})
         </FormLabel>
         <Input
           size="sm"

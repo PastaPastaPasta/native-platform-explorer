@@ -54,6 +54,17 @@ export function ContractLanding() {
               }
               buildHref={(v) => `/contract/?id=${encodeURIComponent(v)}`}
             />
+            <HStack>
+              <Button
+                as={NextLink}
+                href="/broadcast/?op=contract.register"
+                size="sm"
+                colorScheme="blue"
+                variant="outline"
+              >
+                Register a new contract →
+              </Button>
+            </HStack>
           </VStack>
         </InfoBlock>
 

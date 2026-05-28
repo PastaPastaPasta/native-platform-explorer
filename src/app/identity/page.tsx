@@ -31,6 +31,7 @@ import { IdentityLanding } from '@components/identity/IdentityLanding';
 import { AliasesList } from '@components/data/AliasesList';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { ProofFailureBanner } from '@components/data/ProofFailureBanner';
+import { WriteActions } from '@components/broadcast/WriteActions';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useIdentity,
@@ -177,6 +178,33 @@ function Content() {
               );
             })()}
             <ViewedIdentitiesBanner identityId={id} />
+            <WriteActions
+              size="xs"
+              title="Actions"
+              links={[
+                { op: 'identity.topUp', label: 'Top up' },
+                {
+                  op: 'identity.creditTransfer',
+                  label: 'Transfer credits',
+                  ownsTo: id,
+                },
+                {
+                  op: 'identity.creditWithdrawal',
+                  label: 'Withdraw',
+                  ownsTo: id,
+                },
+                {
+                  op: 'identity.updateKeys',
+                  label: 'Update keys',
+                  ownsTo: id,
+                },
+                {
+                  op: 'dpns.registerName',
+                  label: 'Register name',
+                  ownsTo: id,
+                },
+              ]}
+            />
 
             <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">

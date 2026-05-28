@@ -27,6 +27,8 @@ import { getDerivationNetwork } from '@sdk/networks';
 import { createExtensionSigner, detectExtension } from '@/signer/extension';
 import { createMnemonicSigner } from '@/signer/mnemonic';
 import { createWifSigner } from '@/signer/wif';
+import { BridgeImportPane } from '@components/wallet/BridgeImportPane';
+import { BridgeLaunchCard } from '@components/wallet/BridgeLaunchCard';
 import { getConfig } from '@/config';
 import { isBase58Identifier } from '@util/identifier';
 
@@ -263,17 +265,21 @@ export default function Page() {
         <InfoBlock>
           <Tabs variant="soft-rounded" colorScheme="blue">
             <TabList flexWrap="wrap" gap={2} borderBottom="none">
+              <Tab fontSize="sm">Bridge backup</Tab>
               <Tab fontSize="sm">Extension</Tab>
               <Tab fontSize="sm">Mnemonic</Tab>
               <Tab fontSize="sm">WIF</Tab>
             </TabList>
             <TabPanels>
+              <TabPanel px={0}><BridgeImportPane /></TabPanel>
               <TabPanel px={0}><ExtensionPane /></TabPanel>
               <TabPanel px={0}><MnemonicPane /></TabPanel>
               <TabPanel px={0}><WifPane /></TabPanel>
             </TabPanels>
           </Tabs>
         </InfoBlock>
+
+        <BridgeLaunchCard />
       </VStack>
     </Container>
   );

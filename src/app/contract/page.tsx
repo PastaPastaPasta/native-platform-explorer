@@ -26,6 +26,7 @@ import { DataContractDigestCard } from '@components/contract/DataContractDigestC
 import { ContractLanding } from '@components/contract/ContractLanding';
 import { ContractTokensTab } from '@components/contract/ContractTokensTab';
 import { CodeBlock } from '@components/data/CodeBlock';
+import { WriteActions } from '@components/broadcast/WriteActions';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useContract,
@@ -88,6 +89,23 @@ function Content() {
               groupCount={groups.length}
             />
 
+            <WriteActions
+              title="Actions"
+              links={[
+                {
+                  op: 'document.create',
+                  label: 'Create a document',
+                  params: { contract: id },
+                },
+                {
+                  op: 'contract.update',
+                  label: 'Update contract',
+                  params: { contract: id },
+                  ownsTo: contract.ownerId ?? undefined,
+                },
+              ]}
+            />
+
             <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">
                 <Tab fontSize="sm">Schema</Tab>
@@ -123,15 +141,27 @@ function Content() {
                       ) : (
                         docTypes.map((t) => (
                           <WrapItem key={t}>
-                            <Button
-                              as={NextLink}
-                              href={`/contract/documents/?id=${encodeURIComponent(id)}&type=${encodeURIComponent(t)}`}
-                              size="sm"
-                              variant="outline"
-                              colorScheme="blue"
-                            >
-                              {t}
-                            </Button>
+                            <HStack spacing={1}>
+                              <Button
+                                as={NextLink}
+                                href={`/contract/documents/?id=${encodeURIComponent(id)}&type=${encodeURIComponent(t)}`}
+                                size="sm"
+                                variant="outline"
+                                colorScheme="blue"
+                              >
+                                {t}
+                              </Button>
+                              <Button
+                                as={NextLink}
+                                href={`/broadcast/?op=document.create&contract=${encodeURIComponent(id)}&type=${encodeURIComponent(t)}`}
+                                size="sm"
+                                variant="ghost"
+                                colorScheme="blue"
+                                title={`Create a ${t} document`}
+                              >
+                                + new
+                              </Button>
+                            </HStack>
                           </WrapItem>
                         ))
                       )}

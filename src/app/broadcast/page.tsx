@@ -1,9 +1,10 @@
 'use client';
 
-import { Suspense, useMemo } from 'react';
+import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NextLink from 'next/link';
 import {
+  Box,
   Button,
   Grid,
   Heading,
@@ -16,27 +17,107 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { OperationShell } from '@components/broadcast/OperationShell';
-import { OPERATIONS } from '@components/broadcast/operations';
+import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
+import {
+  findOperationById,
+  GROUPS,
+  operationsInGroup,
+  type OperationEntry,
+  type OperationGroup,
+} from '@components/broadcast/operations';
 import { getConfig } from '@/config';
 
-function Content() {
+function GroupCard({
+  group,
+  onPick,
+}: {
+  group: { id: OperationGroup; label: string; blurb: string };
+  onPick: (entry: OperationEntry) => void;
+}) {
+  const ops = operationsInGroup(group.id);
+  if (ops.length === 0) return null;
+  return (
+    <InfoBlock>
+      <VStack align="stretch" spacing={3}>
+        <Box>
+          <Heading size="sm" color="gray.100">
+            {group.label}
+          </Heading>
+          <Text fontSize="xs" color="gray.400" mt={0.5}>
+            {group.blurb}
+          </Text>
+        </Box>
+        <VStack align="stretch" spacing={2}>
+          {ops.map((o) => (
+            <Box
+              key={o.id}
+              as="button"
+              textAlign="left"
+              borderRadius="md"
+              border="1px solid"
+              borderColor="gray.700"
+              p={3}
+              _hover={{ borderColor: 'brand.light', bg: 'rgba(0,141,228,0.05)' }}
+              onClick={() => onPick(o)}
+            >
+              <Text fontSize="sm" color="gray.100" fontWeight={500}>
+                {o.label}
+              </Text>
+              <Text fontSize="xs" color="gray.400" mt={0.5}>
+                {o.blurb}
+              </Text>
+            </Box>
+          ))}
+        </VStack>
+      </VStack>
+    </InfoBlock>
+  );
+}
+
+function Hub() {
   const router = useRouter();
   const params = useSearchParams();
-  const facade = params.get('facade') ?? 'identities';
-  const op = params.get('op') ?? '';
+  const opId = params.get('op');
+  const selected = findOperationById(opId);
 
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Broadcast' }]);
 
-  const facades = useMemo(() => Array.from(new Set(OPERATIONS.map((o) => o.facade))), []);
-  const operations = OPERATIONS.filter((o) => o.facade === facade);
-  const selected = OPERATIONS.find((o) => o.facade === facade && o.op === op);
-
-  const pickOp = (nextFacade: string, nextOp: string) => {
-    const qp = new URLSearchParams();
-    qp.set('facade', nextFacade);
-    qp.set('op', nextOp);
+  const pickOp = (entry: OperationEntry) => {
+    // Preserve any contextual query params already in the URL (contract, type, id).
+    const qp = new URLSearchParams(params.toString());
+    qp.set('op', entry.id);
     router.push(`/broadcast/?${qp.toString()}`);
   };
+
+  const clearOp = () => {
+    const qp = new URLSearchParams(params.toString());
+    qp.delete('op');
+    router.push(qp.toString() ? `/broadcast/?${qp.toString()}` : '/broadcast/');
+  };
+
+  if (selected) {
+    return (
+      <Container py={{ base: 4, md: 6 }}>
+        <VStack align="stretch" spacing={4}>
+          <HStack justify="space-between" align="flex-start" flexWrap="wrap">
+            <VStack align="flex-start" spacing={1}>
+              <Heading size="md" color="gray.100">
+                Broadcast console
+              </Heading>
+              <Text fontSize="sm" color="gray.250">
+                Build, sign, and broadcast a state transition.
+              </Text>
+            </VStack>
+            <Button size="sm" variant="ghost" onClick={clearOp}>
+              ← All operations
+            </Button>
+          </HStack>
+          <SignerStatusCard />
+          <OperationShell descriptor={selected.descriptor} />
+        </VStack>
+      </Container>
+    );
+  }
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -47,94 +128,24 @@ function Content() {
               Broadcast console
             </Heading>
             <Text fontSize="sm" color="gray.250">
-              Build, sign, and broadcast a state transition. Every operation runs through
-              the shared Build → Review → Sign → Broadcast → Result flow.
+              Pick an operation. Every form runs through the same Build → Review
+              → Sign → Broadcast → Result flow with mainnet guardrails.
             </Text>
+            <HStack pt={2} spacing={2}>
+              <Button as={NextLink} href="/wallet/" size="sm" variant="outline">
+                Manage signer
+              </Button>
+            </HStack>
           </VStack>
         </InfoBlock>
-
-        <Grid templateColumns={{ base: '1fr', md: '220px 1fr' }} gap={4}>
-          <VStack align="stretch" spacing={2}>
-            <InfoBlock>
-              <Text fontSize="xs" color="gray.400" textTransform="uppercase" mb={2}>
-                Facades
-              </Text>
-              <VStack align="stretch" spacing={1}>
-                {facades.map((f) => (
-                  <Button
-                    key={f}
-                    size="sm"
-                    variant={f === facade ? 'solid' : 'outline'}
-                    colorScheme="blue"
-                    onClick={() =>
-                      pickOp(
-                        f,
-                        OPERATIONS.find((o) => o.facade === f)?.op ?? '',
-                      )
-                    }
-                  >
-                    {f}
-                  </Button>
-                ))}
-              </VStack>
-            </InfoBlock>
-            <InfoBlock>
-              <Text fontSize="xs" color="gray.400" textTransform="uppercase" mb={2}>
-                Operations
-              </Text>
-              <VStack align="stretch" spacing={1}>
-                {operations.map((o) => (
-                  <Button
-                    key={o.op}
-                    size="sm"
-                    variant={o.op === op ? 'solid' : 'outline'}
-                    colorScheme="blue"
-                    onClick={() => pickOp(o.facade, o.op)}
-                  >
-                    {o.op}
-                  </Button>
-                ))}
-              </VStack>
-            </InfoBlock>
-            <InfoBlock>
-              <Text fontSize="xs" color="gray.400" mb={2}>
-                Need a signer?
-              </Text>
-              <Button as={NextLink} href="/wallet/" size="sm" variant="outline">
-                Open /wallet
-              </Button>
-            </InfoBlock>
-          </VStack>
-
-          {selected ? (
-            <OperationShell descriptor={selected.descriptor} />
-          ) : (
-            <InfoBlock>
-              <VStack align="flex-start" spacing={2}>
-                <Heading size="sm" color="gray.100">
-                  Pick an operation
-                </Heading>
-                <Text fontSize="sm" color="gray.250">
-                  Choose a facade and operation from the left rail. The explorer ships
-                  with a representative set of write flows; the remaining SDK write
-                  methods follow the same OperationShell pattern and are tracked as
-                  follow-up work.
-                </Text>
-                <HStack spacing={2} flexWrap="wrap" pt={2}>
-                  {OPERATIONS.map((o) => (
-                    <Button
-                      key={`${o.facade}:${o.op}`}
-                      size="sm"
-                      variant="outline"
-                      onClick={() => pickOp(o.facade, o.op)}
-                    >
-                      {o.facade}.{o.op}
-                    </Button>
-                  ))}
-                </HStack>
-              </VStack>
-            </InfoBlock>
-          )}
+        <SignerStatusCard />
+        <Grid
+          templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', xl: 'repeat(3, 1fr)' }}
+          gap={4}
+        >
+          {GROUPS.map((g) => (
+            <GroupCard key={g.id} group={g} onPick={pickOp} />
+          ))}
         </Grid>
       </VStack>
     </Container>
@@ -148,7 +159,7 @@ export default function Page() {
   }
   return (
     <Suspense fallback={null}>
-      <Content />
+      <Hub />
     </Suspense>
   );
 }

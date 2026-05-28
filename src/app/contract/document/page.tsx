@@ -26,6 +26,7 @@ import { DateBlock } from '@components/data/DateBlock';
 import { NotActive } from '@components/data/NotActive';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useDocument } from '@sdk/queries';
+import { WriteActions } from '@components/broadcast/WriteActions';
 import { shortId } from '@util/identifier';
 import { idToString, readProp } from '@util/sdk-shape';
 
@@ -112,6 +113,40 @@ function Content() {
                     }
                   />
                 </HStack>
+                <WriteActions
+                  size="xs"
+                  links={[
+                    {
+                      op: 'document.replace',
+                      label: 'Edit',
+                      params: { contract: id, type, id: docId },
+                      ownsTo: owner ?? undefined,
+                    },
+                    {
+                      op: 'document.transfer',
+                      label: 'Transfer',
+                      params: { contract: id, type, id: docId },
+                      ownsTo: owner ?? undefined,
+                    },
+                    {
+                      op: 'document.setPrice',
+                      label: 'Set price',
+                      params: { contract: id, type, id: docId },
+                      ownsTo: owner ?? undefined,
+                    },
+                    {
+                      op: 'document.delete',
+                      label: 'Delete',
+                      params: { contract: id, type, id: docId },
+                      ownsTo: owner ?? undefined,
+                    },
+                    {
+                      op: 'document.purchase',
+                      label: 'Purchase',
+                      params: { contract: id, type, id: docId },
+                    },
+                  ]}
+                />
               </VStack>
             </InfoBlock>
 
