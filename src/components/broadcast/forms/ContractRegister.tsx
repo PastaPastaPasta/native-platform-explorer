@@ -74,7 +74,7 @@ export function ContractRegisterForm({
   signer,
   onOptionsChange,
 }: OperationFormProps<ContractRegisterOptions>) {
-  const [ownerId, setOwnerId] = useState(signer.identityId);
+  const ownerId = signer.identityId;
   const [schemasText, setSchemasText] = useState(() =>
     JSON.stringify(SAMPLE_SCHEMA, null, 2),
   );
@@ -120,14 +120,15 @@ export function ContractRegisterForm({
         <Input
           size="sm"
           value={ownerId}
-          onChange={(e) => setOwnerId(e.target.value)}
+          isReadOnly
           fontFamily="mono"
           bg="gray.800"
           borderColor="gray.700"
+          opacity={0.85}
         />
         <Text fontSize="xs" color="gray.400" mt={1}>
-          Pre-filled from your connected signer. The contract will be owned by
-          this identity.
+          The contract will be owned by the connected signer. Disconnect on
+          /wallet and reconnect as a different identity to change this.
         </Text>
       </Box>
 

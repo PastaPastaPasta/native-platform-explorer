@@ -115,3 +115,29 @@ describe('issuesToErrorMap', () => {
     expect(map).toEqual({ '/foo': 'bad', '/bar/baz': 'worse' });
   });
 });
+
+describe('validateAgainstSchema — additional coverage', () => {
+  it('treats integer 0 as a present value, not "missing"', () => {
+    const issues = validateAgainstSchema(
+      {
+        type: 'object',
+        properties: { count: { type: 'integer' } },
+        required: ['count'],
+      },
+      { count: 0 },
+    );
+    expect(issues).toEqual([]);
+  });
+
+  it('treats boolean false as a present value', () => {
+    const issues = validateAgainstSchema(
+      {
+        type: 'object',
+        properties: { flag: { type: 'boolean' } },
+        required: ['flag'],
+      },
+      { flag: false },
+    );
+    expect(issues).toEqual([]);
+  });
+});

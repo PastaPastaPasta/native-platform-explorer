@@ -1,13 +1,19 @@
 'use client';
 
-import { Button, HStack, Heading, Text, VStack } from '@chakra-ui/react';
+import { Button, Code, HStack, Heading, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useSdk } from '@sdk/hooks';
 import { useSigner } from '@/signer/SignerProvider';
 
-const BRIDGE_BASE_URL =
-  process.env.NEXT_PUBLIC_BRIDGE_URL?.replace(/\/+$/, '') ||
-  'https://platform-bridge.dash.org';
+// We deliberately do not ship a default Bridge URL. Pointing identity creation
+// at an arbitrary fallback domain is a security-sensitive footgun — if the
+// domain changes hands or DNS lapses, every user clicking "Create new identity"
+// would be sent somewhere untrusted to type a seed phrase. Operators must opt
+// in by setting NEXT_PUBLIC_BRIDGE_URL.
+const BRIDGE_BASE_URL = (process.env.NEXT_PUBLIC_BRIDGE_URL ?? '').replace(
+  /\/+$/,
+  '',
+);
 
 function buildBridgeUrl(params: Record<string, string | undefined>): string {
   const qp = new URLSearchParams();
@@ -21,6 +27,24 @@ function buildBridgeUrl(params: Record<string, string | undefined>): string {
 export function BridgeLaunchCard() {
   const { network } = useSdk();
   const { signer } = useSigner();
+
+  if (!BRIDGE_BASE_URL) {
+    return (
+      <InfoBlock>
+        <VStack align="flex-start" spacing={2}>
+          <Heading size="sm" color="gray.100">
+            Bridge link not configured
+          </Heading>
+          <Text fontSize="sm" color="gray.250">
+            Set <Code fontSize="xs">NEXT_PUBLIC_BRIDGE_URL</Code> to the
+            deployed Dash Platform bridge to enable one-click identity
+            creation and top-up. Until then, run the bridge separately and
+            paste the backup JSON above.
+          </Text>
+        </VStack>
+      </InfoBlock>
+    );
+  }
 
   return (
     <InfoBlock>

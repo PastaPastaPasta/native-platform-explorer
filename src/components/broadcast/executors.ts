@@ -8,7 +8,11 @@ import {
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
 import type { EvoSDK, Identity } from '@dashevo/evo-sdk';
-import type { ExplorerSigner, KeySelectionCriteria } from '@/signer/types';
+import type {
+  ExplorerSigner,
+  KeySelectionCriteria,
+  SdkSigningMaterial,
+} from '@/signer/types';
 import type { ContractRegisterOptions } from './forms/ContractRegister';
 import type { ContractUpdateOptions } from './forms/ContractUpdate';
 import type { DocumentCreateOptions } from './forms/DocumentCreate';
@@ -69,6 +73,29 @@ async function prepareSigning(
   return signer.prepareSdk(criteria);
 }
 
+// wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
+// only release on explicit `free()`. Every executor now goes through this
+// helper so the IdentitySigner is freed after the broadcast resolves (or
+// throws). The IdentityPublicKey is owned by the on-chain Identity instance
+// returned from `identities.fetch` and is freed when that Identity is GC'd,
+// so we only need to manage the signer here.
+async function withSigningMaterial<T>(
+  signer: ExplorerSigner,
+  criteria: KeySelectionCriteria | undefined,
+  fn: (material: SdkSigningMaterial) => Promise<T>,
+): Promise<T> {
+  const material = await prepareSigning(signer, criteria);
+  try {
+    return await fn(material);
+  } finally {
+    try {
+      material.identitySigner.free();
+    } catch {
+      /* already freed or build without free — best-effort */
+    }
+  }
+}
+
 async function getPlatformVersion(sdk: EvoSDK): Promise<number> {
   return sdk.version();
 }
@@ -81,40 +108,41 @@ export async function executeContractRegister(args: {
   options: ContractRegisterOptions;
 }): Promise<ContractRegisterResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
-  });
+  return withSigningMaterial(
+    signer,
+    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+    async (material) => {
+      const platformVersion = await getPlatformVersion(sdk);
+      const identityNonce =
+        (await sdk.identities.nonce(material.identityId)) ?? 0n;
 
-  const platformVersion = await getPlatformVersion(sdk);
-  const identityNonce =
-    (await sdk.identities.nonce(material.identityId)) ?? 0n;
+      const dataContract = new DataContract({
+        ownerId: material.identityId,
+        identityNonce: identityNonce + 1n,
+        schemas: options.documentSchemas as Record<string, object>,
+        definitions: options.definitions ?? undefined,
+        fullValidation: true,
+        platformVersion,
+      });
 
-  const dataContract = new DataContract({
-    ownerId: material.identityId,
-    identityNonce: identityNonce + 1n,
-    schemas: options.documentSchemas as Record<string, object>,
-    definitions: options.definitions ?? undefined,
-    fullValidation: true,
-    platformVersion,
-  });
+      const published = await sdk.contracts.publish({
+        dataContract,
+        identityKey: material.identityKey,
+        signer: material.identitySigner,
+      });
 
-  const published = await sdk.contracts.publish({
-    dataContract,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
+      const docSchemas =
+        (published.schemas as Record<string, unknown> | undefined) ?? {};
 
-  const docSchemas =
-    (published.schemas as Record<string, unknown> | undefined) ?? {};
-
-  return {
-    kind: 'contractRegister',
-    contractId: String(published.id),
-    ownerId: String(published.ownerId),
-    version: published.version,
-    documentTypes: Object.keys(docSchemas),
-  };
+      return {
+        kind: 'contractRegister' as const,
+        contractId: String(published.id),
+        ownerId: String(published.ownerId),
+        version: published.version,
+        documentTypes: Object.keys(docSchemas),
+      };
+    },
+  );
 }
 
 export async function executeContractUpdate(args: {
@@ -123,40 +151,42 @@ export async function executeContractUpdate(args: {
   options: ContractUpdateOptions;
 }): Promise<ContractUpdateResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
-  });
-  const platformVersion = await getPlatformVersion(sdk);
+  return withSigningMaterial(
+    signer,
+    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+    async (material) => {
+      const platformVersion = await getPlatformVersion(sdk);
 
-  const current = await sdk.contracts.fetch(options.contractId);
-  if (!current) throw new Error(`Contract ${options.contractId} not found.`);
-  if (String(current.ownerId) !== material.identityId) {
-    throw new Error(
-      `You are signed in as ${material.identityId} but the contract is owned by ${String(
-        current.ownerId,
-      )}.`,
-    );
-  }
+      const current = await sdk.contracts.fetch(options.contractId);
+      if (!current) throw new Error(`Contract ${options.contractId} not found.`);
+      if (String(current.ownerId) !== material.identityId) {
+        throw new Error(
+          `You are signed in as ${material.identityId} but the contract is owned by ${String(
+            current.ownerId,
+          )}.`,
+        );
+      }
 
-  current.setSchemas(
-    options.documentSchemas as Record<string, object>,
-    options.definitions ?? null,
-    true,
-    platformVersion,
+      current.setSchemas(
+        options.documentSchemas as Record<string, object>,
+        options.definitions ?? null,
+        true,
+        platformVersion,
+      );
+
+      await sdk.contracts.update({
+        dataContract: current,
+        identityKey: material.identityKey,
+        signer: material.identitySigner,
+      });
+
+      return {
+        kind: 'contractUpdate' as const,
+        contractId: options.contractId,
+        newVersion: current.version,
+      };
+    },
   );
-
-  await sdk.contracts.update({
-    dataContract: current,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'contractUpdate',
-    contractId: options.contractId,
-    newVersion: current.version,
-  };
 }
 
 // ─── documents ──────────────────────────────────────────────────────────
@@ -196,38 +226,38 @@ async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<I
   return identity;
 }
 
+const DOC_CRITERIA: KeySelectionCriteria = {
+  purpose: 'AUTHENTICATION',
+  minSecurityLevel: 'HIGH',
+};
+
 export async function executeDocumentCreate(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
   options: DocumentCreateOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    const document = buildDocument(
+      options.contractId,
+      options.documentType,
+      material.identityId,
+      options.properties,
+    );
+    await sdk.documents.create({
+      document,
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'document' as const,
+      action: 'create' as const,
+      contractId: options.contractId,
+      documentType: options.documentType,
+      documentId: String(document.id),
+      ownerId: material.identityId,
+    };
   });
-
-  const document = buildDocument(
-    options.contractId,
-    options.documentType,
-    material.identityId,
-    options.properties,
-  );
-
-  await sdk.documents.create({
-    document,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'document',
-    action: 'create',
-    contractId: options.contractId,
-    documentType: options.documentType,
-    documentId: String(document.id),
-    ownerId: material.identityId,
-  };
 }
 
 export async function executeDocumentReplace(args: {
@@ -236,34 +266,29 @@ export async function executeDocumentReplace(args: {
   options: DocumentReplaceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    const document = buildDocument(
+      options.contractId,
+      options.documentType,
+      material.identityId,
+      options.properties,
+      options.documentId,
+      options.currentRevision + 1n,
+    );
+    await sdk.documents.replace({
+      document,
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'document' as const,
+      action: 'replace' as const,
+      contractId: options.contractId,
+      documentType: options.documentType,
+      documentId: options.documentId,
+      ownerId: material.identityId,
+    };
   });
-
-  const document = buildDocument(
-    options.contractId,
-    options.documentType,
-    material.identityId,
-    options.properties,
-    options.documentId,
-    options.currentRevision + 1n,
-  );
-
-  await sdk.documents.replace({
-    document,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'document',
-    action: 'replace',
-    contractId: options.contractId,
-    documentType: options.documentType,
-    documentId: options.documentId,
-    ownerId: material.identityId,
-  };
 }
 
 export async function executeDocumentDelete(args: {
@@ -272,30 +297,26 @@ export async function executeDocumentDelete(args: {
   options: DocumentDeleteOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
-  });
-
-  await sdk.documents.delete({
-    document: {
-      id: options.documentId,
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    await sdk.documents.delete({
+      document: {
+        id: options.documentId,
+        ownerId: material.identityId,
+        dataContractId: options.contractId,
+        documentTypeName: options.documentType,
+      },
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'document' as const,
+      action: 'delete' as const,
+      contractId: options.contractId,
+      documentType: options.documentType,
+      documentId: options.documentId,
       ownerId: material.identityId,
-      dataContractId: options.contractId,
-      documentTypeName: options.documentType,
-    },
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
+    };
   });
-
-  return {
-    kind: 'document',
-    action: 'delete',
-    contractId: options.contractId,
-    documentType: options.documentType,
-    documentId: options.documentId,
-    ownerId: material.identityId,
-  };
 }
 
 export async function executeDocumentTransfer(args: {
@@ -304,35 +325,30 @@ export async function executeDocumentTransfer(args: {
   options: DocumentTransferOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    const existing = await fetchExistingDocument(
+      sdk,
+      options.contractId,
+      options.documentType,
+      options.documentId,
+    );
+    await sdk.documents.transfer({
+      document: existing,
+      recipientId: options.recipientId as unknown as Parameters<
+        typeof sdk.documents.transfer
+      >[0]['recipientId'],
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'document' as const,
+      action: 'transfer' as const,
+      contractId: options.contractId,
+      documentType: options.documentType,
+      documentId: options.documentId,
+      ownerId: material.identityId,
+    };
   });
-
-  const existing = await fetchExistingDocument(
-    sdk,
-    options.contractId,
-    options.documentType,
-    options.documentId,
-  );
-
-  await sdk.documents.transfer({
-    document: existing,
-    recipientId: options.recipientId as unknown as Parameters<
-      typeof sdk.documents.transfer
-    >[0]['recipientId'],
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'document',
-    action: 'transfer',
-    contractId: options.contractId,
-    documentType: options.documentType,
-    documentId: options.documentId,
-    ownerId: material.identityId,
-  };
 }
 
 export async function executeDocumentSetPrice(args: {
@@ -341,33 +357,28 @@ export async function executeDocumentSetPrice(args: {
   options: DocumentSetPriceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    const existing = await fetchExistingDocument(
+      sdk,
+      options.contractId,
+      options.documentType,
+      options.documentId,
+    );
+    await sdk.documents.setPrice({
+      document: existing,
+      price: options.priceCredits,
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'document' as const,
+      action: 'setPrice' as const,
+      contractId: options.contractId,
+      documentType: options.documentType,
+      documentId: options.documentId,
+      ownerId: material.identityId,
+    };
   });
-
-  const existing = await fetchExistingDocument(
-    sdk,
-    options.contractId,
-    options.documentType,
-    options.documentId,
-  );
-
-  await sdk.documents.setPrice({
-    document: existing,
-    price: options.priceCredits,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'document',
-    action: 'setPrice',
-    contractId: options.contractId,
-    documentType: options.documentType,
-    documentId: options.documentId,
-    ownerId: material.identityId,
-  };
 }
 
 export async function executeDocumentPurchase(args: {
@@ -376,36 +387,33 @@ export async function executeDocumentPurchase(args: {
   options: DocumentPurchaseOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    const existing = await fetchExistingDocument(
+      sdk,
+      options.contractId,
+      options.documentType,
+      options.documentId,
+    );
+    await sdk.documents.purchase({
+      document: existing,
+      // The buyer is whoever is signing; pass the active identity, not the
+      // key's optional contractBounds metadata.
+      buyerId: material.identityId as unknown as Parameters<
+        typeof sdk.documents.purchase
+      >[0]['buyerId'],
+      price: options.priceCredits,
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'document' as const,
+      action: 'purchase' as const,
+      contractId: options.contractId,
+      documentType: options.documentType,
+      documentId: options.documentId,
+      ownerId: material.identityId,
+    };
   });
-
-  const existing = await fetchExistingDocument(
-    sdk,
-    options.contractId,
-    options.documentType,
-    options.documentId,
-  );
-
-  await sdk.documents.purchase({
-    document: existing,
-    buyerId: material.identityKey.toJSON().contractBounds as unknown as Parameters<
-      typeof sdk.documents.purchase
-    >[0]['buyerId'],
-    price: options.priceCredits,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  } as Parameters<typeof sdk.documents.purchase>[0]);
-
-  return {
-    kind: 'document',
-    action: 'purchase',
-    contractId: options.contractId,
-    documentType: options.documentType,
-    documentId: options.documentId,
-    ownerId: material.identityId,
-  };
 }
 
 // ─── identity ───────────────────────────────────────────────────────────
@@ -416,27 +424,25 @@ export async function executeIdentityCreditTransfer(args: {
   options: IdentityCreditTransferOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, { purpose: 'TRANSFER' });
-
-  const identity = await fetchExistingIdentity(sdk, material.identityId);
-
-  const result = (await sdk.identities.creditTransfer({
-    identity,
-    recipientId: options.recipientId,
-    amount: options.amountCredits,
-    signer: material.identitySigner,
-    signingKey: material.identityKey,
-  } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0])) as unknown as {
-    senderBalance?: bigint;
-    recipientBalance?: bigint;
-  };
-
-  return {
-    kind: 'identity',
-    identityId: material.identityId,
-    message: `Transferred ${options.amountCredits} credits to ${options.recipientId}.`,
-    newBalance: result?.senderBalance ? String(result.senderBalance) : undefined,
-  };
+  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material) => {
+    const identity = await fetchExistingIdentity(sdk, material.identityId);
+    const result = (await sdk.identities.creditTransfer({
+      identity,
+      recipientId: options.recipientId,
+      amount: options.amountCredits,
+      signer: material.identitySigner,
+      signingKey: material.identityKey,
+    } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0])) as unknown as {
+      senderBalance?: bigint;
+      recipientBalance?: bigint;
+    };
+    return {
+      kind: 'identity' as const,
+      identityId: material.identityId,
+      message: `Transferred ${options.amountCredits} credits to ${options.recipientId}.`,
+      newBalance: result?.senderBalance ? String(result.senderBalance) : undefined,
+    };
+  });
 }
 
 export async function executeIdentityCreditWithdrawal(args: {
@@ -445,25 +451,23 @@ export async function executeIdentityCreditWithdrawal(args: {
   options: IdentityCreditWithdrawalOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, { purpose: 'TRANSFER' });
-
-  const identity = await fetchExistingIdentity(sdk, material.identityId);
-
-  const newBalance = await sdk.identities.creditWithdrawal({
-    identity,
-    amount: options.amountCredits,
-    toAddress: options.toAddress,
-    coreFeePerByte: options.coreFeePerByte,
-    signer: material.identitySigner,
-    signingKey: material.identityKey,
-  } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]);
-
-  return {
-    kind: 'identity',
-    identityId: material.identityId,
-    message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
-    newBalance: String(newBalance),
-  };
+  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material) => {
+    const identity = await fetchExistingIdentity(sdk, material.identityId);
+    const newBalance = await sdk.identities.creditWithdrawal({
+      identity,
+      amount: options.amountCredits,
+      toAddress: options.toAddress,
+      coreFeePerByte: options.coreFeePerByte,
+      signer: material.identitySigner,
+      signingKey: material.identityKey,
+    } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]);
+    return {
+      kind: 'identity' as const,
+      identityId: material.identityId,
+      message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
+      newBalance: String(newBalance),
+    };
+  });
 }
 
 export async function executeIdentityUpdateKeys(args: {
@@ -472,37 +476,35 @@ export async function executeIdentityUpdateKeys(args: {
   options: IdentityUpdateKeysOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'MASTER',
-  });
-
-  const identity = await fetchExistingIdentity(sdk, material.identityId);
-
-  const addPublicKeys: IdentityPublicKeyInCreation[] | undefined =
-    options.addPublicKeysJson && options.addPublicKeysJson.length > 0
-      ? options.addPublicKeysJson.map((js) =>
-          IdentityPublicKeyInCreation.fromJSON(
-            js as unknown as Parameters<typeof IdentityPublicKeyInCreation.fromJSON>[0],
-          ),
-        )
-      : undefined;
-
-  await sdk.identities.update({
-    identity,
-    addPublicKeys,
-    disablePublicKeys:
-      options.disableKeyIds && options.disableKeyIds.length > 0
-        ? options.disableKeyIds
-        : undefined,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'identity',
-    identityId: material.identityId,
-    message: 'Identity keys updated.',
-  };
+  return withSigningMaterial(
+    signer,
+    { purpose: 'AUTHENTICATION', minSecurityLevel: 'MASTER' },
+    async (material) => {
+      const identity = await fetchExistingIdentity(sdk, material.identityId);
+      const addPublicKeys: IdentityPublicKeyInCreation[] | undefined =
+        options.addPublicKeysJson && options.addPublicKeysJson.length > 0
+          ? options.addPublicKeysJson.map((js) =>
+              IdentityPublicKeyInCreation.fromJSON(
+                js as unknown as Parameters<typeof IdentityPublicKeyInCreation.fromJSON>[0],
+              ),
+            )
+          : undefined;
+      await sdk.identities.update({
+        identity,
+        addPublicKeys,
+        disablePublicKeys:
+          options.disableKeyIds && options.disableKeyIds.length > 0
+            ? options.disableKeyIds
+            : undefined,
+        signer: material.identitySigner,
+      });
+      return {
+        kind: 'identity' as const,
+        identityId: material.identityId,
+        message: 'Identity keys updated.',
+      };
+    },
+  );
 }
 
 export async function executeIdentityTopUp(_args: {
@@ -530,25 +532,20 @@ export async function executeDpnsRegister(args: {
   options: DpnsRegisterOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  const material = await prepareSigning(signer, {
-    purpose: 'AUTHENTICATION',
-    minSecurityLevel: 'HIGH',
+  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+    const identity = await fetchExistingIdentity(sdk, material.identityId);
+    await sdk.dpns.registerName({
+      label: options.label,
+      identity,
+      identityKey: material.identityKey,
+      signer: material.identitySigner,
+    });
+    return {
+      kind: 'identity' as const,
+      identityId: material.identityId,
+      message: `Registered ${options.label} on DPNS.`,
+    };
   });
-
-  const identity = await fetchExistingIdentity(sdk, material.identityId);
-
-  await sdk.dpns.registerName({
-    label: options.label,
-    identity,
-    identityKey: material.identityKey,
-    signer: material.identitySigner,
-  });
-
-  return {
-    kind: 'identity',
-    identityId: material.identityId,
-    message: `Registered ${options.label} on DPNS.`,
-  };
 }
 
 // ─── voting ─────────────────────────────────────────────────────────────

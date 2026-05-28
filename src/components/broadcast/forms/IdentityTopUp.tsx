@@ -20,9 +20,13 @@ export interface IdentityTopUpOptions {
   amountDash: string;
 }
 
-const BRIDGE_BASE_URL =
-  process.env.NEXT_PUBLIC_BRIDGE_URL?.replace(/\/+$/, '') ||
-  'https://platform-bridge.dash.org';
+// Mirrors BridgeLaunchCard: no fallback URL. Operators must set
+// NEXT_PUBLIC_BRIDGE_URL — we don't want to send users to an arbitrary domain
+// to type a seed phrase.
+const BRIDGE_BASE_URL = (process.env.NEXT_PUBLIC_BRIDGE_URL ?? '').replace(
+  /\/+$/,
+  '',
+);
 
 export function IdentityTopUpForm({
   signer,
@@ -42,14 +46,13 @@ export function IdentityTopUpForm({
     onOptionsChange({ identityId: identityId.trim(), amountDash: amount });
   }, [identityId, amount, onOptionsChange]);
 
-  const bridgeUrl = (() => {
-    const qp = new URLSearchParams({
-      network,
-      mode: 'topup',
-      identityId: identityId.trim(),
-    });
-    return `${BRIDGE_BASE_URL}/?${qp.toString()}`;
-  })();
+  const bridgeUrl = BRIDGE_BASE_URL
+    ? `${BRIDGE_BASE_URL}/?${new URLSearchParams({
+        network,
+        mode: 'topup',
+        identityId: identityId.trim(),
+      }).toString()}`
+    : null;
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -95,19 +98,26 @@ export function IdentityTopUpForm({
             &ldquo;complete&rdquo;, return here and the identity balance will refresh
             automatically.
           </Text>
-          <HStack>
-            <Button
-              as="a"
-              size="sm"
-              colorScheme="blue"
-              href={bridgeUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              isDisabled={!isBase58Identifier(identityId.trim())}
-            >
-              Open bridge →
-            </Button>
-          </HStack>
+          {bridgeUrl ? (
+            <HStack>
+              <Button
+                as="a"
+                size="sm"
+                colorScheme="blue"
+                href={bridgeUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                isDisabled={!isBase58Identifier(identityId.trim())}
+              >
+                Open bridge →
+              </Button>
+            </HStack>
+          ) : (
+            <Text fontSize="xs" color="warning">
+              Bridge URL not configured. Set NEXT_PUBLIC_BRIDGE_URL to enable
+              this shortcut, or run the bridge separately.
+            </Text>
+          )}
         </VStack>
       </InfoBlock>
     </VStack>

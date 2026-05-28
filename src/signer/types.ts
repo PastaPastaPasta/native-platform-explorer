@@ -21,7 +21,11 @@ export interface SignerKeyDescriptor {
 export interface KeySelectionCriteria {
   /** Desired key purpose, e.g. 'AUTHENTICATION', 'TRANSFER', 'OWNER'. */
   purpose?: string;
-  /** Minimum security level. Higher is stronger: MASTER > CRITICAL > HIGH > MEDIUM. */
+  /**
+   * Minimum security level the selected key must satisfy. MASTER is the
+   * strongest, MEDIUM the weakest — a key at or stronger than the requested
+   * level qualifies (so requiring HIGH also accepts CRITICAL and MASTER keys).
+   */
   minSecurityLevel?: 'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM';
   /** Explicit key id (skips selection logic). */
   keyId?: number;

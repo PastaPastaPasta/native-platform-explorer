@@ -389,17 +389,19 @@ export function SchemaForm({ schema, value, onChange, errors }: SchemaFormProps)
     if (!editAsJson) setJsonText(JSON.stringify(value, null, 2));
   }, [value, editAsJson]);
 
-  const applyJson = useCallback(() => {
+  const applyJson = useCallback((): boolean => {
     try {
       const parsed: unknown = JSON.parse(jsonText);
       if (!isObject(parsed)) {
         setJsonError('Document must be a JSON object.');
-        return;
+        return false;
       }
       setJsonError(null);
       onChange(parsed);
+      return true;
     } catch (e) {
       setJsonError(e instanceof Error ? e.message : String(e));
+      return false;
     }
   }, [jsonText, onChange]);
 
@@ -414,12 +416,15 @@ export function SchemaForm({ schema, value, onChange, errors }: SchemaFormProps)
           isChecked={editAsJson}
           onChange={(e) => {
             if (!e.target.checked) {
-              // leaving JSON view — apply any pending text first.
-              applyJson();
+              // Leaving JSON view — apply any pending text first. If the JSON
+              // is invalid, keep the user in JSON mode with the error visible
+              // so their edits aren't silently discarded.
+              if (!applyJson()) return;
+              setEditAsJson(false);
             } else {
               setJsonText(JSON.stringify(value, null, 2));
+              setEditAsJson(true);
             }
-            setEditAsJson(e.target.checked);
           }}
         />
       </HStack>
