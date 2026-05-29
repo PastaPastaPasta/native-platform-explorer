@@ -20,6 +20,7 @@ import { Container } from '@ui/Container';
 import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { NetworkSelect } from './NetworkSelect';
 import { NetworkStatus } from './NetworkStatus';
+import { NetworkHealthBadge } from './NetworkHealthBadge';
 
 const NAV_ITEMS: ReadonlyArray<{ href: string; label: string }> = [
   { href: '/', label: 'Home' },
@@ -116,6 +117,9 @@ export function Navbar() {
             </Box>
             <NetworkSelect />
             <Box display={{ base: 'none', sm: 'block' }}>
+              <NetworkHealthBadge />
+            </Box>
+            <Box display={{ base: 'none', sm: 'block' }}>
               <NetworkStatus />
             </Box>
             <IconButton
@@ -142,7 +146,10 @@ export function Navbar() {
                 <NavLink key={item.href} {...item} onClick={onClose} />
               ))}
               <Box pt={4}>
-                <NetworkStatus />
+                <VStack align="stretch" spacing={3}>
+                  <NetworkHealthBadge />
+                  <NetworkStatus />
+                </VStack>
               </Box>
             </VStack>
           </DrawerBody>
