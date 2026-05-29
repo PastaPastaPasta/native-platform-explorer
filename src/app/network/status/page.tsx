@@ -86,16 +86,13 @@ function HealthBanner({ health }: { health: NetworkHealth }) {
     <InfoBlock emphasised>
       <VStack align="stretch" spacing={2}>
         <HStack justify="space-between" flexWrap="wrap" spacing={3}>
-          <Heading size="sm" color="gray.100">
-            Platform liveness
-          </Heading>
+          <Text fontSize="sm" color="gray.300">
+            {b.headline}
+          </Text>
           <Badge colorScheme={b.color} variant="subtle" textTransform="none">
             {b.label}
           </Badge>
         </HStack>
-        <Text fontSize="sm" color="gray.300">
-          {b.headline}
-        </Text>
         {health.reasons.length > 0 ? (
           <VStack align="flex-start" spacing={0.5}>
             {health.reasons.map((r) => (
