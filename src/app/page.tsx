@@ -38,6 +38,7 @@ import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
 import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 import type { ProofStatus } from '@components/proof/ProofInspectorContext';
+import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 
 function getQuorumsCount(raw: unknown): number | null {
   if (!raw) return null;
@@ -53,6 +54,7 @@ function StatCell({
   footnote,
   proofStatus,
   proofTitle,
+  proofEntry,
   loading,
   error,
 }: {
@@ -61,6 +63,7 @@ function StatCell({
   footnote?: React.ReactNode;
   proofStatus?: ProofStatus;
   proofTitle?: string;
+  proofEntry?: QueryProofEntry;
   loading?: boolean;
   error?: Error | null;
 }) {
@@ -88,7 +91,7 @@ function StatCell({
               errored
                 ? { title: proofTitle ?? label, status: 'failed', notes: error?.message }
                 : proofTitle
-                  ? { title: proofTitle, status: effectiveStatus }
+                  ? { title: proofTitle, status: effectiveStatus, entry: proofEntry }
                   : undefined
             }
           />
@@ -201,6 +204,7 @@ export default function HomePage() {
             label="Block height"
             proofStatus={proofStatus}
             proofTitle="Block height proof"
+            proofEntry={statusQ.proofEntry}
             loading={statusQ.isLoading}
             error={statusQ.error}
             value={
@@ -221,6 +225,7 @@ export default function HomePage() {
             label="Current epoch"
             proofStatus={proofStatus}
             proofTitle="Epoch proof"
+            proofEntry={epochQ.proofEntry}
             loading={epochQ.isLoading}
             error={epochQ.error}
             value={
@@ -245,6 +250,7 @@ export default function HomePage() {
             label="Total credits"
             proofStatus={proofStatus}
             proofTitle="Total credits proof"
+            proofEntry={creditsQ.proofEntry}
             loading={creditsQ.isLoading}
             error={creditsQ.error}
             value={<CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />}
@@ -255,6 +261,7 @@ export default function HomePage() {
             label="Protocol version"
             proofStatus={proofStatus}
             proofTitle="Protocol version proof"
+            proofEntry={protocolQ.proofEntry}
             loading={protocolQ.isLoading}
             error={protocolQ.error}
             value={
@@ -283,6 +290,7 @@ export default function HomePage() {
             label="Active quorums"
             proofStatus={proofStatus}
             proofTitle="Active quorums proof"
+            proofEntry={quorumsQ.proofEntry}
             loading={quorumsQ.isLoading}
             error={quorumsQ.error}
             value={

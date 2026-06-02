@@ -182,10 +182,20 @@ export function ProofInspector() {
             ) : null}
 
             {!proof && !meta && !payload?.notes ? (
-              <Text fontSize="sm" color="muted">
-                No proof payload is attached to this value yet. Open a page that
-                triggers a verified query to populate the inspector.
-              </Text>
+              entry ? (
+                <Text fontSize="sm" color="muted">
+                  {entry.error
+                    ? `Proof was not captured: ${entry.error}`
+                    : status === 'trusted'
+                      ? 'Served in trust mode — no cryptographic proof was requested for this query.'
+                      : 'This value was served without a verifiable proof (non-provable endpoint).'}
+                </Text>
+              ) : (
+                <Text fontSize="sm" color="muted">
+                  No proof payload is attached to this value yet. Open a page that
+                  triggers a verified query to populate the inspector.
+                </Text>
+              )
             ) : null}
           </VStack>
         </DrawerBody>
