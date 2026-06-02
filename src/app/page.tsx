@@ -15,7 +15,6 @@ import {
 import NextLink from 'next/link';
 import { useMemo } from 'react';
 import { Eyebrow } from '@ui/Eyebrow';
-import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
 import { VotePollsList } from '@components/governance/VotePollsList';
@@ -55,6 +54,28 @@ function glyphStatus(s: ProofState): ProofStatus {
       // no-variant, trusted-off, in-flight, unknown — nothing was proven.
       return 'trusted';
   }
+}
+
+/** Field-manual section divider: a small-caps label, a rule line that runs to
+ *  the edge, and an optional right-aligned action. Gives secondary sections a
+ *  labeled rhythm so the dashboard isn't a stack of identical cards — the only
+ *  carded element is the primary vitals readout. */
+function SectionHeading({
+  label,
+  action,
+}: {
+  label: React.ReactNode;
+  action?: React.ReactNode;
+}) {
+  return (
+    <HStack spacing={4} align="center" mb={4}>
+      <Eyebrow size="11px" whiteSpace="nowrap">
+        {label}
+      </Eyebrow>
+      <Box flex="1" h="1px" bg="hairline" />
+      {action ?? null}
+    </HStack>
+  );
 }
 
 function getQuorumsCount(raw: unknown): number | null {
@@ -332,47 +353,49 @@ export default function HomePage() {
       </Box>
 
       {/* Top proposers */}
-      <InfoBlock>
-        <HStack justify="space-between" mb={3}>
-          <Eyebrow size="11px">
-            Top proposers · epoch {epoch ? `#${epoch.index}` : '—'}
-          </Eyebrow>
-          <Button
-            as={NextLink}
-            href="/epoch/"
-            size="xs"
-            variant="ghost"
-            color="accent"
-            fontFamily="mono"
-            fontSize="11px"
-          >
-            view epoch →
-          </Button>
-        </HStack>
-        {epochQ.isLoading || evonodesQ.isLoading ? (
-          <LoadingCard lines={5} />
-        ) : (
-          <EvonodesLeaderboard entries={bars} limit={10} />
-        )}
-      </InfoBlock>
-
-      {/* Bottom grid */}
-      <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={4}>
-        <InfoBlock>
-          <HStack justify="space-between" mb={3}>
-            <Eyebrow size="11px">Vote polls ending soon</Eyebrow>
+      <Box as="section">
+        <SectionHeading
+          label={`Top proposers · epoch ${epoch ? `#${epoch.index}` : '—'}`}
+          action={
             <Button
               as={NextLink}
-              href="/governance/polls/"
+              href="/epoch/"
               size="xs"
               variant="ghost"
               color="accent"
               fontFamily="mono"
               fontSize="11px"
             >
-              all polls →
+              view epoch →
             </Button>
-          </HStack>
+          }
+        />
+        {epochQ.isLoading || evonodesQ.isLoading ? (
+          <LoadingCard lines={5} />
+        ) : (
+          <EvonodesLeaderboard entries={bars} limit={10} />
+        )}
+      </Box>
+
+      {/* Bottom grid */}
+      <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={{ base: 8, lg: 10 }}>
+        <Box as="section">
+          <SectionHeading
+            label="Vote polls ending soon"
+            action={
+              <Button
+                as={NextLink}
+                href="/governance/polls/"
+                size="xs"
+                variant="ghost"
+                color="accent"
+                fontFamily="mono"
+                fontSize="11px"
+              >
+                all polls →
+              </Button>
+            }
+          />
           {pollsQ.isLoading ? (
             <LoadingCard lines={3} />
           ) : polls.length === 0 ? (
@@ -382,12 +405,10 @@ export default function HomePage() {
           ) : (
             <VotePollsList entries={polls.slice(0, 10)} />
           )}
-        </InfoBlock>
+        </Box>
 
-        <InfoBlock>
-          <Eyebrow size="11px" mb={3}>
-            Well-known contracts
-          </Eyebrow>
+        <Box as="section">
+          <SectionHeading label="Well-known contracts" />
           <VStack align="stretch" spacing={0} divider={<Box h="1px" bg="hairline" />}>
             {WELL_KNOWN.map((w) => (
               <Box
@@ -408,7 +429,7 @@ export default function HomePage() {
               </Box>
             ))}
           </VStack>
-        </InfoBlock>
+        </Box>
       </Grid>
 
       <Text fontSize="xs" color="muted" textAlign="center" fontFamily="mono">
