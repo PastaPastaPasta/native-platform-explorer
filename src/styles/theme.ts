@@ -136,6 +136,26 @@ export const theme = extendTheme({
     Tabs: {
       defaultProps: { variant: 'line' },
     },
+    Tooltip: {
+      // Chakra's default tooltip reads from gray.700/gray.100, which this theme
+      // remaps to the paper (tan) scale — so without this it renders as an
+      // off-theme tan box. Pin it to the surface/ink tokens instead.
+      baseStyle: {
+        bg: 'surface',
+        color: 'ink',
+        border: '1px solid',
+        borderColor: 'hairlineStrong',
+        borderRadius: 'card',
+        fontFamily: 'body',
+        fontSize: '12px',
+        px: 3,
+        py: 2,
+        boxShadow: 'lg',
+        maxW: '320px',
+        // Arrow shares the tooltip bg (it has no border of its own).
+        '--popper-arrow-bg': 'var(--chakra-colors-surface)',
+      },
+    },
   },
 });
 
