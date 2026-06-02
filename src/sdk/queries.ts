@@ -328,9 +328,12 @@ function useSdkQuery<TData>(
   // stringified `fullKey` (matching how the store records it) and recomputed
   // only when the store changes, not on every render.
   const fullKeyStr = JSON.stringify(fullKey);
+  // O(1) Map lookup keyed on the same stringified key the store records under.
+  // `proofStore` gets a fresh identity on every version bump (see its value
+  // useMemo), so this stays reactive without scanning the entries array.
   const proofEntry = useMemo(
-    () => proofStore.entries.find((e) => JSON.stringify(e.queryKey) === fullKeyStr),
-    [proofStore.entries, fullKeyStr],
+    () => proofStore.getEntry(fullKeyStr),
+    [proofStore, fullKeyStr],
   );
 
   return Object.assign(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled });

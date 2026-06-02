@@ -54,6 +54,9 @@ function readEnabled(): boolean {
 interface QueryProofStoreValue {
   entries: QueryProofEntry[];
   version: number;
+  /** O(1) lookup of a single entry by its store key (the stringified query
+   *  key). Avoids scanning `entries` per consumer on every store update. */
+  getEntry: (key: string) => QueryProofEntry | undefined;
   record: (key: string, entry: QueryProofEntry) => void;
   clear: () => void;
   enabled: boolean;
@@ -101,6 +104,8 @@ export function QueryProofStoreProvider({ children }: { children: ReactNode }) {
     setVersion((p) => p + 1);
   }, []);
 
+  const getEntry = useCallback((key: string) => mapRef.current.get(key), []);
+
   const entries = useMemo(
     () => Array.from(mapRef.current.values()).reverse(),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -111,8 +116,8 @@ export function QueryProofStoreProvider({ children }: { children: ReactNode }) {
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
 
   const value = useMemo<QueryProofStoreValue>(
-    () => ({ entries, version, record, clear, enabled, setEnabled, drawerOpen, openDrawer, closeDrawer }),
-    [entries, record, clear, enabled, setEnabled, drawerOpen, openDrawer, closeDrawer, version],
+    () => ({ entries, version, getEntry, record, clear, enabled, setEnabled, drawerOpen, openDrawer, closeDrawer }),
+    [entries, getEntry, record, clear, enabled, setEnabled, drawerOpen, openDrawer, closeDrawer, version],
   );
 
   return (
