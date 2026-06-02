@@ -20,7 +20,7 @@ function systemPrefersDark(): boolean {
 }
 
 export function ThemeToggle() {
-  const { colorMode, setColorMode } = useColorMode();
+  const { setColorMode } = useColorMode();
   const [mode, setMode] = useState<Mode>('system');
 
   useEffect(() => {
@@ -30,16 +30,15 @@ export function ThemeToggle() {
     else if (stored === 'carbon') setColorMode('dark');
   }, [setColorMode]);
 
+  // Follow the OS only while the *stored* preference is 'system'. We read the
+  // persisted value rather than the `mode` state: on mount this effect runs
+  // before the effect above has committed `setMode(stored)`, so the state is
+  // still its 'system' default — gating on that would clobber an explicit
+  // paper/carbon choice with the OS preference on every reload. (`mode` stays
+  // in the deps purely so the listener re-attaches when the user toggles.)
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.documentElement.dataset.theme = colorMode === 'dark' ? 'carbon' : 'paper';
-    }
-  }, [colorMode]);
-
-  // Follow system when the user has opted into 'system'.
-  useEffect(() => {
-    if (mode !== 'system') return;
     if (typeof window === 'undefined') return;
+    if (readStored() !== 'system') return;
     const mql = window.matchMedia('(prefers-color-scheme: dark)');
     const handler = () => setColorMode(mql.matches ? 'dark' : 'light');
     handler();
