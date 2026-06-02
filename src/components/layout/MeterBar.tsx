@@ -191,7 +191,7 @@ export function MeterBar() {
           </HStack>
         </Field>
 
-        <Field label="Quorums">
+        <Field label="Quorums" divider={false}>
           {renderValue(
             quorumsQ.isLoading,
             quorumsQ.error,
@@ -201,6 +201,12 @@ export function MeterBar() {
             '26px',
           )}
         </Field>
+
+        {/* Push network identity + health to the right edge so the strip reads
+            as an instrument panel — live telemetry left, context right — rather
+            than a left-justified run trailing into dead space. */}
+        <Box flex="1" minW={4} />
+        <Box w="1px" bg="hairline" />
 
         <Field label="Platform">
           {health.level === 'unknown' ? (
