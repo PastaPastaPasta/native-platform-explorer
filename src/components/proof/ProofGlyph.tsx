@@ -5,7 +5,8 @@ import { useProofInspector, type ProofPayload, type ProofStatus } from './ProofI
 
 const COLOR_BY_STATUS: Record<ProofStatus, string> = {
   verified: 'verified',
-  trusted: 'trusted',
+  // Grey, not yellow — "served without a proof" is informational, not a warning.
+  trusted: 'muted',
   failed: 'failed',
 };
 

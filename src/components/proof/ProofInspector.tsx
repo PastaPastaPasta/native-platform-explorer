@@ -25,7 +25,8 @@ const STATUS_LABEL: Record<ProofStatus, string> = {
 
 const STATUS_COLOR: Record<ProofStatus, string> = {
   verified: 'verified',
-  trusted: 'trusted',
+  // Grey, not yellow — "served without a proof" is informational, not a warning.
+  trusted: 'muted',
   failed: 'failed',
 };
 
