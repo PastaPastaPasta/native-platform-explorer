@@ -2,8 +2,10 @@
 
 import { Box, Flex, HStack, Skeleton, Text, Tooltip, VStack } from '@chakra-ui/react';
 import { useMemo } from 'react';
+import NextLink from 'next/link';
 import { Eyebrow } from '@ui/Eyebrow';
 import { useSdk } from '@sdk/hooks';
+import { useNetworkHealth, type HealthLevel } from '@sdk/health';
 import {
   useCurrentEpoch,
   useCurrentQuorumsInfo,
@@ -35,6 +37,27 @@ function Field({
   );
 }
 
+const HEALTH_PRESENTATION: Record<
+  Exclude<HealthLevel, 'unknown'>,
+  { label: string; color: string; summary: string }
+> = {
+  healthy: {
+    label: 'Live',
+    color: 'verified',
+    summary: 'Platform is producing blocks and tracking Core.',
+  },
+  degraded: {
+    label: 'Lagging',
+    color: 'warning',
+    summary: 'Platform is falling behind Core or slow to produce blocks.',
+  },
+  stale: {
+    label: 'Stalled',
+    color: 'failed',
+    summary: 'Platform consensus appears stuck while Core keeps advancing.',
+  },
+};
+
 function getQuorumsCount(raw: unknown): number | null {
   if (!raw) return null;
   if (Array.isArray(raw)) return raw.length;
@@ -48,6 +71,7 @@ export function MeterBar() {
   const statusQ = useSystemStatus();
   const epochQ = useCurrentEpoch();
   const quorumsQ = useCurrentQuorumsInfo();
+  const health = useNetworkHealth();
 
   const epoch = epochQ.data ? normaliseEpoch(epochQ.data) : null;
 
@@ -175,6 +199,60 @@ export function MeterBar() {
               {quorumsCount ?? '—'}
             </Text>,
             '26px',
+          )}
+        </Field>
+
+        <Field label="Platform">
+          {health.level === 'unknown' ? (
+            <HStack spacing={1.5}>
+              <Text as="span" color="muted" fontSize="10px" lineHeight={1}>
+                ●
+              </Text>
+              <Text fontFamily="mono" fontSize="13px" color="muted">
+                —
+              </Text>
+            </HStack>
+          ) : (
+            (() => {
+              const hp = HEALTH_PRESENTATION[health.level];
+              const tooltip = (
+                <VStack align="flex-start" spacing={1} py={1}>
+                  <Text fontWeight={600}>{hp.summary}</Text>
+                  {health.reasons.map((r) => (
+                    <Text key={r} fontSize="xs">
+                      • {r}
+                    </Text>
+                  ))}
+                  {health.coreHeight !== null ? (
+                    <Text fontSize="xs" color="muted">
+                      Core tip {health.coreHeight.toLocaleString()} · Platform chainlock{' '}
+                      {health.coreChainLockedHeight?.toLocaleString() ?? '—'}
+                    </Text>
+                  ) : !health.insightAvailable ? (
+                    <Text fontSize="xs" color="muted">
+                      No Insight endpoint for this network — Core cross-check unavailable.
+                    </Text>
+                  ) : null}
+                </VStack>
+              );
+              return (
+                <Tooltip label={tooltip} hasArrow placement="bottom" openDelay={200}>
+                  <HStack
+                    as={NextLink}
+                    href="/network/status"
+                    spacing={1.5}
+                    _hover={{ opacity: 0.75 }}
+                  >
+                    <Text as="span" color={hp.color} fontSize="10px" lineHeight={1}>
+                      ●
+                    </Text>
+                    <Text fontFamily="mono" fontSize="13px" color="ink">
+                      {hp.label}
+                    </Text>
+                  </HStack>
+                </Tooltip>
+              );
+            })()
           )}
         </Field>
 
