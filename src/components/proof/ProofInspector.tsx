@@ -83,6 +83,12 @@ export function ProofInspector() {
   const signature = bytesToHex(proof?.signature);
   const quorumHash = bytesToHex(proof?.quorumHash);
 
+  // A value from a non-provable endpoint isn't "trust mode" — there is simply
+  // no proof to verify. Label it honestly rather than reusing the status chip.
+  const noProof = !proof && entry?.hasProofVariant === false;
+  const statusLabel = noProof ? 'NO PROOF' : STATUS_LABEL[status];
+  const statusColor = noProof ? 'muted' : STATUS_COLOR[status];
+
   return (
     <Drawer isOpen={isOpen} placement="right" onClose={close} size="md">
       <DrawerOverlay bg="blackAlpha.500" />
@@ -100,11 +106,11 @@ export function ProofInspector() {
             <Eyebrow>Proof Inspector</Eyebrow>
             <Text>{payload?.title ?? 'Proof details'}</Text>
             <HStack spacing={1.5}>
-              <Box as="span" fontSize="9px" color={STATUS_COLOR[status]} lineHeight={1}>
+              <Box as="span" fontSize="9px" color={statusColor} lineHeight={1}>
                 ●
               </Box>
-              <Text fontFamily="mono" fontSize="11px" color={STATUS_COLOR[status]}>
-                {STATUS_LABEL[status]}
+              <Text fontFamily="mono" fontSize="11px" color={statusColor}>
+                {statusLabel}
               </Text>
             </HStack>
           </VStack>
@@ -186,9 +192,9 @@ export function ProofInspector() {
                 <Text fontSize="sm" color="muted">
                   {entry.error
                     ? `Proof was not captured: ${entry.error}`
-                    : status === 'trusted'
-                      ? 'Served in trust mode — no cryptographic proof was requested for this query.'
-                      : 'This value was served without a verifiable proof (non-provable endpoint).'}
+                    : entry.hasProofVariant === false
+                      ? 'This endpoint does not return a cryptographic proof, so there is nothing to verify here.'
+                      : 'Served in trust mode — no proof was requested for this query. Enable trusted mode to verify it in your browser.'}
                 </Text>
               ) : (
                 <Text fontSize="sm" color="muted">

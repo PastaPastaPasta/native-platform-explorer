@@ -39,6 +39,23 @@ import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 import type { ProofStatus } from '@components/proof/ProofInspectorContext';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
+import type { ProofState } from '@sdk/proofs';
+
+// Map a query's real proof state to the glyph's three-way status, so a value
+// only reads "verified" when a proof was actually verified — not for endpoints
+// that return no proof (e.g. system.status, currentQuorumsInfo) or when trusted
+// mode is off.
+function glyphStatus(s: ProofState): ProofStatus {
+  switch (s.kind) {
+    case 'verified':
+      return 'verified';
+    case 'failed':
+      return 'failed';
+    default:
+      // no-variant, trusted-off, in-flight, unknown — nothing was proven.
+      return 'trusted';
+  }
+}
 
 function getQuorumsCount(raw: unknown): number | null {
   if (!raw) return null;
@@ -86,7 +103,13 @@ function StatCell({
         {effectiveStatus ? (
           <ProofGlyph
             status={effectiveStatus}
-            label={errored ? `${proofTitle ?? label}: ${error?.message ?? 'failed'}` : undefined}
+            label={
+              errored
+                ? `${proofTitle ?? label}: ${error?.message ?? 'failed'}`
+                : proofEntry?.hasProofVariant === false
+                  ? 'This endpoint returns no proof — nothing to verify'
+                  : undefined
+            }
             payload={
               errored
                 ? { title: proofTitle ?? label, status: 'failed', notes: error?.message }
@@ -134,7 +157,6 @@ export default function HomePage() {
   usePageBreadcrumbs([]);
   const { network, trusted, status } = useSdk();
   const proofsOn = trusted && status === 'ready';
-  const proofStatus: ProofStatus = proofsOn ? 'verified' : 'trusted';
 
   const statusQ = useSystemStatus();
   const epochQ = useCurrentEpoch();
@@ -202,7 +224,7 @@ export default function HomePage() {
         <SimpleGrid columns={{ base: 1, lg: 5 }} spacing={0}>
           <StatCell
             label="Block height"
-            proofStatus={proofStatus}
+            proofStatus={glyphStatus(statusQ.proofState)}
             proofTitle="Block height proof"
             proofEntry={statusQ.proofEntry}
             loading={statusQ.isLoading}
@@ -223,7 +245,7 @@ export default function HomePage() {
 
           <StatCell
             label="Current epoch"
-            proofStatus={proofStatus}
+            proofStatus={glyphStatus(epochQ.proofState)}
             proofTitle="Epoch proof"
             proofEntry={epochQ.proofEntry}
             loading={epochQ.isLoading}
@@ -248,7 +270,7 @@ export default function HomePage() {
 
           <StatCell
             label="Total credits"
-            proofStatus={proofStatus}
+            proofStatus={glyphStatus(creditsQ.proofState)}
             proofTitle="Total credits proof"
             proofEntry={creditsQ.proofEntry}
             loading={creditsQ.isLoading}
@@ -259,7 +281,7 @@ export default function HomePage() {
 
           <StatCell
             label="Protocol version"
-            proofStatus={proofStatus}
+            proofStatus={glyphStatus(protocolQ.proofState)}
             proofTitle="Protocol version proof"
             proofEntry={protocolQ.proofEntry}
             loading={protocolQ.isLoading}
@@ -288,7 +310,7 @@ export default function HomePage() {
 
           <StatCell
             label="Active quorums"
-            proofStatus={proofStatus}
+            proofStatus={glyphStatus(quorumsQ.proofState)}
             proofTitle="Active quorums proof"
             proofEntry={quorumsQ.proofEntry}
             loading={quorumsQ.isLoading}
