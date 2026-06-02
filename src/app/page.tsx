@@ -44,7 +44,11 @@ import type { ProofState } from '@sdk/proofs';
 // only reads "verified" when a proof was actually verified — not for endpoints
 // that return no proof (e.g. system.status, currentQuorumsInfo) or when trusted
 // mode is off.
-function glyphStatus(s: ProofState): ProofStatus {
+function glyphStatus(s: ProofState, entry?: QueryProofEntry): ProofStatus {
+  // A proof variant that threw and fell back to the non-proof path returns data
+  // (proofState 'verified') but captured no proof — the entry carries the
+  // capture error. Don't paint that green; the proof genuinely failed.
+  if (s.kind === 'verified' && entry?.error) return 'failed';
   switch (s.kind) {
     case 'verified':
       return 'verified';
@@ -245,7 +249,7 @@ export default function HomePage() {
         <SimpleGrid columns={{ base: 1, lg: 5 }} spacing={0}>
           <StatCell
             label="Block height"
-            proofStatus={glyphStatus(statusQ.proofState)}
+            proofStatus={glyphStatus(statusQ.proofState, statusQ.proofEntry)}
             proofTitle="Block height proof"
             proofEntry={statusQ.proofEntry}
             loading={statusQ.isLoading}
@@ -266,7 +270,7 @@ export default function HomePage() {
 
           <StatCell
             label="Current epoch"
-            proofStatus={glyphStatus(epochQ.proofState)}
+            proofStatus={glyphStatus(epochQ.proofState, epochQ.proofEntry)}
             proofTitle="Epoch proof"
             proofEntry={epochQ.proofEntry}
             loading={epochQ.isLoading}
@@ -291,7 +295,7 @@ export default function HomePage() {
 
           <StatCell
             label="Total credits"
-            proofStatus={glyphStatus(creditsQ.proofState)}
+            proofStatus={glyphStatus(creditsQ.proofState, creditsQ.proofEntry)}
             proofTitle="Total credits proof"
             proofEntry={creditsQ.proofEntry}
             loading={creditsQ.isLoading}
@@ -302,7 +306,7 @@ export default function HomePage() {
 
           <StatCell
             label="Protocol version"
-            proofStatus={glyphStatus(protocolQ.proofState)}
+            proofStatus={glyphStatus(protocolQ.proofState, protocolQ.proofEntry)}
             proofTitle="Protocol version proof"
             proofEntry={protocolQ.proofEntry}
             loading={protocolQ.isLoading}
@@ -331,7 +335,7 @@ export default function HomePage() {
 
           <StatCell
             label="Active quorums"
-            proofStatus={glyphStatus(quorumsQ.proofState)}
+            proofStatus={glyphStatus(quorumsQ.proofState, quorumsQ.proofEntry)}
             proofTitle="Active quorums proof"
             proofEntry={quorumsQ.proofEntry}
             loading={quorumsQ.isLoading}

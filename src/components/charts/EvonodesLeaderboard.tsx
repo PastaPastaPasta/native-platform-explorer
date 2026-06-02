@@ -82,7 +82,7 @@ export function EvonodesLeaderboard({
     return (
       <VStack align="stretch" spacing={0}>
         <Text fontSize="xs" color="muted" mb={2}>
-          {top.length} proposer{top.length === 1 ? '' : 's'}, tied at {max} block
+          {top.length} proposer{top.length === 1 ? '' : 's'} shown, tied at {max} block
           {max === 1 ? '' : 's'} each — ranking emerges as the epoch fills.
         </Text>
         {top.map((e) => (
@@ -102,7 +102,8 @@ export function EvonodesLeaderboard({
   return (
     <VStack align="stretch" spacing={0}>
       <Text fontSize="xs" color="muted" mb={1}>
-        {top.length} proposers · {total} blocks this epoch.
+        Top {top.length} proposer{top.length === 1 ? '' : 's'} · {total} block
+        {total === 1 ? '' : 's'} shown.
       </Text>
 
       {/* Column header */}
