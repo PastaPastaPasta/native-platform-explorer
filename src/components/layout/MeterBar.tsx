@@ -145,32 +145,30 @@ export function MeterBar() {
               </Text>,
               '34px',
             )}
-            <Box position="relative" w="80px" h="6px" bg="sunken" borderRadius="badge">
-              <Box
-                position="absolute"
-                inset="0 auto 0 0"
-                w={`${progress ?? 0}%`}
-                bg="accent"
-                borderRadius="badge"
-                transition="width 0.5s ease"
-              />
-              {/* ruler ticks */}
-              {[25, 50, 75].map((p) => (
-                <Box
-                  key={p}
-                  position="absolute"
-                  top="-1px"
-                  bottom="-1px"
-                  left={`${p}%`}
-                  w="1px"
-                  bg="hairlineStrong"
-                />
-              ))}
-            </Box>
+            {/* Progress meter only when we actually know start/end times —
+                otherwise an empty track read as a broken widget. */}
             {progress != null ? (
-              <Text fontFamily="mono" fontSize="11px" color="muted" minW="34px">
-                {progress.toFixed(0)}%
-              </Text>
+              <>
+                <Box
+                  position="relative"
+                  w="72px"
+                  h="5px"
+                  bg="sunken"
+                  borderRadius="badge"
+                  overflow="hidden"
+                >
+                  <Box
+                    position="absolute"
+                    inset="0 auto 0 0"
+                    w={`${progress}%`}
+                    bg="accent"
+                    transition="width 0.5s ease"
+                  />
+                </Box>
+                <Text fontFamily="mono" fontSize="11px" color="muted" minW="30px">
+                  {progress.toFixed(0)}%
+                </Text>
+              </>
             ) : null}
           </HStack>
         </Field>
