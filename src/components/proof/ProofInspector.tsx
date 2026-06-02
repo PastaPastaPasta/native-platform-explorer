@@ -2,7 +2,6 @@
 
 import {
   Box,
-  Code,
   Drawer,
   DrawerBody,
   DrawerCloseButton,
@@ -14,8 +13,8 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { useProofInspector, type ProofStatus } from './ProofInspectorContext';
-import { CopyButton } from '@ui/CopyButton';
 import { Eyebrow } from '@ui/Eyebrow';
+import { QueryEntryDetail } from '@components/query-inspector/QueryEntryCard';
 
 const STATUS_LABEL: Record<ProofStatus, string> = {
   verified: 'VERIFIED',
@@ -30,68 +29,29 @@ const STATUS_COLOR: Record<ProofStatus, string> = {
   failed: 'failed',
 };
 
-function bytesToHex(bytes: Uint8Array | undefined): string | null {
-  if (!bytes) return null;
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <Box>
-      <Eyebrow mb={1.5}>{label}</Eyebrow>
-      {children}
-    </Box>
-  );
-}
-
-function MonoCopy({ value }: { value: string }) {
-  return (
-    <HStack
-      align="flex-start"
-      spacing={2}
-      bg="sunken"
-      borderRadius="card"
-      px={3}
-      py={2}
-      border="1px solid"
-      borderColor="hairline"
-    >
-      <Box
-        as="code"
-        fontFamily="mono"
-        fontSize="11px"
-        color="ink"
-        wordBreak="break-all"
-        flex="1"
-      >
-        {value}
-      </Box>
-      <CopyButton value={value} label="Copy" />
-    </HStack>
-  );
-}
-
+/**
+ * Single-value proof drawer opened from a ProofGlyph. It renders the exact same
+ * Query / Result / Proof breakdown as the query-inspector list (via the shared
+ * QueryEntryDetail) so a value's proof dot opens the full depth — parameters,
+ * result, response metadata, quorum signature, and the parsed GroveDB proof
+ * tree — rather than a flat subset. Defaults to the Proof tab.
+ */
 export function ProofInspector() {
   const { isOpen, close, payload } = useProofInspector();
   const status = payload?.status ?? 'verified';
   const entry = payload?.entry;
-  const proof = entry?.proof;
-  const meta = entry?.metadata;
-
-  const merkleRoot = bytesToHex(proof?.blockIdHash);
-  const signature = bytesToHex(proof?.signature);
-  const quorumHash = bytesToHex(proof?.quorumHash);
 
   // A value from a non-provable endpoint isn't "trust mode" — there is simply
   // no proof to verify. Label it honestly rather than reusing the status chip.
-  const noProof = !proof && entry?.hasProofVariant === false;
+  const noProof = entry ? !entry.proof && entry.hasProofVariant === false : false;
   const statusLabel = noProof ? 'NO PROOF' : STATUS_LABEL[status];
   const statusColor = noProof ? 'muted' : STATUS_COLOR[status];
+  // Open straight to the Proof tab (index 2) when this value carries a proof
+  // variant; otherwise the Query tab (no Proof tab is rendered).
+  const defaultTabIndex = entry?.hasProofVariant ? 2 : 0;
 
   return (
-    <Drawer isOpen={isOpen} placement="right" onClose={close} size="md">
+    <Drawer isOpen={isOpen} placement="right" onClose={close} size="lg">
       <DrawerOverlay bg="blackAlpha.500" />
       <DrawerContent bg="surface" color="ink">
         <DrawerCloseButton color="muted" _hover={{ color: 'ink' }} />
@@ -117,92 +77,20 @@ export function ProofInspector() {
           </VStack>
         </DrawerHeader>
         <DrawerBody py={5}>
-          <VStack align="stretch" spacing={5}>
+          <VStack align="stretch" spacing={4}>
             {payload?.notes ? (
               <Text fontSize="sm" color="muted">
                 {payload.notes}
               </Text>
             ) : null}
 
-            {merkleRoot ? (
-              <Field label="Block ID hash (merkle root)">
-                <MonoCopy value={merkleRoot} />
-              </Field>
-            ) : null}
-
-            {quorumHash ? (
-              <Field label="Quorum hash">
-                <MonoCopy value={quorumHash} />
-              </Field>
-            ) : null}
-
-            {proof ? (
-              <Field label="Quorum">
-                <HStack spacing={4} fontFamily="mono" fontSize="12px" color="ink">
-                  <Text>
-                    <Text as="span" color="muted">
-                      type
-                    </Text>{' '}
-                    {proof.quorumType}
-                  </Text>
-                  <Text>
-                    <Text as="span" color="muted">
-                      round
-                    </Text>{' '}
-                    {proof.round}
-                  </Text>
-                </HStack>
-              </Field>
-            ) : null}
-
-            {meta ? (
-              <Field label="Response metadata">
-                <Code
-                  display="block"
-                  fontFamily="mono"
-                  fontSize="11px"
-                  color="ink"
-                  bg="sunken"
-                  borderRadius="card"
-                  border="1px solid"
-                  borderColor="hairline"
-                  p={3}
-                  whiteSpace="pre"
-                >
-                  {`height       ${meta.height}\nepoch        #${meta.epoch}\ncore height  ${meta.coreChainLockedHeight}\nprotocol     v${meta.protocolVersion}\nchain id     ${meta.chainId}\ntime         ${new Date(meta.timeMs).toISOString()}`}
-                </Code>
-              </Field>
-            ) : null}
-
-            {signature ? (
-              <Field label="Threshold signature">
-                <MonoCopy value={signature} />
-              </Field>
-            ) : null}
-
             {entry ? (
-              <Field label="Call">
-                <Text fontFamily="mono" fontSize="11px" color="ink">
-                  {entry.methodName}
-                </Text>
-              </Field>
-            ) : null}
-
-            {!proof && !meta && !payload?.notes ? (
-              entry ? (
-                <Text fontSize="sm" color="muted">
-                  {entry.error
-                    ? `Proof was not captured: ${entry.error}`
-                    : entry.hasProofVariant === false
-                      ? 'This endpoint does not return a cryptographic proof, so there is nothing to verify here.'
-                      : 'Served in trust mode — no proof was requested for this query. Enable trusted mode to verify it in your browser.'}
-                </Text>
-              ) : (
-                <Text fontSize="sm" color="muted">
-                  No proof payload is attached to this value yet. Open a page that
-                  triggers a verified query to populate the inspector.
-                </Text>
-              )
+              <QueryEntryDetail entry={entry} defaultTabIndex={defaultTabIndex} />
+            ) : !payload?.notes ? (
+              <Text fontSize="sm" color="muted">
+                No proof payload is attached to this value yet. Open a page that
+                triggers a verified query to populate the inspector.
+              </Text>
             ) : null}
           </VStack>
         </DrawerBody>

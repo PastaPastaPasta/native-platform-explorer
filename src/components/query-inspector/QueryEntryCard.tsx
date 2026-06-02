@@ -223,8 +223,6 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
 }
 
 export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
-  const annotation = METHOD_ANNOTATIONS[entry.methodName];
-
   return (
     <AccordionItem border="none" mb={1}>
       <AccordionButton
@@ -256,50 +254,67 @@ export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
         </HStack>
       </AccordionButton>
       <AccordionPanel px={3} pb={4}>
-        <Tabs size="sm" variant="soft-rounded" colorScheme="gray">
-          <TabList mb={3}>
-            <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Query</Tab>
-            <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Result</Tab>
-            {entry.hasProofVariant ? (
-              <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Proof</Tab>
-            ) : null}
-          </TabList>
-          <TabPanels>
-            <TabPanel px={0}>
-              <VStack align="stretch" spacing={3}>
-                <Box>
-                  <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Method</Text>
-                  <Text fontSize="xs" fontFamily="mono" color="gray.100">{entry.methodName}</Text>
-                </Box>
-                {annotation ? (
-                  <Text fontSize="xs" color="gray.400" lineHeight="1.5">{annotation}</Text>
-                ) : null}
-                <Box>
-                  <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Parameters</Text>
-                  <MiniCodeBlock value={JSON.stringify(entry.methodParams, null, 2)} collapsedHeight={200} />
-                </Box>
-              </VStack>
-            </TabPanel>
-            <TabPanel px={0}>
-              <VStack align="stretch" spacing={3}>
-                {entry.status === 'error' ? (
-                  <Text fontSize="xs" color="red.300">{entry.error}</Text>
-                ) : (
-                  <MiniCodeBlock
-                    value={typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result, null, 2)}
-                    collapsedHeight={400}
-                  />
-                )}
-              </VStack>
-            </TabPanel>
-            {entry.hasProofVariant ? (
-              <TabPanel px={0}>
-                <ProofTab entry={entry} />
-              </TabPanel>
-            ) : null}
-          </TabPanels>
-        </Tabs>
+        <QueryEntryDetail entry={entry} />
       </AccordionPanel>
     </AccordionItem>
+  );
+}
+
+/** The tabbed body of a recorded query — Query (method + params), Result, and
+ *  (when available) the full Proof breakdown. Shared between the query-inspector
+ *  list and the single-value Proof Inspector drawer so both show the same depth.
+ *  `defaultTabIndex` lets the proof glyph open straight to the Proof tab. */
+export function QueryEntryDetail({
+  entry,
+  defaultTabIndex = 0,
+}: {
+  entry: QueryProofEntry;
+  defaultTabIndex?: number;
+}) {
+  const annotation = METHOD_ANNOTATIONS[entry.methodName];
+  return (
+    <Tabs size="sm" variant="soft-rounded" colorScheme="gray" defaultIndex={defaultTabIndex}>
+      <TabList mb={3}>
+        <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Query</Tab>
+        <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Result</Tab>
+        {entry.hasProofVariant ? (
+          <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Proof</Tab>
+        ) : null}
+      </TabList>
+      <TabPanels>
+        <TabPanel px={0}>
+          <VStack align="stretch" spacing={3}>
+            <Box>
+              <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Method</Text>
+              <Text fontSize="xs" fontFamily="mono" color="gray.100">{entry.methodName}</Text>
+            </Box>
+            {annotation ? (
+              <Text fontSize="xs" color="gray.400" lineHeight="1.5">{annotation}</Text>
+            ) : null}
+            <Box>
+              <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Parameters</Text>
+              <MiniCodeBlock value={JSON.stringify(entry.methodParams, null, 2)} collapsedHeight={200} />
+            </Box>
+          </VStack>
+        </TabPanel>
+        <TabPanel px={0}>
+          <VStack align="stretch" spacing={3}>
+            {entry.status === 'error' ? (
+              <Text fontSize="xs" color="red.300">{entry.error}</Text>
+            ) : (
+              <MiniCodeBlock
+                value={typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result, null, 2)}
+                collapsedHeight={400}
+              />
+            )}
+          </VStack>
+        </TabPanel>
+        {entry.hasProofVariant ? (
+          <TabPanel px={0}>
+            <ProofTab entry={entry} />
+          </TabPanel>
+        ) : null}
+      </TabPanels>
+    </Tabs>
   );
 }
