@@ -61,7 +61,7 @@ export function BrandRow() {
 
       <Drawer isOpen={drawer.isOpen} placement="left" onClose={drawer.onClose}>
         <DrawerOverlay bg="blackAlpha.700" />
-        <DrawerContent bg="surface">
+        <DrawerContent bg="surface" aria-label="Main navigation">
           <DrawerBody pt={10}>
             <VStack align="stretch" spacing={4}>
               <Box pb={2}>

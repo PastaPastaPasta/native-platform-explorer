@@ -125,7 +125,7 @@ function StatCell({
     >
       <Eyebrow mb={2}>{label}</Eyebrow>
       <HStack spacing={2} align="baseline">
-        {effectiveStatus ? (
+        {effectiveStatus && !loading ? (
           <ProofGlyph
             status={effectiveStatus}
             label={

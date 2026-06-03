@@ -273,7 +273,16 @@ export function QueryEntryDetail({
 }) {
   const annotation = METHOD_ANNOTATIONS[entry.methodName];
   return (
-    <Tabs size="sm" variant="soft-rounded" colorScheme="gray" defaultIndex={defaultTabIndex}>
+    // Keyed on the entry + default tab so the uncontrolled Tabs reset to the
+    // intended tab whenever a different entry is inspected (e.g. reusing the
+    // Proof Inspector drawer for another value).
+    <Tabs
+      key={`${entry.timestamp}:${defaultTabIndex}`}
+      size="sm"
+      variant="soft-rounded"
+      colorScheme="gray"
+      defaultIndex={defaultTabIndex}
+    >
       <TabList mb={3}>
         <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Query</Tab>
         <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Result</Tab>

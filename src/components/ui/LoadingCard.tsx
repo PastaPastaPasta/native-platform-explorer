@@ -18,7 +18,7 @@ export function LoadingCard({ lines = 4 }: { lines?: number }) {
           <Skeleton
             key={i}
             height="12px"
-            width={`${78 - i * 8}%`}
+            width={`${Math.max(78 - i * 8, 10)}%`}
             startColor="sunken"
             endColor="raised"
             borderRadius="badge"

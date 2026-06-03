@@ -1,6 +1,6 @@
 'use client';
 
-import { Box, HStack, Text } from '@chakra-ui/react';
+import { Box, Button, HStack, Text } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSdk } from '@sdk/hooks';
@@ -68,17 +68,18 @@ export function Footer() {
             </Text>
           </HStack>
           {inspectorEnabled ? (
-            <Text
+            <Button
+              variant="link"
               fontFamily="mono"
               fontSize="xs"
+              fontWeight="normal"
               color="muted"
-              cursor="pointer"
-              _hover={{ color: 'accent' }}
+              _hover={{ color: 'accent', textDecoration: 'none' }}
               onClick={openDrawer}
               title="Open Query Inspector (Cmd+Shift+P)"
             >
               {entries.length} {entries.length === 1 ? 'query' : 'queries'}
-            </Text>
+            </Button>
           ) : null}
           <Text fontFamily="mono" fontSize="xs" color="muted">
             dash platform · sdk-only
