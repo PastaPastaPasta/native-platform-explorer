@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-test('home page renders with navbar', async ({ page }) => {
+test('home page renders with brand mark', async ({ page }) => {
   await page.goto('/');
-  // The navbar brand mark.
-  await expect(page.getByText('NPE')).toBeVisible();
+  // The Field Manual brand mark in the header (BrandRow → Logotype).
+  await expect(page.getByText('native_explorer')).toBeVisible();
 });
