@@ -51,3 +51,7 @@ next-env.d.ts
 # Misc
 *.pem
 .pnpm-store/
+
+# Use pnpm exclusively — no npm/yarn lockfiles
+package-lock.json
+yarn.lock
