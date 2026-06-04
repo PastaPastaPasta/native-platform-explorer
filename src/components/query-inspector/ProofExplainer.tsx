@@ -236,7 +236,7 @@ export function ProofExplainer({ text }: { text: string }) {
 
   return (
     <VStack align="stretch" spacing={3} mb={3}>
-      <Box bg="whiteAlpha.50" borderRadius="md" px={3} py={2.5}>
+      <Box bg="sunken" borderRadius="md" px={3} py={2.5}>
         <Text fontSize="xs" color="gray.300" lineHeight="1.6">
           A GroveDB proof is a list of stack operations that rebuilds the merkle
           path from the queried value(s) up to the state root. Verifying it means

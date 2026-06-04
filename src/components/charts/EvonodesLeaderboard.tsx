@@ -2,20 +2,59 @@
 
 import NextLink from 'next/link';
 import { HStack, VStack, Text, Box } from '@chakra-ui/react';
-import { Identifier } from '@components/data/Identifier';
+import { Eyebrow } from '@ui/Eyebrow';
 
 export interface EvonodeBar {
   proTxHash: string;
   blocks: number;
 }
 
-/** Horizontal bar chart of [{ proTxHash, blocks }]. Responsive; pure CSS
- *  (no SVG) to avoid layout thrash on resize. Top-N items only.
- *
- *  When the counts have no meaningful variation (max < 2, typical of a
- *  just-started epoch where everyone has proposed 1 block) we render a
- *  compact list instead of all-100%-width bars — that would be accurate
- *  but visually misleading. */
+function Row({
+  children,
+  href,
+}: {
+  children: React.ReactNode;
+  href?: string;
+}) {
+  return (
+    <HStack
+      {...(href ? { as: NextLink, href } : {})}
+      spacing={4}
+      px={2}
+      py={2.5}
+      borderBottom="1px solid"
+      borderColor="hairline"
+      _last={{ borderBottom: 'none' }}
+      _hover={href ? { bg: 'sunken' } : undefined}
+      transition="background 0.12s ease"
+    >
+      {children}
+    </HStack>
+  );
+}
+
+function Hash({ value, dim }: { value: string; dim?: boolean }) {
+  const head = value.slice(0, 10);
+  const tail = value.length > 16 ? value.slice(-6) : '';
+  return (
+    <Text fontFamily="mono" fontSize="xs" whiteSpace="nowrap">
+      <Text as="span" color={dim ? 'muted' : 'ink'}>
+        {head}
+      </Text>
+      {tail ? (
+        <Text as="span" color="faint">
+          …{tail}
+        </Text>
+      ) : null}
+    </Text>
+  );
+}
+
+/** Top-N block proposers for an epoch. Two readings of the same data:
+ *  • Diverged — a ranked bar chart whose bars span the full width so small
+ *    leads are actually visible, with the count called out at the end.
+ *  • Tied (max === min, typical of a fresh epoch) — a plain roster; per-row
+ *    counts/bars are dropped since they're identical and stated in the note. */
 export function EvonodesLeaderboard({
   entries,
   limit = 20,
@@ -28,78 +67,114 @@ export function EvonodesLeaderboard({
   const top = entries.slice(0, limit);
   if (top.length === 0) {
     return (
-      <Text color="gray.400" fontSize="sm">
+      <Text color="muted" fontSize="sm">
         {emptyLabel}
       </Text>
     );
   }
+
   const max = top.reduce((m, e) => Math.max(m, e.blocks), 0) || 1;
   const min = top.reduce((m, e) => Math.min(m, e.blocks), max);
-  const flat = max === min || max < 2;
+  const total = top.reduce((s, e) => s + e.blocks, 0);
+  const flat = max === min;
 
   if (flat) {
     return (
-      <VStack align="stretch" spacing={1}>
-        <Text fontSize="xs" color="gray.400" mb={1}>
-          {top.length} proposer{top.length === 1 ? '' : 's'} so far; each has proposed
-          {max === 1 ? ' 1 block.' : ` ${max} blocks.`} Ranking will appear once counts
-          diverge.
+      <VStack align="stretch" spacing={0}>
+        <Text fontSize="xs" color="muted" mb={2}>
+          {top.length} proposer{top.length === 1 ? '' : 's'} shown, tied at {max} block
+          {max === 1 ? '' : 's'} each — ranking emerges as the epoch fills.
         </Text>
         {top.map((e) => (
-          <HStack
-            key={e.proTxHash}
-            as={NextLink}
-            href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}
-            justify="space-between"
-            spacing={3}
-            _hover={{ bg: 'gray.800' }}
-            borderRadius="md"
-            px={2}
-            py={1}
-          >
-            <Identifier value={e.proTxHash} avatar dense copy={false} />
-            <Text fontSize="xs" fontFamily="mono" color="gray.250">
-              {e.blocks} block{e.blocks === 1 ? '' : 's'}
-            </Text>
-          </HStack>
+          <Row key={e.proTxHash} href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}>
+            <Box flexShrink={0} w="14px" textAlign="center">
+              <Text as="span" color="faint" fontSize="xs">
+                ·
+              </Text>
+            </Box>
+            <Hash value={e.proTxHash} />
+          </Row>
         ))}
       </VStack>
     );
   }
 
   return (
-    <VStack align="stretch" spacing={1.5}>
-      {top.map((e) => {
-        const pct = Math.max(4, Math.round((e.blocks / max) * 100));
+    <VStack align="stretch" spacing={0}>
+      <Text fontSize="xs" color="muted" mb={1}>
+        Top {top.length} proposer{top.length === 1 ? '' : 's'} · {total} block
+        {total === 1 ? '' : 's'} shown.
+      </Text>
+
+      {/* Column header */}
+      <HStack spacing={4} px={2} pb={1.5} borderBottom="1px solid" borderColor="hairline">
+        <Box flexShrink={0} w="20px" />
+        <Box w={{ base: 'auto', md: '190px' }} flexShrink={0}>
+          <Eyebrow size="9px">Proposer</Eyebrow>
+        </Box>
+        <Box flex="1" />
+        <Box minW="40px" textAlign="right">
+          <Eyebrow size="9px">Blocks</Eyebrow>
+        </Box>
+      </HStack>
+
+      {top.map((e, i) => {
+        const rank = i + 1;
+        const isTop = e.blocks === max;
+        const pct = Math.max(2, Math.round((e.blocks / max) * 100));
         return (
-          <HStack
-            key={e.proTxHash}
-            as={NextLink}
-            href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}
-            spacing={3}
-            _hover={{ bg: 'gray.800' }}
-            borderRadius="md"
-            px={2}
-            py={1}
-          >
-            <Box flexShrink={0} minW="140px">
-              <Identifier value={e.proTxHash} avatar dense copy={false} />
+          <Row key={e.proTxHash} href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}>
+            <Text
+              flexShrink={0}
+              w="20px"
+              textAlign="right"
+              fontFamily="mono"
+              fontSize="xs"
+              color={isTop ? 'accent' : 'muted'}
+              sx={{ fontVariantNumeric: 'tabular-nums' }}
+            >
+              {rank}
+            </Text>
+
+            <Box w={{ base: 'auto', md: '190px' }} flexShrink={0}>
+              <Hash value={e.proTxHash} />
             </Box>
-            <Box flex="1" position="relative" height="14px" bg="gray.800" borderRadius="md">
+
+            {/* Share bar — spans the full remaining width so small leads read */}
+            <Box
+              display={{ base: 'none', sm: 'block' }}
+              flex="1"
+              minW={0}
+              position="relative"
+              height="8px"
+              bg="sunken"
+              borderRadius="badge"
+            >
               <Box
                 position="absolute"
-                inset="0"
-                right="auto"
+                insetStart={0}
+                top={0}
+                bottom={0}
                 width={`${pct}%`}
-                bg="brand.normal"
-                borderRadius="md"
-                opacity={0.85}
+                bg="accent"
+                opacity={isTop ? 1 : 0.5}
+                borderRadius="badge"
               />
             </Box>
-            <Text fontSize="xs" fontFamily="mono" color="gray.100" minW="60px" textAlign="right">
+
+            <Text
+              flexShrink={0}
+              minW="40px"
+              textAlign="right"
+              fontFamily="mono"
+              fontSize="sm"
+              fontWeight={600}
+              color={isTop ? 'ink' : 'muted'}
+              sx={{ fontVariantNumeric: 'tabular-nums' }}
+            >
               {e.blocks}
             </Text>
-          </HStack>
+          </Row>
         );
       })}
     </VStack>

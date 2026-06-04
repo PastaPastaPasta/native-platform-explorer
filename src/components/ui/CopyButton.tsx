@@ -24,15 +24,16 @@ export function CopyButton({ value, label = 'Copy' }: CopyButtonProps) {
   }, [value, toast]);
 
   return (
-    <Tooltip label={label} hasArrow>
+    <Tooltip label={label} hasArrow openDelay={400}>
       <IconButton
         aria-label={label}
-        icon={<CopyIcon />}
+        icon={<CopyIcon boxSize="11px" />}
         size="xs"
         variant="ghost"
-        color="gray.250"
+        color="muted"
+        borderRadius="badge"
         onClick={onClick}
-        _hover={{ color: 'brand.light', bg: 'gray.750' }}
+        _hover={{ color: 'accent', bg: 'transparent' }}
       />
     </Tooltip>
   );

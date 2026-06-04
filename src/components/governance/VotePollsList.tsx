@@ -50,7 +50,7 @@ function PollEntryRow({ entry }: PollRowProps) {
   return (
     <Box
       borderTop="1px solid"
-      borderColor="whiteAlpha.50"
+      borderColor="hairline"
       py={2.5}
       _first={{ borderTop: 'none', pt: 0 }}
     >

@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef } from 'react';
+import { useMemo, useRef } from 'react';
 import {
   useQuery,
   useQueries,
@@ -15,6 +15,7 @@ import { walkInstance, safeStringify } from '@util/wasm-json';
 import {
   useQueryProofStore,
   type ProofData,
+  type QueryProofEntry,
   type ResponseMeta,
 } from '@/contexts/QueryProofStore';
 
@@ -22,6 +23,10 @@ type Awaited<T> = T extends Promise<infer U> ? U : T;
 
 export type SdkQueryResult<TData> = UseQueryResult<TData, Error> & {
   proofState: ProofState;
+  /** The inspector entry recorded for this query (proof, metadata, result),
+   *  if one has been captured. Lets a value's ProofGlyph open the inspector
+   *  pre-populated with the real proof rather than an empty placeholder. */
+  proofEntry?: QueryProofEntry;
 };
 
 export function shouldUseProofTransport(
@@ -317,7 +322,21 @@ function useSdkQuery<TData>(
   // forever waiting for a precondition the user hasn't met yet. (Mutating `q`
   // instead of spreading preserves RQ's discriminated-union narrowing.)
   const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
-  return Object.assign(q, { proofState, isLoading: q.isPending && userEnabled });
+
+  // Surface the recorded inspector entry for this exact query so a value's
+  // ProofGlyph can open the inspector with the real proof. Keyed on the
+  // stringified `fullKey` (matching how the store records it) and recomputed
+  // only when the store changes, not on every render.
+  const fullKeyStr = JSON.stringify(fullKey);
+  // O(1) Map lookup keyed on the same stringified key the store records under.
+  // `proofStore` gets a fresh identity on every version bump (see its value
+  // useMemo), so this stays reactive without scanning the entries array.
+  const proofEntry = useMemo(
+    () => proofStore.getEntry(fullKeyStr),
+    [proofStore, fullKeyStr],
+  );
+
+  return Object.assign(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled });
 }
 
 /**

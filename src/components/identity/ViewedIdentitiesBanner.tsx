@@ -35,9 +35,9 @@ export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
       px={3}
       py={1.5}
       borderRadius="md"
-      bg="rgba(35,44,48,0.4)"
+      bg="raised"
       border="1px dashed"
-      borderColor="whiteAlpha.100"
+      borderColor="hairlineStrong"
     >
       <HStack justify="space-between" flexWrap="wrap" spacing={3}>
         <Text fontSize="xs" color="gray.400">

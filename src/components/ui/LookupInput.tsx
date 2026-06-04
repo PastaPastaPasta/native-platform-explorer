@@ -18,8 +18,7 @@ export interface LookupInputProps {
   label: string;
   description?: string;
   placeholder?: string;
-  /** Optional client-side validator. Return null when valid, a reason string
-   *  when not. */
+  /** Optional client-side validator. Return null when valid, a reason string when not. */
   validate?: (v: string) => string | null;
   /** Build the destination URL. Receives the trimmed input. */
   buildHref: (value: string) => string;
@@ -48,7 +47,13 @@ export function LookupInput({
   return (
     <VStack align="stretch" spacing={1}>
       <FormControl isInvalid={!!err}>
-        <FormLabel fontSize="xs" color="gray.250" mb={1}>
+        <FormLabel
+          fontSize="xs"
+          color="muted"
+          mb={1}
+          textTransform="uppercase"
+          letterSpacing="0.08em"
+        >
           {label}
         </FormLabel>
         <InputGroup size="sm">
@@ -63,13 +68,26 @@ export function LookupInput({
               }
             }}
             fontFamily="mono"
-            bg="gray.800"
-            borderColor="gray.700"
-            _focus={{ borderColor: 'brand.normal' }}
+            bg="raised"
+            borderColor="hairline"
+            borderRadius="card"
+            _hover={{ borderColor: 'hairlineStrong' }}
+            _focusVisible={{
+              borderColor: 'accent',
+              boxShadow: 'none',
+            }}
             pr="5rem"
           />
           <InputRightElement width="4.5rem">
-            <Button size="xs" colorScheme="blue" onClick={submit} isDisabled={!canSubmit}>
+            <Button
+              size="xs"
+              variant="ghost"
+              color="accent"
+              fontFamily="mono"
+              fontSize="11px"
+              onClick={submit}
+              isDisabled={!canSubmit}
+            >
               {buttonLabel}
             </Button>
           </InputRightElement>
@@ -77,7 +95,7 @@ export function LookupInput({
         {err ? <FormErrorMessage fontSize="xs">{err}</FormErrorMessage> : null}
       </FormControl>
       {description ? (
-        <Text fontSize="xs" color="gray.400">
+        <Text fontSize="xs" color="muted">
           {description}
         </Text>
       ) : null}

@@ -106,7 +106,7 @@ export function QueryInspectorDrawer() {
             </HStack>
 
             <Box
-              bg="whiteAlpha.50"
+              bg="sunken"
               borderRadius="md"
               px={3}
               py={2}

@@ -25,7 +25,7 @@ export function DigestRow({
       flexWrap={{ base: 'wrap', sm: 'nowrap' }}
       py={1.5}
       borderBottom="1px solid"
-      borderColor="whiteAlpha.50"
+      borderColor="hairline"
       _last={{ borderBottom: 'none' }}
     >
       <Text
