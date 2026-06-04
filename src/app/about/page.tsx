@@ -4,7 +4,8 @@ import NextLink from 'next/link';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
-import { Box, Heading, Link, Text } from '@chakra-ui/react';
+import { Badge, Box, Heading, Link, Text } from '@chakra-ui/react';
+import { EVO_SDK_VERSION } from '@/version';
 
 // Simple static rendering. We skip react-markdown here so Stage 5 avoids a
 // new runtime dep + SSR concern; the source file at `src/content/about.md` is
@@ -27,7 +28,10 @@ export default function Page() {
             A client-only block explorer for Dash Platform, powered exclusively by{' '}
             <Link href="https://github.com/dashevo/platform/tree/master/packages/js-evo-sdk" isExternal color="brand.light">
               @dashevo/evo-sdk
-            </Link>
+            </Link>{' '}
+            <Badge ml={1} colorScheme="blue" fontFamily="mono" textTransform="none" verticalAlign="middle">
+              v{EVO_SDK_VERSION}
+            </Badge>
             . There is no API server, no database, and no indexer behind this site —
             every value you see has been fetched from a masternode&apos;s DAPI endpoint
             by the WASM SDK running in your browser, and (by default) verified
