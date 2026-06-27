@@ -1,6 +1,7 @@
 import { ChakraProvider } from '@chakra-ui/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, type RenderOptions } from '@testing-library/react';
+import { useState } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import { theme } from '@styles/theme';
 import { SdkContext, type SdkContextValue } from '@sdk/SdkProvider';
@@ -23,15 +24,18 @@ export function createTestQueryClient() {
 export function TestProviders({
   children,
   sdk,
-  queryClient = createTestQueryClient(),
+  queryClient,
 }: {
   children: ReactNode;
   sdk?: Partial<SdkContextValue>;
   queryClient?: QueryClient;
 }) {
+  const [fallbackQueryClient] = useState(() => createTestQueryClient());
+  const client = queryClient ?? fallbackQueryClient;
+
   return (
     <ChakraProvider theme={theme}>
-      <QueryClientProvider client={queryClient}>
+      <QueryClientProvider client={client}>
         <SdkContext.Provider value={createSdkContextValue(sdk)}>
           <QueryProofStoreProvider>
             <BreadcrumbsProvider>

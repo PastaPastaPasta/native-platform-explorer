@@ -1,7 +1,19 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { getConfig } from './config';
 
+const ENV_KEYS = [
+  'NEXT_PUBLIC_DEFAULT_NETWORK',
+  'NEXT_PUBLIC_TRUSTED_MODE',
+  'NEXT_PUBLIC_DISABLE_WRITE_MODE',
+  'NEXT_PUBLIC_RATE_PROVIDER',
+  'NEXT_PUBLIC_WELL_KNOWN_URL',
+] as const;
+
 describe('getConfig', () => {
+  beforeEach(() => {
+    for (const key of ENV_KEYS) vi.stubEnv(key, undefined);
+  });
+
   afterEach(() => {
     vi.unstubAllEnvs();
   });
@@ -37,4 +49,3 @@ describe('getConfig', () => {
     expect(getConfig().rateProvider).toBe('kucoin');
   });
 });
-

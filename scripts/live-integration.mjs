@@ -51,8 +51,8 @@ assertPresent('totalCreditsInPlatformWithProof.proof', creditsWithProof?.proof);
 console.log('[live] proof metadata ok');
 
 if (dpnsName) {
-  const dpns = await withTimeout('dpns.getUsernameByName', sdk.dpns.getUsernameByName(dpnsName));
-  assertPresent(`dpns.getUsernameByName(${dpnsName})`, dpns);
+  const dpns = await withTimeout('dpns.resolveName', sdk.dpns.resolveName(dpnsName));
+  assertPresent(`dpns.resolveName(${dpnsName})`, dpns);
   console.log(`[live] DPNS fixture ${dpnsName} ok`);
 } else {
   console.log('[live] DPNS fixture skipped; set NPE_LIVE_DPNS_NAME to enable it');

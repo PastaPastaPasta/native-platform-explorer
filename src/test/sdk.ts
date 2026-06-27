@@ -3,8 +3,12 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import type { SdkContextValue } from '@sdk/SdkProvider';
 import type { Network } from '@sdk/networks';
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 export function createMockSdk(overrides: Record<string, unknown> = {}): EvoSDK {
-  return {
+  const defaults = {
     connect: vi.fn().mockResolvedValue(undefined),
     version: vi.fn().mockResolvedValue(1),
     system: {
@@ -34,7 +38,31 @@ export function createMockSdk(overrides: Record<string, unknown> = {}): EvoSDK {
       username: vi.fn().mockResolvedValue(null),
       usernameWithProof: vi.fn().mockResolvedValue({ data: null }),
     },
+  };
+
+  return {
+    ...defaults,
     ...overrides,
+    system: {
+      ...defaults.system,
+      ...(isRecord(overrides.system) ? overrides.system : {}),
+    },
+    epoch: {
+      ...defaults.epoch,
+      ...(isRecord(overrides.epoch) ? overrides.epoch : {}),
+    },
+    protocol: {
+      ...defaults.protocol,
+      ...(isRecord(overrides.protocol) ? overrides.protocol : {}),
+    },
+    voting: {
+      ...defaults.voting,
+      ...(isRecord(overrides.voting) ? overrides.voting : {}),
+    },
+    dpns: {
+      ...defaults.dpns,
+      ...(isRecord(overrides.dpns) ? overrides.dpns : {}),
+    },
   } as unknown as EvoSDK;
 }
 
