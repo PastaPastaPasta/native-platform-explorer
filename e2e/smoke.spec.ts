@@ -34,13 +34,14 @@ test('search redirects single static epoch matches without live SDK data', async
 test('settings persist network preference in localStorage', async ({ page }) => {
   await page.goto('/settings/');
 
-  await page.locator('select').first().selectOption('mainnet');
+  const settingsNetworkSelect = page.locator('main select').first();
+  await settingsNetworkSelect.selectOption('mainnet');
   await expect
     .poll(() => page.evaluate(() => window.localStorage.getItem('npe:network')))
     .toBe('mainnet');
 
   await page.reload();
-  await expect(page.locator('select').first()).toHaveValue('mainnet');
+  await expect(page.locator('main select').first()).toHaveValue('mainnet');
 });
 
 test('mobile viewport renders the primary app chrome without desktop sidebar', async ({ page }) => {
