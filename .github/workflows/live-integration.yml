@@ -1,0 +1,37 @@
+name: Live Integration
+
+on:
+  workflow_dispatch:
+    inputs:
+      network:
+        description: Network to test against
+        required: false
+        default: testnet
+      dpns_name:
+        description: Optional DPNS fixture name
+        required: false
+        default: ''
+  schedule:
+    - cron: '17 8 * * *'
+
+jobs:
+  live-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa
+        with:
+          version: 9
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 20
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - name: Run live SDK checks
+        run: node scripts/live-integration.mjs
+        env:
+          NPE_LIVE_NETWORK: ${{ github.event.inputs.network || 'testnet' }}
+          NPE_LIVE_DPNS_NAME: ${{ github.event.inputs.dpns_name || '' }}

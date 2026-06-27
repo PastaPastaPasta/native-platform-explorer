@@ -7,13 +7,13 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3000',
+    baseURL: 'http://127.0.0.1:3100',
     trace: 'retain-on-failure',
   },
   webServer: {
-    command: 'pnpm serve -l 3000',
-    port: 3000,
-    reuseExistingServer: !process.env.CI,
+    command: 'pnpm exec serve out --listen tcp://127.0.0.1:3100',
+    port: 3100,
+    reuseExistingServer: false,
     timeout: 120_000,
   },
   projects: [
