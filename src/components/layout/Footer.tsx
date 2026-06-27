@@ -5,7 +5,7 @@ import NextLink from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSdk } from '@sdk/hooks';
 import { useQueryProofStore } from '@/contexts/QueryProofStore';
-import { APP_VERSION } from '@/version';
+import { APP_VERSION, EVO_SDK_VERSION } from '@/version';
 
 function LocalClock() {
   const [now, setNow] = useState<Date | null>(null);
@@ -41,6 +41,14 @@ export function Footer() {
           <LocalClock />
           <Text fontFamily="mono" fontSize="xs" color="muted">
             v{APP_VERSION}
+          </Text>
+          <Text
+            fontFamily="mono"
+            fontSize="xs"
+            color="muted"
+            title="@dashevo/evo-sdk version this build was compiled against"
+          >
+            sdk {EVO_SDK_VERSION}
           </Text>
           <Text
             as={NextLink}
