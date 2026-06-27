@@ -125,6 +125,12 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   const [sdk, setSdk] = useState<EvoSDKType | null>(null);
   const [status, setStatus] = useState<SdkStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
+  // Mirror the (network, trusted) selection so `setNetwork` / `setTrusted` can
+  // detect no-op calls without re-creating the callback every render.
+  const networkRef = useRef(network);
+  networkRef.current = network;
+  const trustedRef = useRef(trusted);
+  trustedRef.current = trusted;
   // Gate the first connect on the URL/localStorage hydration below. Without
   // this, every mount starts a connect against the SSR-fallback network
   // (testnet) before the effect can swap it to a devnet, which not only
@@ -178,16 +184,36 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   }, [network, trusted, hydrated]);
 
   const setNetwork = useCallback((next: Network) => {
+    if (networkRef.current === next) return;
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(NETWORK_KEY, next);
     }
+    // Drop the outgoing SDK in the same React batch as the network change so
+    // children that re-render with the new `network` see `status !== 'ready'`
+    // and don't fire a `useSdkQuery` against the old SDK — that race poisoned
+    // the cache with old-network data keyed under the new network, surfacing
+    // as "stale until reload". Also bump connectSeq so any in-flight connect
+    // for the previous network is orphaned immediately rather than briefly
+    // resolving as `ready` in the window between this commit and the
+    // connect-on-change effect.
+    networkRef.current = next;
+    connectSeq.current += 1;
+    setSdk(null);
+    setStatus('connecting');
+    setError(null);
     setNetworkState(next);
   }, []);
 
   const setTrusted = useCallback((next: boolean) => {
+    if (trustedRef.current === next) return;
     if (typeof window !== 'undefined') {
       window.localStorage.setItem(TRUSTED_KEY, String(next));
     }
+    trustedRef.current = next;
+    connectSeq.current += 1;
+    setSdk(null);
+    setStatus('connecting');
+    setError(null);
     setTrustedState(next);
   }, []);
 
