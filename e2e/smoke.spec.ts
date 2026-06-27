@@ -35,13 +35,14 @@ test('settings persist network preference in localStorage', async ({ page }) => 
   await page.goto('/settings/');
 
   const settingsNetworkSelect = page.locator('main select').first();
-  await settingsNetworkSelect.selectOption('mainnet');
+  const nextNetwork = (await settingsNetworkSelect.inputValue()) === 'mainnet' ? 'testnet' : 'mainnet';
+  await settingsNetworkSelect.selectOption(nextNetwork);
   await expect
     .poll(() => page.evaluate(() => window.localStorage.getItem('npe:network')))
-    .toBe('mainnet');
+    .toBe(nextNetwork);
 
   await page.reload();
-  await expect(page.locator('main select').first()).toHaveValue('mainnet');
+  await expect(page.locator('main select').first()).toHaveValue(nextNetwork);
 });
 
 test('mobile viewport renders the primary app chrome without desktop sidebar', async ({ page }) => {
