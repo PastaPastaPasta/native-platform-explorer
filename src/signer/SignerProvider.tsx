@@ -11,6 +11,7 @@ import {
   type ReactNode,
 } from 'react';
 import type { ExplorerSigner, SignerKind } from './types';
+import { useSdk } from '@sdk/hooks';
 
 export interface SignerStash {
   kind: SignerKind;
@@ -64,6 +65,7 @@ function removeStash() {
 const IDLE_TIMEOUT_MS = 10 * 60_000;
 
 export function SignerProvider({ children }: { children: ReactNode }) {
+  const { network, trusted, status } = useSdk();
   const [signer, setSigner] = useState<ExplorerSigner | null>(null);
   // Surfaces the previous-session hint. Initial value must be null on both
   // server and client to avoid a hydration mismatch; the useEffect below pulls
@@ -129,6 +131,26 @@ export function SignerProvider({ children }: { children: ReactNode }) {
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [signer, disconnect]);
+
+  // Identity bindings are network-scoped: an identity that exists on testnet
+  // generally does not exist on mainnet (and even if the ID happened to
+  // collide, the key material wouldn't match). Drop both the live signer and
+  // the previous-session hint whenever the user switches networks or toggles
+  // trusted mode, so /wallet doesn't keep claiming "connected as X" against a
+  // network where X is meaningless.
+  //
+  // Gate on `hasConnectedOnceRef` so the SdkProvider's mount-time hydration
+  // (default network → stored network) doesn't immediately wipe the stash the
+  // user just rehydrated from sessionStorage. We only act once the SDK has
+  // reached `ready` at least once — i.e., on a real user-initiated switch.
+  const hasConnectedOnceRef = useRef(false);
+  useEffect(() => {
+    if (status === 'ready') hasConnectedOnceRef.current = true;
+  }, [status]);
+  useEffect(() => {
+    if (!hasConnectedOnceRef.current) return;
+    disconnect();
+  }, [network, trusted, disconnect]);
 
   const value = useMemo<SignerContextValue>(
     () => ({ signer, stash, connect, disconnect, clearStash: clearStashOnly }),
