@@ -6,6 +6,21 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: false,
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
+    setupFiles: ['./vitest.setup.ts'],
+    coverage: {
+      provider: 'v8',
+      reporter: ['text', 'lcov', 'json-summary'],
+      reportsDirectory: './coverage',
+      include: ['src/**/*.{ts,tsx}'],
+      exclude: [
+        'src/**/*.test.{ts,tsx}',
+        'src/**/*.spec.{ts,tsx}',
+        'src/test/**',
+        'src/app/**/page.tsx',
+        'src/app/layout.tsx',
+        'src/lib/grovedb-proof-parser/**',
+      ],
+    },
   },
   resolve: {
     alias: {
