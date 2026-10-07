@@ -25,6 +25,7 @@ import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
 import { useSigner } from '@/signer/SignerProvider';
 import { useSdk } from '@sdk/hooks';
+import { normalizeError } from '@sdk/errors';
 import { getDerivationNetwork } from '@sdk/networks';
 import { BridgeImportPane } from '@components/wallet/BridgeImportPane';
 import { BridgeLaunchCard } from '@components/wallet/BridgeLaunchCard';
@@ -101,7 +102,7 @@ function MnemonicPane() {
       );
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
       setMnemonic('');
       setBusy(false);
@@ -197,7 +198,7 @@ function WifPane() {
       const signer = await createWifSigner(sdk, wif.trim(), identityId.trim());
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
       setWif('');
       setBusy(false);

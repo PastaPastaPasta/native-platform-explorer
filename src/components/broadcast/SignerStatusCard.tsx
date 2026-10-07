@@ -7,6 +7,7 @@ import { CodeBlock } from '@components/data/CodeBlock';
 import { useSigner } from '@/signer/SignerProvider';
 import { useEffect, useState } from 'react';
 import type { SignerKeyDescriptor } from '@/signer/types';
+import { extractErrorMessage } from '@sdk/errors';
 
 export function SignerStatusCard() {
   const { signer, disconnect } = useSigner();
@@ -26,7 +27,7 @@ export function SignerStatusCard() {
         if (!cancelled) setKeys(k);
       },
       (error: unknown) => {
-        if (!cancelled) setError(error instanceof Error ? error.message : String(error));
+        if (!cancelled) setError(extractErrorMessage(error));
       },
     );
     return () => {

@@ -14,6 +14,7 @@ import {
 import { InfoBlock } from '@ui/InfoBlock';
 import { ErrorCard } from '@ui/ErrorCard';
 import { useSdk } from '@sdk/hooks';
+import { normalizeError } from '@sdk/errors';
 import { useSigner } from '@/signer/SignerProvider';
 import {
   createBackupSigner,
@@ -199,7 +200,7 @@ export function BridgeImportPane() {
       const signer = await createBackupSigner(sdk, parsed);
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
       // Remove the backup's secret fields after every connection attempt.
       clearDraft();

@@ -41,6 +41,8 @@ test('invalid WIF and mnemonic attempts show errors and clear credential fields'
   await expect(connectWif).toBeEnabled({ timeout: 20_000 });
   await connectWif.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
+  await expect(page.getByText(/Invalid WIF: key base58 error/)).toBeVisible();
+  await expect(page.getByRole('tabpanel')).not.toContainText('[object Object]');
   await expect(wifInput).toHaveValue('');
   await expect(connectWif).toBeDisabled();
 
@@ -52,6 +54,8 @@ test('invalid WIF and mnemonic attempts show errors and clear credential fields'
   await expect(connectMnemonic).toBeEnabled();
   await connectMnemonic.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
+  await expect(page.getByText('That BIP-39 mnemonic is not valid.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel')).not.toContainText('[object Object]');
   await expect(mnemonicInput).toHaveValue('');
   await expect(connectMnemonic).toBeDisabled();
 });
@@ -77,6 +81,7 @@ test('bridge backup previews can be discarded, mismatched networks are blocked, 
   await expect(useIdentity).toBeEnabled();
   await useIdentity.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
+  await expect(page.getByText(/Invalid WIF: key base58 error/)).toBeVisible();
   await expect(input).toHaveValue('');
   await expect(useIdentity).toHaveCount(0);
 });
@@ -97,6 +102,7 @@ test('bridge file import supports keyboard activation and clears the selected fi
   await expect(useIdentity).toBeEnabled({ timeout: 20_000 });
   await useIdentity.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
+  await expect(page.getByText(/Invalid WIF: key base58 error/)).toBeVisible();
   await expect(page.getByLabel('Bridge backup file', { exact: true })).toHaveValue('');
   await expect(useIdentity).toHaveCount(0);
 });
