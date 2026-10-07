@@ -9,26 +9,15 @@
 | 5 — Proofs | ✅ Complete | `979f833`, `c9fb14f` | ProofState + classify/aggregate helpers, ProofChip + ProofFailureBanner, hooks return `proofState`, no-proof-variant hooks tagged honestly, untrusted-mode navbar border + badge, real /settings (trusted toggle + diagnostics opt-in), DiagnosticsDrawer with ⌘/ + Ctrl+/ guarded against inputs, /about explainer with #proofs + #enumeration anchors. |
 | 6 — Write mode | ✅ Complete | `7a378d7`, `a704993` | ExplorerSigner interface + mnemonic / WIF / extension-stub adapters, SignerProvider with idle-timeout + beforeunload wipe + surfaced reconnect hint, /wallet with three tabs + SignerStatusCard, /broadcast with facade/op rail + shared OperationShell (Build → Review → Sign → Broadcast → Result + mainnet typed-MAINNET confirmation + destructive ack), three representative preview-only forms (identity.topUp, dpns.registerName, raw stateTransitions.broadcast), kill switch honouring NEXT_PUBLIC_DISABLE_WRITE_MODE. |
 
-## Scope notes
+## Current capabilities
 
-- **Representative write forms ship as preview-only.** All three included
-  flows (identity.topUp, dpns.registerName, stateTransitions.broadcast raw
-  hex) run the full Build → Review → Sign-ack → Broadcast lifecycle but
-  throw an explicit "requires IdentitySigner bridge" error at the SDK
-  call. This is the honest v1.0 posture — the SDK's write facades want
-  SDK-internal `Identity` + `IdentityPublicKey` + `IdentitySigner` class
-  instances, which the `ExplorerSigner` interface deliberately does not
-  expose. Wiring that bridge is tracked as the first follow-up after
-  tagging. The PRD's full inventory of ~30 write operations plugs into
-  the same shell following the same pattern.
-- **Extension adapter is detection-only** until the public API of
-  `dash-platform-extension` is finalised. The stub throws a clear error
-  and the /wallet Extension tab surfaces it.
-- **Hardening follow-ups** deferred: automated Playwright write-flow
-  tests, axe-core a11y audit, service worker for offline app-shell
-  caching, `.github/workflows/deploy.yml`, SBOM + SRI emission,
-  `v1.0.0` tag.
+The stage table records the original implementation milestones. Later work
+added the identity-signing bridge and document/contract operations, aggregate
+and multi-statement SQL, backup import, deployment, and automated coverage.
+The original stage-6 preview-only limitation no longer describes the whole
+write surface. Each operation must advertise its current signer and SDK
+requirements; an interface or build passing does not prove a live broadcast.
 
-## Blockers
-
-None.
+The CI workflow validates the same static export that Pages deploys, including
+its configured deployment prefix. Live SDK integration checks remain separate from deterministic
+browser and unit checks; they do not broadcast transactions.
