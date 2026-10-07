@@ -45,7 +45,7 @@ export function ProofInspector() {
 
   // A value from a non-provable endpoint isn't "trust mode" — there is simply
   // no proof to verify. Label it honestly rather than reusing the status chip.
-  const noProof = entry ? !entry.proof && entry.hasProofVariant === false : false;
+  const noProof = entry?.hasProofVariant === false && status === 'trusted';
   const statusLabel = noProof ? 'NO PROOF' : STATUS_LABEL[status];
   const statusColor = noProof ? 'muted' : STATUS_COLOR[status];
   // Open straight to the Proof tab (index 2) when this value carries a proof
