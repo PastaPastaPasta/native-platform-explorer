@@ -1,9 +1,7 @@
 'use client';
 
-import { createElement } from 'react';
-import NextLink from 'next/link';
-import { Box, Button, HStack, Text, VStack } from '@chakra-ui/react';
 import type { OperationDescriptor } from './OperationShell';
+import { operationRequirement } from './capabilities';
 import { ContractRegisterForm, type ContractRegisterOptions } from './forms/ContractRegister';
 import { ContractUpdateForm, type ContractUpdateOptions } from './forms/ContractUpdate';
 import { DocumentCreateForm, type DocumentCreateOptions } from './forms/DocumentCreate';
@@ -20,10 +18,7 @@ import {
   IdentityCreditWithdrawalForm,
   type IdentityCreditWithdrawalOptions,
 } from './forms/IdentityCreditWithdrawal';
-import {
-  IdentityUpdateKeysForm,
-  type IdentityUpdateKeysOptions,
-} from './forms/IdentityUpdateKeys';
+import { IdentityUpdateKeysForm, type IdentityUpdateKeysOptions } from './forms/IdentityUpdateKeys';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
 import { DpnsRegisterForm, type DpnsRegisterOptions } from './forms/DpnsRegister';
 import { VotingCastVoteForm, type VotingCastVoteOptions } from './forms/VotingCastVote';
@@ -49,13 +44,7 @@ import {
   type IdentityResult,
 } from './executors';
 
-export type OperationGroup =
-  | 'identity'
-  | 'contract'
-  | 'document'
-  | 'dpns'
-  | 'voting'
-  | 'advanced';
+export type OperationGroup = 'identity' | 'contract' | 'document' | 'dpns' | 'voting' | 'advanced';
 
 export interface OperationEntry {
   /** Stable op id used in URLs (e.g. "contract.register"). */
@@ -81,7 +70,11 @@ function makeEntry<O, R>(
     group,
     label,
     blurb,
-    descriptor: descriptor as OperationDescriptor<unknown, unknown>,
+    descriptor: {
+      ...descriptor,
+      operationId: id,
+      capability: operationRequirement(id),
+    } as OperationDescriptor<unknown, unknown>,
   };
 }
 
@@ -112,63 +105,6 @@ export const OPERATIONS: OperationEntry[] = [
         `Register a contract with ${Object.keys(o.documentSchemas ?? {}).length} ` +
         `document type(s) owned by ${o.ownerId}.`,
       execute: executeContractRegister,
-      renderResult: (r) =>
-        createElement(
-          VStack,
-          { align: 'stretch', spacing: 3 },
-          createElement(
-            Box,
-            null,
-            createElement(
-              Text,
-              { fontSize: 'xs', color: 'gray.400' },
-              'New contract ID',
-            ),
-            createElement(
-              Text,
-              { fontFamily: 'mono', fontSize: 'sm', color: 'gray.100' },
-              r.contractId,
-            ),
-          ),
-          createElement(
-            Box,
-            null,
-            createElement(
-              Text,
-              { fontSize: 'xs', color: 'gray.400' },
-              `Version ${r.version} · ${r.documentTypes.length} document type(s)`,
-            ),
-          ),
-          createElement(
-            HStack,
-            { spacing: 2, flexWrap: 'wrap' },
-            createElement(
-              Button,
-              {
-                as: NextLink,
-                href: `/contract/?id=${encodeURIComponent(r.contractId)}`,
-                size: 'sm',
-                variant: 'outline',
-              },
-              'Open contract',
-            ),
-            ...r.documentTypes.map((t) =>
-              createElement(
-                Button,
-                {
-                  key: t,
-                  as: NextLink,
-                  href: `/broadcast/?op=document.create&contract=${encodeURIComponent(
-                    r.contractId,
-                  )}&type=${encodeURIComponent(t)}`,
-                  size: 'sm',
-                  colorScheme: 'blue',
-                },
-                `Create a ${t} →`,
-              ),
-            ),
-          ),
-        ),
     },
   ),
   makeEntry<ContractUpdateOptions, ContractUpdateResult>(
@@ -179,8 +115,7 @@ export const OPERATIONS: OperationEntry[] = [
     {
       title: 'Update a data contract',
       description:
-        'Mutates an existing contract. The new contract version is computed ' +
-        'automatically.',
+        'Mutates an existing contract. The new contract version is computed ' + 'automatically.',
       FormComponent: ContractUpdateForm,
       summarise: (o) => `Update contract ${o.contractId}.`,
       execute: executeContractUpdate,
@@ -198,60 +133,10 @@ export const OPERATIONS: OperationEntry[] = [
     {
       title: 'Create a document',
       description:
-        'Pick a contract and a document type, fill in the fields, sign, and ' +
-        'broadcast.',
+        'Pick a contract and a document type, fill in the fields, sign, and ' + 'broadcast.',
       FormComponent: DocumentCreateForm,
-      summarise: (o) =>
-        `Create a "${o.documentType}" document on contract ${o.contractId}.`,
+      summarise: (o) => `Create a "${o.documentType}" document on contract ${o.contractId}.`,
       execute: executeDocumentCreate,
-      renderResult: (r) =>
-        createElement(
-          VStack,
-          { align: 'stretch', spacing: 3 },
-          createElement(
-            Box,
-            null,
-            createElement(
-              Text,
-              { fontSize: 'xs', color: 'gray.400' },
-              'Document ID',
-            ),
-            createElement(
-              Text,
-              { fontFamily: 'mono', fontSize: 'sm', color: 'gray.100' },
-              r.documentId,
-            ),
-          ),
-          createElement(
-            HStack,
-            { spacing: 2 },
-            createElement(
-              Button,
-              {
-                as: NextLink,
-                href:
-                  `/contract/document/?id=${encodeURIComponent(r.contractId)}` +
-                  `&type=${encodeURIComponent(r.documentType)}` +
-                  `&docId=${encodeURIComponent(r.documentId)}`,
-                size: 'sm',
-                colorScheme: 'blue',
-              },
-              'Open document',
-            ),
-            createElement(
-              Button,
-              {
-                as: NextLink,
-                href:
-                  `/broadcast/?op=document.create&contract=${encodeURIComponent(r.contractId)}` +
-                  `&type=${encodeURIComponent(r.documentType)}`,
-                size: 'sm',
-                variant: 'outline',
-              },
-              'Create another',
-            ),
-          ),
-        ),
     },
   ),
   makeEntry<DocumentReplaceOptions, DocumentResult>(
@@ -265,8 +150,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Loads the current document and lets you change its fields. The revision ' +
         'is bumped automatically.',
       FormComponent: DocumentReplaceForm,
-      summarise: (o) =>
-        `Replace document ${o.documentId} on contract ${o.contractId}.`,
+      summarise: (o) => `Replace document ${o.documentId} on contract ${o.contractId}.`,
       execute: executeDocumentReplace,
     },
   ),
@@ -280,8 +164,7 @@ export const OPERATIONS: OperationEntry[] = [
       description: 'Removes a document. This is permanent.',
       destructive: true,
       FormComponent: DocumentDeleteForm,
-      summarise: (o) =>
-        `Delete document ${o.documentId} on contract ${o.contractId}.`,
+      summarise: (o) => `Delete document ${o.documentId} on contract ${o.contractId}.`,
       execute: executeDocumentDelete,
     },
   ),
@@ -296,8 +179,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Changes the owner of a document to another identity. The recipient ' +
         'becomes responsible for the document going forward.',
       FormComponent: DocumentTransferForm,
-      summarise: (o) =>
-        `Transfer document ${o.documentId} to ${o.recipientId}.`,
+      summarise: (o) => `Transfer document ${o.documentId} to ${o.recipientId}.`,
       execute: executeDocumentTransfer,
     },
   ),
@@ -312,8 +194,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Marks a document as for-sale at a given credit price. Set the price to 0 ' +
         'to remove the listing.',
       FormComponent: DocumentSetPriceForm,
-      summarise: (o) =>
-        `Set price on document ${o.documentId} to ${o.priceCredits} credits.`,
+      summarise: (o) => `Set price on document ${o.documentId} to ${o.priceCredits} credits.`,
       execute: executeDocumentSetPrice,
     },
   ),
@@ -328,8 +209,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Buys a document that has been listed for sale. The credits leave your ' +
         'identity and ownership transfers to you.',
       FormComponent: DocumentPurchaseForm,
-      summarise: (o) =>
-        `Purchase document ${o.documentId} for ${o.priceCredits} credits.`,
+      summarise: (o) => `Purchase document ${o.documentId} for ${o.priceCredits} credits.`,
       execute: executeDocumentPurchase,
     },
   ),
@@ -364,8 +244,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Sends credits from your identity to another. The recipient must already ' +
         'exist on Platform.',
       FormComponent: IdentityCreditTransferForm,
-      summarise: (o) =>
-        `Transfer ${o.amountCredits} credits to ${o.recipientId}.`,
+      summarise: (o) => `Transfer ${o.amountCredits} credits to ${o.recipientId}.`,
       execute: executeIdentityCreditTransfer,
     },
   ),
@@ -380,8 +259,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Withdraws credits to a Dash Core address. The withdrawal is queued ' +
         'on-chain and settles as a Core transaction.',
       FormComponent: IdentityCreditWithdrawalForm,
-      summarise: (o) =>
-        `Withdraw ${o.amountCredits} credits to ${o.toAddress}.`,
+      summarise: (o) => `Withdraw ${o.amountCredits} credits to ${o.toAddress}.`,
       execute: executeIdentityCreditWithdrawal,
     },
   ),
@@ -399,9 +277,8 @@ export const OPERATIONS: OperationEntry[] = [
       FormComponent: IdentityUpdateKeysForm,
       summarise: (o) => {
         const adds = (o.addPublicKeysJson?.length ?? 0) > 0 ? 'add keys' : '';
-        const disables = (o.disableKeyIds?.length ?? 0) > 0
-          ? `disable ${o.disableKeyIds!.length} key(s)`
-          : '';
+        const disables =
+          (o.disableKeyIds?.length ?? 0) > 0 ? `disable ${o.disableKeyIds!.length} key(s)` : '';
         return [adds, disables].filter(Boolean).join(', ') || 'no-op';
       },
       execute: executeIdentityUpdateKeys,
@@ -442,8 +319,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Casts a masternode vote on a contested resource (e.g. a contested DPNS ' +
         'name). Only operating masternodes have a voting key.',
       FormComponent: VotingCastVoteForm,
-      summarise: (o) =>
-        `Vote ${o.choice}${o.targetIdentityId ? ` → ${o.targetIdentityId}` : ''}.`,
+      summarise: (o) => `Vote ${o.choice}${o.targetIdentityId ? ` → ${o.targetIdentityId}` : ''}.`,
       execute: executeVotingCastVote,
     },
   ),
