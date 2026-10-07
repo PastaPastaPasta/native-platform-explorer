@@ -8,6 +8,8 @@ import { createTestQueryClient } from '@/test/render';
 import { createMockSdk, createSdkContextValue } from '@/test/sdk';
 import { SdkContext, type SdkContextValue } from '../SdkProvider';
 import { useEpochInfo, useEpochRange, useFinalizedEpochInfo } from '../queries';
+import { createEvidenceBundle } from '../evidence';
+import { nativeProofError, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
 
 type EpochQuery = NonNullable<Parameters<EvoSDK['epoch']['epochsInfo']>[0]>;
 
@@ -30,8 +32,11 @@ function Probe({ kind, index = 42 }: { kind: 'detail' | 'finalized' | 'range'; i
     <div data-testid="evidence">{store.entries.length}:{String(!!store.entries[0]?.proof)}:{String(!!store.entries[0]?.metadata)}</div>
     <div data-testid="capture-note">{store.entries[0]?.captureNote}</div>
     <div data-testid="params">{JSON.stringify(store.entries[0]?.methodParams)}</div>
+    <div data-testid="proof-state">{q.proofState.kind}</div>
+    <div data-testid="export">{JSON.stringify(createEvidenceBundle(store.entries).queries[0])}</div>
     <div data-testid="error">{q.error?.message}</div>
     <button onClick={() => { void q.refetch(); }}>Refetch</button>
+    <button onClick={() => store.setEnabled(false)}>Disable inspector</button>
   </>;
 }
 
@@ -44,6 +49,56 @@ function mountProbe(context: SdkContextValue, kind: 'detail' | 'finalized' | 'ra
 afterEach(() => { clients.forEach((client) => client.clear()); clients.length = 0; });
 
 describe('epoch hook SDK arguments and capture', () => {
+  it.each([true, false])('exports aggregate success with its actual trust outcome and limitation (trusted=%s)', async (trusted) => {
+    const epochsInfo = vi.fn((query: EpochQuery) => Promise.resolve(new Map([[query.startEpoch!, { blockHeight: 100n }]])));
+    const epochsInfoWithProof = vi.fn();
+    mountProbe(createSdkContextValue({ trusted, sdk: createMockSdk({ epoch: { epochsInfo, epochsInfoWithProof } }) }), 'range');
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle:0,10,20'));
+    expect(epochsInfoWithProof).not.toHaveBeenCalled();
+    expect(screen.getByTestId('proof-state')).toHaveTextContent(trusted ? 'verified' : 'unverified-trusted-off');
+    const evidence = JSON.parse(screen.getByTestId('export').textContent!);
+    expect(evidence.verification).toMatchObject({
+      outcome: trusted ? 'verified' : 'not-verified',
+      proofAvailability: 'not-captured',
+      captureNote: `Combined results from separate ${trusted ? 'SDK-verified batches' : 'SDK calls'}. No single proof payload or response height covers this range.`,
+    });
+    expect(evidence.context).toMatchObject({ network: 'testnet', trustedMode: trusted });
+    expect(evidence).not.toHaveProperty('proof');
+    expect(evidence).not.toHaveProperty('metadata');
+    expect(evidence.result).toEqual({ 0: { blockHeight: '100' }, 10: { blockHeight: '100' }, 20: { blockHeight: '100' } });
+  });
+
+  it.each([
+    ['invalid quorum signature', 'failed'],
+    [SDK_PROOF_DECODE_MESSAGE, 'unavailable'],
+  ])('exports a failed native range read without a success note or retry: %s', async (message, outcome) => {
+    const epochsInfo = vi.fn().mockRejectedValue(new Error('Epoch read failed', { cause: nativeProofError(message) }));
+    const epochsInfoWithProof = vi.fn();
+    mountProbe(createSdkContextValue({ sdk: createMockSdk({ epoch: { epochsInfo, epochsInfoWithProof } }) }), 'range');
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('error:idle:'));
+    expect(epochsInfo).toHaveBeenCalledOnce();
+    expect(epochsInfoWithProof).not.toHaveBeenCalled();
+    expect(screen.getByTestId('proof-state')).toHaveTextContent(outcome);
+    const evidence = JSON.parse(screen.getByTestId('export').textContent!);
+    expect(evidence.verification.outcome).toBe(outcome);
+    expect(evidence.verification).not.toHaveProperty('captureNote');
+    expect(evidence).not.toHaveProperty('result');
+    expect(evidence).not.toHaveProperty('proof');
+    expect(evidence).not.toHaveProperty('metadata');
+  });
+
+  it('still completes bounded internal SDK reads without capturing evidence when the inspector is disabled', async () => {
+    const epochsInfo = vi.fn((query: EpochQuery) => Promise.resolve(new Map([[query.startEpoch!, undefined]])));
+    mountProbe(createSdkContextValue({ sdk: createMockSdk({ epoch: { epochsInfo } }) }), 'range');
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle:0,10,20'));
+    await act(async () => { screen.getByRole('button', { name: 'Disable inspector' }).click(); });
+    await act(async () => { screen.getByRole('button', { name: 'Refetch' }).click(); });
+    await waitFor(() => expect(epochsInfo).toHaveBeenCalledTimes(6));
+    expect(screen.getByTestId('state')).toHaveTextContent('success:idle:0,10,20');
+    expect(screen.getByTestId('proof-state')).toHaveTextContent('verified');
+    expect(screen.getByTestId('evidence')).toHaveTextContent('0:false:false');
+  });
+
   it.each(['detail', 'finalized'] as const)('fetches exactly epoch 42 through %s proof transport', async (kind) => {
     const fetch = vi.fn().mockResolvedValue({ data: new Map([[42, {}]]) });
     const sdk = createMockSdk({ epoch: { epochsInfoWithProof: fetch, finalizedInfosWithProof: fetch } });
