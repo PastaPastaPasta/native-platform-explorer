@@ -2,14 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import {
-  Box,
-  Button,
-  HStack,
-  Text,
-  Textarea,
-  VStack,
-} from '@chakra-ui/react';
+import { Box, Button, HStack, Text, Textarea, VStack } from '@chakra-ui/react';
 import { useSdkQuery } from '@sdk/hooks';
 import { normaliseContract } from '@util/contract';
 import { ContractPicker, rememberContract } from '../ContractPicker';
@@ -22,13 +15,10 @@ export interface ContractUpdateOptions {
   definitions?: Record<string, unknown>;
 }
 
-export function ContractUpdateForm({
-  onOptionsChange,
-}: OperationFormProps<ContractUpdateOptions>) {
+export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<ContractUpdateOptions>) {
   const params = useSearchParams();
   const [contractId, setContractId] = useState(params.get('contract') ?? '');
   const [schemasText, setSchemasText] = useState('');
-  const [parseError, setParseError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
 
   const validContract = isBase58Identifier(contractId.trim());
@@ -52,19 +42,16 @@ export function ContractUpdateForm({
     }
   }, [contractQuery.data, loaded]);
 
-  const parsed = useMemo<Record<string, unknown> | null>(() => {
-    if (!schemasText.trim()) return null;
+  const { parsed, parseError } = useMemo(() => {
+    if (!schemasText.trim()) return { parsed: null, parseError: null };
     try {
       const json: unknown = JSON.parse(schemasText);
       if (!json || typeof json !== 'object' || Array.isArray(json)) {
-        setParseError('documentSchemas must be a JSON object.');
-        return null;
+        return { parsed: null, parseError: 'documentSchemas must be a JSON object.' };
       }
-      setParseError(null);
-      return json as Record<string, unknown>;
+      return { parsed: json as Record<string, unknown>, parseError: null };
     } catch (e) {
-      setParseError(e instanceof Error ? e.message : String(e));
-      return null;
+      return { parsed: null, parseError: e instanceof Error ? e.message : String(e) };
     }
   }, [schemasText]);
 
@@ -82,13 +69,27 @@ export function ContractUpdateForm({
         <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
           Contract
         </Text>
-        <ContractPicker value={contractId} onChange={setContractId} />
+        <ContractPicker
+          value={contractId}
+          onChange={(id) => {
+            setContractId(id);
+            if (id.trim() === contractId.trim()) return;
+            setLoaded(false);
+            setSchemasText('');
+          }}
+        />
       </Box>
 
       {contractQuery.data && loaded ? (
         <Box>
           <HStack justify="space-between" mb={1}>
-            <Text fontSize="sm" color="gray.100" fontWeight={500}>
+            <Text
+              as="label"
+              htmlFor="contract-update-schemas"
+              fontSize="sm"
+              color="gray.100"
+              fontWeight={500}
+            >
               Document schemas
             </Text>
             <Button
@@ -105,6 +106,7 @@ export function ContractUpdateForm({
             </Button>
           </HStack>
           <Textarea
+            id="contract-update-schemas"
             rows={18}
             fontFamily="mono"
             fontSize="xs"
@@ -119,8 +121,8 @@ export function ContractUpdateForm({
             </Text>
           ) : null}
           <Text fontSize="xs" color="gray.400" mt={1}>
-            Schema changes are append-only for required fields and bounded by the
-            contract&apos;s mutability config.
+            Schema changes are append-only for required fields and bounded by the contract&apos;s
+            mutability config.
           </Text>
         </Box>
       ) : contractQuery.isLoading ? (

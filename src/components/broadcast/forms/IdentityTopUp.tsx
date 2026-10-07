@@ -1,18 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import {
-  Button,
-  FormControl,
-  FormLabel,
-  HStack,
-  Input,
-  Text,
-  VStack,
-} from '@chakra-ui/react';
+import { Button, FormControl, FormLabel, HStack, Input, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useSdk } from '@sdk/hooks';
 import type { OperationFormProps } from '../OperationShell';
+import type { ExplorerSigner } from '@/signer/types';
 import { isBase58Identifier } from '@util/identifier';
 
 export interface IdentityTopUpOptions {
@@ -23,17 +16,16 @@ export interface IdentityTopUpOptions {
 // Mirrors BridgeLaunchCard: no fallback URL. Operators must set
 // NEXT_PUBLIC_BRIDGE_URL — we don't want to send users to an arbitrary domain
 // to type a seed phrase.
-const BRIDGE_BASE_URL = (process.env.NEXT_PUBLIC_BRIDGE_URL ?? '').replace(
-  /\/+$/,
-  '',
-);
+const BRIDGE_BASE_URL = (process.env.NEXT_PUBLIC_BRIDGE_URL ?? '').replace(/\/+$/, '');
 
 export function IdentityTopUpForm({
   signer,
   onOptionsChange,
-}: OperationFormProps<IdentityTopUpOptions>) {
+}: Pick<OperationFormProps<IdentityTopUpOptions>, 'onOptionsChange'> & {
+  signer?: ExplorerSigner | null;
+}) {
   const { network } = useSdk();
-  const [identityId, setIdentityId] = useState(signer.identityId);
+  const [identityId, setIdentityId] = useState(signer?.identityId ?? '');
   const [amount, setAmount] = useState('0.1');
 
   useEffect(() => {
@@ -93,10 +85,9 @@ export function IdentityTopUpForm({
             Top-up happens in the bridge
           </Text>
           <Text fontSize="xs" color="gray.250">
-            Top-up requires an asset-lock proof built from a Dash Core transaction
-            — the bridge does that for you. Open it below; when the bridge says
-            &ldquo;complete&rdquo;, return here and the identity balance will refresh
-            automatically.
+            Top-up requires an asset-lock proof built from a Dash Core transaction — the bridge does
+            that for you. Open it below; when the bridge says &ldquo;complete&rdquo;, return here
+            and the identity balance will refresh automatically.
           </Text>
           {bridgeUrl ? (
             <HStack>
@@ -114,8 +105,8 @@ export function IdentityTopUpForm({
             </HStack>
           ) : (
             <Text fontSize="xs" color="warning">
-              Bridge URL not configured. Set NEXT_PUBLIC_BRIDGE_URL to enable
-              this shortcut, or run the bridge separately.
+              Bridge URL not configured. Set NEXT_PUBLIC_BRIDGE_URL to enable this shortcut, or run
+              the bridge separately.
             </Text>
           )}
         </VStack>
