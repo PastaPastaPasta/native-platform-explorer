@@ -33,6 +33,7 @@ export interface QueryProofEntry {
   queryKey: readonly unknown[];
   methodName: string;
   methodParams: Record<string, unknown>;
+  captureNote?: string;
   hasProofVariant: boolean;
   timestamp: number;
   durationMs: number;
