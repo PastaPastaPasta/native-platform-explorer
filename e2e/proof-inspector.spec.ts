@@ -116,6 +116,9 @@ test('a real SDK connection outage can be retried while the inspector stays usab
   await openDuringConnectionOutage(page, 'settings/');
   const sdkStatus = page.getByText(/^SDK status: (connecting|ready|error)$/);
   await expect(sdkStatus).toHaveText('SDK status: error');
+  const connectionAlert = page.getByRole('alert').filter({ hasText: 'Failed to prefetch quorums' });
+  await expect(connectionAlert).toBeVisible();
+  await expect(connectionAlert).not.toContainText('[object Object]');
   await expect.poll(() => quorumRequests).toBeGreaterThan(0);
   const beforeRetry = quorumRequests;
   // Capture even a brief visible transition, so old SDK background traffic
