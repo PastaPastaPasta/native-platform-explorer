@@ -8,7 +8,8 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery } from './hooks';
+import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery, type SdkQueryExecution } from './hooks';
+import { epochInfoQuery, epochRangeError, epochRangeQueries, fetchEpochRange, isEpochIndex } from './epoch-queries';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
@@ -54,6 +55,8 @@ interface SdkQueryOpts<TData>
   methodName?: string;
   /** Parameters passed to the SDK method, shown in the inspector. */
   methodParams?: Record<string, unknown>;
+  /** Limits of captured evidence for queries that combine multiple responses. */
+  captureNote?: string;
 }
 
 function decodeChainId(raw: unknown): string {
@@ -106,12 +109,12 @@ function extractProof(proof: unknown): ProofData | undefined {
  */
 function useSdkQuery<TData>(
   key: readonly unknown[],
-  fn: (sdk: EvoSDK) => Promise<TData>,
+  fn: (sdk: EvoSDK, execution: SdkQueryExecution) => Promise<TData>,
   opts?: SdkQueryOpts<TData>,
 ): SdkQueryResult<TData> {
   const context = useSdk();
   const { network, trusted } = context;
-  const { hasProofVariant = true, withProofFn, methodName, methodParams, ...rest } = opts ?? {};
+  const { hasProofVariant = true, withProofFn, methodName, methodParams, captureNote, ...rest } = opts ?? {};
   const proofStore = useQueryProofStore();
 
   const proofStoreRef = useRef(proofStore);
@@ -120,7 +123,8 @@ function useSdkQuery<TData>(
   const fullKey = getSdkQueryKey(context, key);
   const storeKey = JSON.stringify(fullKey);
 
-  const q = useSessionQuery<TData>(key, async (sdk, { assertActive }) => {
+  const q = useSessionQuery<TData>(key, async (sdk, execution) => {
+    const { assertActive } = execution;
     const store = proofStoreRef.current;
     const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
     const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
@@ -143,6 +147,7 @@ function useSdkQuery<TData>(
             timestamp: Date.now(),
             durationMs: Math.round(elapsed),
             status: 'success',
+            captureNote,
             result: safeSerialize(data),
             metadata: extractMetadata(response?.metadata),
             proof: extractProof(response?.proof),
@@ -158,7 +163,7 @@ function useSdkQuery<TData>(
         // proof-capture error so the inspector can show both: "data succeeded,
         // but proof was not captured because ...".
         try {
-          const result = await fn(sdk);
+          const result = await fn(sdk, execution);
           assertActive();
           const elapsed = performance.now() - t0;
           if (store.enabled) {
@@ -170,6 +175,7 @@ function useSdkQuery<TData>(
               timestamp: Date.now(),
               durationMs: Math.round(elapsed),
               status: 'success',
+              captureNote,
               result: safeSerialize(result),
               error: `Proof capture failed: ${proofError}`,
             });
@@ -203,7 +209,7 @@ function useSdkQuery<TData>(
 
     // Ordinary path (trusted off or no withProofFn)
     try {
-      const result = await fn(sdk);
+      const result = await fn(sdk, execution);
       assertActive();
       const elapsed = performance.now() - t0;
 
@@ -216,6 +222,7 @@ function useSdkQuery<TData>(
           timestamp: Date.now(),
           durationMs: Math.round(elapsed),
           status: 'success',
+          captureNote,
           result: safeSerialize(result),
         });
       }
@@ -722,29 +729,39 @@ export function useCurrentEpoch() {
 }
 
 export function useEpochInfo(index: number | undefined) {
-  const query = { startIndex: index!, endIndex: index! } as never;
+  const valid = isEpochIndex(index);
+  const query = valid ? epochInfoQuery(index) : undefined;
   return useSdkQuery(
     ['epoch', 'epochsInfo', index],
-    (sdk) => sdk.epoch.epochsInfo(query) as Promise<unknown>,
-    { enabled: index !== undefined, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.epoch.epochsInfoWithProof(query), methodName: 'epoch.epochsInfo', methodParams: { startIndex: index, endIndex: index } },
+    (sdk) => sdk.epoch.epochsInfo(epochInfoQuery(index!)) as Promise<unknown>,
+    { enabled: valid, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.epoch.epochsInfoWithProof(epochInfoQuery(index!)), methodName: 'epoch.epochsInfo', methodParams: query ? { ...query } : {} },
   );
 }
 
 export function useEpochRange(from: number | undefined, to: number | undefined) {
-  const query = { startIndex: from!, endIndex: to! } as never;
+  const { trusted } = useSdk();
+  const valid = epochRangeError(from, to) === null;
+  const batches = valid ? epochRangeQueries(from!, to!) : [];
   return useSdkQuery(
     ['epoch', 'epochsInfo', from, to],
-    (sdk) => sdk.epoch.epochsInfo(query) as Promise<unknown>,
-    { enabled: from !== undefined && to !== undefined && from <= to, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.epoch.epochsInfoWithProof(query), methodName: 'epoch.epochsInfo', methodParams: { startIndex: from, endIndex: to } },
+    (sdk, execution) => fetchEpochRange(sdk, from!, to!, execution),
+    {
+      enabled: valid,
+      staleTime: STRUCTURAL,
+      methodName: 'epoch.epochsInfo',
+      methodParams: { requestedRange: { from, to }, plannedBatches: batches },
+      captureNote: `Combined results from separate ${trusted ? 'SDK-verified batches' : 'SDK calls'}. No single proof payload or response height covers this range.`,
+    },
   );
 }
 
 export function useFinalizedEpochInfo(index: number | undefined) {
-  const query = { startIndex: index!, endIndex: index! } as never;
+  const valid = isEpochIndex(index);
+  const query = valid ? epochInfoQuery(index) : undefined;
   return useSdkQuery(
     ['epoch', 'finalizedInfos', index],
-    (sdk) => sdk.epoch.finalizedInfos(query) as Promise<unknown>,
-    { enabled: index !== undefined, staleTime: IMMUTABLE, withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(query), methodName: 'epoch.finalizedInfos', methodParams: { startIndex: index, endIndex: index } },
+    (sdk) => sdk.epoch.finalizedInfos(epochInfoQuery(index!)) as Promise<unknown>,
+    { enabled: valid, staleTime: IMMUTABLE, withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(epochInfoQuery(index!)), methodName: 'epoch.finalizedInfos', methodParams: query ? { ...query } : {} },
   );
 }
 

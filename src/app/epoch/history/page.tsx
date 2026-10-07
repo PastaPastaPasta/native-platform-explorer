@@ -24,6 +24,7 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { DateBlock } from '@components/data/DateBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useCurrentEpoch, useEpochRange } from '@sdk/queries';
+import { epochRangeError, MAX_EPOCH_RANGE } from '@sdk/epoch-queries';
 import { normaliseEpoch } from '@util/epoch';
 
 function Content() {
@@ -34,15 +35,16 @@ function Content() {
   ]);
 
   const currentQ = useCurrentEpoch();
-  const currentIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : 0;
+  const currentIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : undefined;
   const [toInput, setToInput] = useState<string>('');
   const [fromInput, setFromInput] = useState<string>('');
   const to = toInput ? Number(toInput) : currentIdx;
-  const from = fromInput ? Number(fromInput) : Math.max(0, to - 19);
+  const from = fromInput ? Number(fromInput) : to === undefined ? undefined : Math.max(0, to - 19);
+  const rangeError = from !== undefined && to !== undefined ? epochRangeError(from, to) : null;
 
   const q = useEpochRange(
-    Number.isFinite(from) ? from : undefined,
-    Number.isFinite(to) ? to : undefined,
+    from,
+    to,
   );
 
   const rows = useMemo(() => {
@@ -63,12 +65,13 @@ function Content() {
               Epoch history
             </Heading>
             <Text fontSize="xs" color="gray.400">
-              Inclusive range. Defaults to the 20 most recent epochs.
+              Inclusive range, up to {MAX_EPOCH_RANGE} epochs. Defaults to the 20 most recent epochs.
             </Text>
             <HStack spacing={2}>
               <Input
                 size="sm"
-                placeholder={`from (default ${Math.max(0, currentIdx - 19)})`}
+                aria-label="Start epoch"
+                placeholder={`from (default ${currentIdx === undefined ? 'pending' : Math.max(0, currentIdx - 19)})`}
                 value={fromInput}
                 onChange={(e) => setFromInput(e.target.value)}
                 width="180px"
@@ -77,7 +80,8 @@ function Content() {
               />
               <Input
                 size="sm"
-                placeholder={`to (default ${currentIdx})`}
+                aria-label="End epoch"
+                placeholder={`to (default ${currentIdx ?? 'pending'})`}
                 value={toInput}
                 onChange={(e) => setToInput(e.target.value)}
                 width="180px"
@@ -89,7 +93,11 @@ function Content() {
         </InfoBlock>
 
         <InfoBlock>
-          {q.isLoading ? (
+          {rangeError ? (
+            <Text role="alert" color="red.300" fontSize="sm">{rangeError}</Text>
+          ) : !toInput && currentQ.isError ? (
+            <ErrorCard error={currentQ.error} onRetry={() => currentQ.refetch()} />
+          ) : (!toInput && currentQ.isLoading) || q.isLoading ? (
             <LoadingCard lines={5} />
           ) : q.isError ? (
             <ErrorCard error={q.error} onRetry={() => q.refetch()} />
