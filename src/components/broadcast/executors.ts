@@ -2,17 +2,15 @@
 // only collect input; the executors take EvoSDK + ExplorerSigner + form options
 // and return a result the OperationShell renders.
 
+import type { Document, EvoSDK, Identity, IdentityPublicKeyInCreation } from '@dashevo/evo-sdk';
+import type { ExplorerSigner, KeySelectionCriteria, SdkSigningMaterial } from '@/signer/types';
 import {
-  DataContract,
-  Document,
-  IdentityPublicKeyInCreation,
-} from '@dashevo/evo-sdk';
-import type { EvoSDK, Identity } from '@dashevo/evo-sdk';
-import type {
-  ExplorerSigner,
-  KeySelectionCriteria,
-  SdkSigningMaterial,
-} from '@/signer/types';
+  BroadcastOutcomeUnknownError,
+  OperationNotSubmittedError,
+  submitOperation,
+  type ReceiptEntities,
+} from './outcomes';
+import { operationRequirement } from './capabilities';
 import type { ContractRegisterOptions } from './forms/ContractRegister';
 import type { ContractUpdateOptions } from './forms/ContractUpdate';
 import type { DocumentCreateOptions } from './forms/DocumentCreate';
@@ -60,36 +58,54 @@ export interface IdentityResult {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-async function prepareSigning(
+// wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
+// only release on explicit `free()`. Every executor now goes through this
+// helper so the IdentitySigner is freed after the broadcast resolves (or
+// throws). Updated adapters release the selected public key as well. Older
+// adapters still have their IdentitySigner freed by the fallback here.
+async function withSigningMaterial<T>(
   signer: ExplorerSigner,
-  criteria?: KeySelectionCriteria,
-) {
+  criteria: KeySelectionCriteria | undefined,
+  fn: (material: SdkSigningMaterial, submit: typeof submitOperation) => Promise<T>,
+): Promise<T> {
   if (!signer.prepareSdk) {
-    throw new Error(
+    throw new OperationNotSubmittedError(
       `The "${signer.kind}" signer does not support SDK signing yet. ` +
         'Connect via the Bridge backup tab on /wallet to enable writes.',
     );
   }
-  return signer.prepareSdk(criteria);
-}
-
-// wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
-// only release on explicit `free()`. Every executor now goes through this
-// helper so the IdentitySigner is freed after the broadcast resolves (or
-// throws). The IdentityPublicKey is owned by the on-chain Identity instance
-// returned from `identities.fetch` and is freed when that Identity is GC'd,
-// so we only need to manage the signer here.
-async function withSigningMaterial<T>(
-  signer: ExplorerSigner,
-  criteria: KeySelectionCriteria | undefined,
-  fn: (material: SdkSigningMaterial) => Promise<T>,
-): Promise<T> {
-  const material = await prepareSigning(signer, criteria);
+  let material: SdkSigningMaterial;
   try {
-    return await fn(material);
+    material = await signer.prepareSdk(criteria);
+  } catch (error) {
+    throw new OperationNotSubmittedError(error);
+  }
+  let submittedEntities: ReceiptEntities | null = null;
+  const submit: typeof submitOperation = async (write, entities, assertCurrent) => {
+    assertCurrent?.();
+    submittedEntities = entities;
+    return submitOperation(write, entities);
+  };
+  try {
+    if (material.identityId !== signer.identityId) {
+      throw new OperationNotSubmittedError(
+        'Signing material does not match the reviewed identity.',
+      );
+    }
+    return await fn(material, submit);
+  } catch (error) {
+    if (
+      error instanceof BroadcastOutcomeUnknownError ||
+      error instanceof OperationNotSubmittedError
+    ) {
+      throw error;
+    }
+    if (submittedEntities) throw new BroadcastOutcomeUnknownError(error, submittedEntities);
+    throw new OperationNotSubmittedError(error);
   } finally {
     try {
-      material.identitySigner.free();
+      if (material.release) material.release();
+      else material.identitySigner.free();
     } catch {
       /* already freed or build without free — best-effort */
     }
@@ -105,17 +121,18 @@ async function getPlatformVersion(sdk: EvoSDK): Promise<number> {
 export async function executeContractRegister(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: ContractRegisterOptions;
 }): Promise<ContractRegisterResult> {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
-    async (material) => {
+    operationRequirement('contract.register').criteria,
+    async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
-      const identityNonce =
-        (await sdk.identities.nonce(material.identityId)) ?? 0n;
+      const identityNonce = (await sdk.identities.nonce(material.identityId)) ?? 0n;
 
+      const { DataContract } = await import('@dashevo/evo-sdk');
       const dataContract = new DataContract({
         ownerId: material.identityId,
         identityNonce: identityNonce + 1n,
@@ -125,14 +142,18 @@ export async function executeContractRegister(args: {
         platformVersion,
       });
 
-      const published = await sdk.contracts.publish({
-        dataContract,
-        identityKey: material.identityKey,
-        signer: material.identitySigner,
-      });
+      const published = await submit(
+        () =>
+          sdk.contracts.publish({
+            dataContract,
+            identityKey: material.identityKey,
+            signer: material.identitySigner,
+          }),
+        { identityId: material.identityId, contractId: String(dataContract.id) },
+        args.assertCurrent,
+      );
 
-      const docSchemas =
-        (published.schemas as Record<string, unknown> | undefined) ?? {};
+      const docSchemas = (published.schemas as Record<string, unknown> | undefined) ?? {};
 
       return {
         kind: 'contractRegister' as const,
@@ -148,13 +169,14 @@ export async function executeContractRegister(args: {
 export async function executeContractUpdate(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: ContractUpdateOptions;
 }): Promise<ContractUpdateResult> {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
-    async (material) => {
+    operationRequirement('contract.update').criteria,
+    async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
 
       const current = await sdk.contracts.fetch(options.contractId);
@@ -174,11 +196,16 @@ export async function executeContractUpdate(args: {
         platformVersion,
       );
 
-      await sdk.contracts.update({
-        dataContract: current,
-        identityKey: material.identityKey,
-        signer: material.identitySigner,
-      });
+      await submit(
+        () =>
+          sdk.contracts.update({
+            dataContract: current,
+            identityKey: material.identityKey,
+            signer: material.identitySigner,
+          }),
+        { identityId: material.identityId, contractId: options.contractId },
+        args.assertCurrent,
+      );
 
       return {
         kind: 'contractUpdate' as const,
@@ -191,14 +218,15 @@ export async function executeContractUpdate(args: {
 
 // ─── documents ──────────────────────────────────────────────────────────
 
-function buildDocument(
+async function buildDocument(
   contractId: string,
   documentType: string,
   ownerId: string,
   properties: Record<string, unknown>,
   documentId?: string,
   revision?: bigint,
-): Document {
+): Promise<Document> {
+  const { Document } = await import('@dashevo/evo-sdk');
   return new Document({
     properties,
     documentTypeName: documentType,
@@ -226,29 +254,36 @@ async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<I
   return identity;
 }
 
-const DOC_CRITERIA: KeySelectionCriteria = {
-  purpose: 'AUTHENTICATION',
-  minSecurityLevel: 'HIGH',
-};
-
 export async function executeDocumentCreate(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DocumentCreateOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
-    const document = buildDocument(
+  const criteria = operationRequirement('document.create').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
+    const document = await buildDocument(
       options.contractId,
       options.documentType,
       material.identityId,
       options.properties,
     );
-    await sdk.documents.create({
-      document,
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+    await submit(
+      () =>
+        sdk.documents.create({
+          document,
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      {
+        identityId: material.identityId,
+        contractId: options.contractId,
+        documentType: options.documentType,
+        documentId: String(document.id),
+      },
+      args.assertCurrent,
+    );
     return {
       kind: 'document' as const,
       action: 'create' as const,
@@ -263,11 +298,13 @@ export async function executeDocumentCreate(args: {
 export async function executeDocumentReplace(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DocumentReplaceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
-    const document = buildDocument(
+  const criteria = operationRequirement('document.replace').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
+    const document = await buildDocument(
       options.contractId,
       options.documentType,
       material.identityId,
@@ -275,11 +312,21 @@ export async function executeDocumentReplace(args: {
       options.documentId,
       options.currentRevision + 1n,
     );
-    await sdk.documents.replace({
-      document,
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+    await submit(
+      () =>
+        sdk.documents.replace({
+          document,
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      {
+        identityId: material.identityId,
+        contractId: options.contractId,
+        documentType: options.documentType,
+        documentId: options.documentId,
+      },
+      args.assertCurrent,
+    );
     return {
       kind: 'document' as const,
       action: 'replace' as const,
@@ -294,20 +341,32 @@ export async function executeDocumentReplace(args: {
 export async function executeDocumentDelete(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DocumentDeleteOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
-    await sdk.documents.delete({
-      document: {
-        id: options.documentId,
-        ownerId: material.identityId,
-        dataContractId: options.contractId,
-        documentTypeName: options.documentType,
+  const criteria = operationRequirement('document.delete').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
+    await submit(
+      () =>
+        sdk.documents.delete({
+          document: {
+            id: options.documentId,
+            ownerId: material.identityId,
+            dataContractId: options.contractId,
+            documentTypeName: options.documentType,
+          },
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      {
+        identityId: material.identityId,
+        contractId: options.contractId,
+        documentType: options.documentType,
+        documentId: options.documentId,
       },
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+      args.assertCurrent,
+    );
     return {
       kind: 'document' as const,
       action: 'delete' as const,
@@ -322,24 +381,36 @@ export async function executeDocumentDelete(args: {
 export async function executeDocumentTransfer(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DocumentTransferOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  const criteria = operationRequirement('document.transfer').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
       options.documentType,
       options.documentId,
     );
-    await sdk.documents.transfer({
-      document: existing,
-      recipientId: options.recipientId as unknown as Parameters<
-        typeof sdk.documents.transfer
-      >[0]['recipientId'],
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+    await submit(
+      () =>
+        sdk.documents.transfer({
+          document: existing,
+          recipientId: options.recipientId as unknown as Parameters<
+            typeof sdk.documents.transfer
+          >[0]['recipientId'],
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      {
+        identityId: material.identityId,
+        contractId: options.contractId,
+        documentType: options.documentType,
+        documentId: options.documentId,
+      },
+      args.assertCurrent,
+    );
     return {
       kind: 'document' as const,
       action: 'transfer' as const,
@@ -354,22 +425,34 @@ export async function executeDocumentTransfer(args: {
 export async function executeDocumentSetPrice(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DocumentSetPriceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  const criteria = operationRequirement('document.setPrice').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
       options.documentType,
       options.documentId,
     );
-    await sdk.documents.setPrice({
-      document: existing,
-      price: options.priceCredits,
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+    await submit(
+      () =>
+        sdk.documents.setPrice({
+          document: existing,
+          price: options.priceCredits,
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      {
+        identityId: material.identityId,
+        contractId: options.contractId,
+        documentType: options.documentType,
+        documentId: options.documentId,
+      },
+      args.assertCurrent,
+    );
     return {
       kind: 'document' as const,
       action: 'setPrice' as const,
@@ -384,27 +467,39 @@ export async function executeDocumentSetPrice(args: {
 export async function executeDocumentPurchase(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DocumentPurchaseOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  const criteria = operationRequirement('document.purchase').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
       options.documentType,
       options.documentId,
     );
-    await sdk.documents.purchase({
-      document: existing,
-      // The buyer is whoever is signing; pass the active identity, not the
-      // key's optional contractBounds metadata.
-      buyerId: material.identityId as unknown as Parameters<
-        typeof sdk.documents.purchase
-      >[0]['buyerId'],
-      price: options.priceCredits,
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+    await submit(
+      () =>
+        sdk.documents.purchase({
+          document: existing,
+          // The buyer is whoever is signing; pass the active identity, not the
+          // key's optional contractBounds metadata.
+          buyerId: material.identityId as unknown as Parameters<
+            typeof sdk.documents.purchase
+          >[0]['buyerId'],
+          price: options.priceCredits,
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      {
+        identityId: material.identityId,
+        contractId: options.contractId,
+        documentType: options.documentType,
+        documentId: options.documentId,
+      },
+      args.assertCurrent,
+    );
     return {
       kind: 'document' as const,
       action: 'purchase' as const,
@@ -421,66 +516,91 @@ export async function executeDocumentPurchase(args: {
 export async function executeIdentityCreditTransfer(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: IdentityCreditTransferOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material) => {
-    const identity = await fetchExistingIdentity(sdk, material.identityId);
-    const result = (await sdk.identities.creditTransfer({
-      identity,
-      recipientId: options.recipientId,
-      amount: options.amountCredits,
-      signer: material.identitySigner,
-      signingKey: material.identityKey,
-    } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0])) as unknown as {
-      senderBalance?: bigint;
-      recipientBalance?: bigint;
-    };
-    return {
-      kind: 'identity' as const,
-      identityId: material.identityId,
-      message: `Transferred ${options.amountCredits} credits to ${options.recipientId}.`,
-      newBalance: result?.senderBalance ? String(result.senderBalance) : undefined,
-    };
-  });
+  return withSigningMaterial(
+    signer,
+    operationRequirement('identity.creditTransfer').criteria,
+    async (material, submit) => {
+      const identity = await fetchExistingIdentity(sdk, material.identityId);
+      // SDK rc.2 merges facade and raw-transition declarations with this
+      // options name. Pass the real facade shape; do not invent nonce fields
+      // to satisfy the upstream declaration collision.
+      const result = (await submit(
+        () =>
+          sdk.identities.creditTransfer({
+            identity,
+            recipientId: options.recipientId,
+            amount: options.amountCredits,
+            signer: material.identitySigner,
+            signingKey: material.identityKey,
+          } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0]),
+        { identityId: material.identityId, recipientId: options.recipientId },
+        args.assertCurrent,
+      )) as unknown as {
+        senderBalance?: bigint;
+        recipientBalance?: bigint;
+      };
+      return {
+        kind: 'identity' as const,
+        identityId: material.identityId,
+        message: `Transferred ${options.amountCredits} credits to ${options.recipientId}.`,
+        newBalance: result?.senderBalance !== undefined ? String(result.senderBalance) : undefined,
+      };
+    },
+  );
 }
 
 export async function executeIdentityCreditWithdrawal(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: IdentityCreditWithdrawalOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material) => {
-    const identity = await fetchExistingIdentity(sdk, material.identityId);
-    const newBalance = await sdk.identities.creditWithdrawal({
-      identity,
-      amount: options.amountCredits,
-      toAddress: options.toAddress,
-      coreFeePerByte: options.coreFeePerByte,
-      signer: material.identitySigner,
-      signingKey: material.identityKey,
-    } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]);
-    return {
-      kind: 'identity' as const,
-      identityId: material.identityId,
-      message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
-      newBalance: String(newBalance),
-    };
-  });
+  return withSigningMaterial(
+    signer,
+    operationRequirement('identity.creditWithdrawal').criteria,
+    async (material, submit) => {
+      const identity = await fetchExistingIdentity(sdk, material.identityId);
+      const newBalance = await submit(
+        () =>
+          sdk.identities.creditWithdrawal({
+            identity,
+            amount: options.amountCredits,
+            toAddress: options.toAddress,
+            coreFeePerByte: options.coreFeePerByte,
+            signer: material.identitySigner,
+            signingKey: material.identityKey,
+          } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]),
+        { identityId: material.identityId },
+        args.assertCurrent,
+      );
+      return {
+        kind: 'identity' as const,
+        identityId: material.identityId,
+        message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
+        newBalance: String(newBalance),
+      };
+    },
+  );
 }
 
 export async function executeIdentityUpdateKeys(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: IdentityUpdateKeysOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'MASTER' },
-    async (material) => {
+    operationRequirement('identity.updateKeys').criteria,
+    async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
+      const { IdentityPublicKeyInCreation } = await import('@dashevo/evo-sdk');
       const addPublicKeys: IdentityPublicKeyInCreation[] | undefined =
         options.addPublicKeysJson && options.addPublicKeysJson.length > 0
           ? options.addPublicKeysJson.map((js) =>
@@ -489,15 +609,20 @@ export async function executeIdentityUpdateKeys(args: {
               ),
             )
           : undefined;
-      await sdk.identities.update({
-        identity,
-        addPublicKeys,
-        disablePublicKeys:
-          options.disableKeyIds && options.disableKeyIds.length > 0
-            ? options.disableKeyIds
-            : undefined,
-        signer: material.identitySigner,
-      });
+      await submit(
+        () =>
+          sdk.identities.update({
+            identity,
+            addPublicKeys,
+            disablePublicKeys:
+              options.disableKeyIds && options.disableKeyIds.length > 0
+                ? options.disableKeyIds
+                : undefined,
+            signer: material.identitySigner,
+          }),
+        { identityId: material.identityId },
+        args.assertCurrent,
+      );
       return {
         kind: 'identity' as const,
         identityId: material.identityId,
@@ -510,6 +635,7 @@ export async function executeIdentityUpdateKeys(args: {
 export async function executeIdentityTopUp(_args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: IdentityTopUpOptions;
 }): Promise<IdentityResult> {
   // Top-up requires an asset-lock proof, which is built end-to-end inside the
@@ -517,7 +643,7 @@ export async function executeIdentityTopUp(_args: {
   // intentionally don't replicate that flow in the explorer; the form deep-
   // links the user to the bridge instead. This executor only ever runs if the
   // user clicks "Broadcast" past the deep-link CTA.
-  throw new Error(
+  throw new OperationNotSubmittedError(
     'Top-up runs in the Dash Platform bridge — click "Open bridge" on the form ' +
       'instead. When the bridge completes the top-up, return to the explorer ' +
       'and the balance will refresh automatically.',
@@ -529,17 +655,24 @@ export async function executeIdentityTopUp(_args: {
 export async function executeDpnsRegister(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: DpnsRegisterOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  const criteria = operationRequirement('dpns.registerName').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
-    await sdk.dpns.registerName({
-      label: options.label,
-      identity,
-      identityKey: material.identityKey,
-      signer: material.identitySigner,
-    });
+    await submit(
+      () =>
+        sdk.dpns.registerName({
+          label: options.label,
+          identity,
+          identityKey: material.identityKey,
+          signer: material.identitySigner,
+        }),
+      { identityId: material.identityId },
+      args.assertCurrent,
+    );
     return {
       kind: 'identity' as const,
       identityId: material.identityId,
@@ -550,21 +683,12 @@ export async function executeDpnsRegister(args: {
 
 // ─── voting ─────────────────────────────────────────────────────────────
 
-export async function executeVotingCastVote(args: {
+export async function executeVotingCastVote(_args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
+  assertCurrent?: () => void;
   options: VotingCastVoteOptions;
 }): Promise<IdentityResult> {
-  const { sdk, signer, options } = args;
-  void sdk;
-  void options;
-  // Voting requires a masternode voting key (Purpose: VOTING) — most users
-  // signed in via a Bridge backup won't have one. Surfacing a clear error now
-  // is better than calling the SDK with the wrong key purpose. Full wiring is
-  // tracked under the voting follow-up.
-  await prepareSigning(signer, { purpose: 'VOTING' });
-  throw new Error(
-    'Vote broadcast is not yet wired through this signer. You need a masternode ' +
-      'voting key (purpose = VOTING) to cast a vote.',
-  );
+  // Unsupported execution must fail before allocating any signing material.
+  throw new OperationNotSubmittedError(operationRequirement('voting.castVote').reason);
 }
