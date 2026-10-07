@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { act, fireEvent, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { waitFor } from '@testing-library/react';
 import { useSdk } from '@sdk/hooks';
 import { useSigner } from '@/signer/SignerProvider';
 import { createTestQueryClient, renderWithProviders } from '@/test/render';
@@ -77,6 +78,86 @@ beforeEach(() => {
 });
 
 describe('OperationShell', () => {
+  it('checks matching signer keys before allowing review', async () => {
+    let resolveKeys!: (keys: unknown[]) => void;
+    useSignerMock.mockReturnValue({
+      ...useSignerMock(),
+      signer: createMockSigner({
+        availableKeys: vi.fn().mockImplementation(
+          () =>
+            new Promise((resolve) => {
+              resolveKeys = resolve;
+            }),
+        ),
+      }),
+    });
+    setup({ capability: { status: 'available', criteria: { purpose: 'TRANSFER' } } });
+    expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+    await act(async () => resolveKeys([{ id: 1, purpose: 'TRANSFER' }]));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+  });
+
+  it.each([
+    createMockSigner({
+      availableKeys: vi.fn().mockResolvedValue([{ id: 1, purpose: 'AUTHENTICATION' }]),
+    }),
+    createMockSigner({ prepareSdk: undefined }),
+    createMockSigner({
+      availableKeys: vi.fn().mockRejectedValue(new Error('Identity lookup unavailable')),
+    }),
+  ])('blocks review for incompatible or unavailable signer keys', async (signer) => {
+    useSignerMock.mockReturnValue({ ...useSignerMock(), signer });
+    setup({ capability: { status: 'available', criteria: { purpose: 'TRANSFER' } } });
+    await waitFor(() =>
+      expect(screen.queryByText('Checking signer capabilities…')).not.toBeInTheDocument(),
+    );
+    expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+  });
+
+  it.each(['unsupported', 'external-bridge'] as const)(
+    'shows %s before collecting or reviewing inputs',
+    (status) => {
+      useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+      setup({ capability: { status, reason: 'Use the supported external tool.' } });
+      expect(screen.getByText('Use the supported external tool.')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
+      expect(screen.queryByText('form ready')).not.toBeInTheDocument();
+    },
+  );
+
+  it('blocks a signer bound to another SDK session', async () => {
+    useSignerMock.mockReturnValue({
+      ...useSignerMock(),
+      signer: createMockSigner({ sdk: createMockSdk() }),
+    });
+    setup({ capability: { status: 'available' } });
+    expect(
+      await screen.findByText('Reconnect your signer for the current SDK session.'),
+    ).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
+  });
+
+  it('opens the top-up bridge form without requiring a signer or offering broadcast', () => {
+    useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+    setup({ operationId: 'identity.topUp', capability: { status: 'external-bridge' } });
+    expect(screen.getByRole('textbox', { name: 'Identity' })).toHaveValue('');
+    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Sign + broadcast' })).not.toBeInTheDocument();
+  });
+
+  it('clears an external top-up identity when the network and signer change', () => {
+    const { descriptor, rerender } = setup({
+      operationId: 'identity.topUp',
+      capability: { status: 'external-bridge' },
+    });
+    const identity = screen.getByRole('textbox', { name: 'Identity' });
+    fireEvent.change(identity, { target: { value: 'A'.repeat(43) } });
+    useSdkMock.mockReturnValue({ ...useSdkMock(), network: 'mainnet', sdk: createMockSdk() });
+    useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+    rerender(<OperationShell descriptor={descriptor} />);
+    expect(screen.getByRole('textbox', { name: 'Identity' })).toHaveValue('');
+  });
+
   it('executes the exact reviewed snapshot and refreshes its network', async () => {
     initialOptions = { id: 'operation-1', amount: 9007199254740993n };
     const { execute, invalidate } = setup();

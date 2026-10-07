@@ -26,6 +26,8 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { SignerStatusCard } from './SignerStatusCard';
 import { OperationReceipt } from './OperationReceipt';
+import { IdentityTopUpForm } from './forms/IdentityTopUp';
+import { resolveOperationCapability, type OperationCapabilityRequirement } from './capabilities';
 import {
   BroadcastOutcomeUnknownError,
   OperationNotSubmittedError,
@@ -35,7 +37,7 @@ import { useSigner } from '@/signer/SignerProvider';
 import { useSdk } from '@sdk/hooks';
 import { getDerivationNetwork, type Network } from '@sdk/networks';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import type { ExplorerSigner } from '@/signer/types';
+import type { ExplorerSigner, SignerKeyDescriptor } from '@/signer/types';
 
 export interface OperationFormProps<TOptions> {
   signer: ExplorerSigner;
@@ -45,6 +47,7 @@ export interface OperationFormProps<TOptions> {
 
 export interface OperationDescriptor<TOptions, TResult> {
   operationId?: string;
+  capability?: OperationCapabilityRequirement;
   title: string;
   description: string;
   destructive?: boolean;
@@ -119,6 +122,11 @@ export function OperationShell<TOptions, TResult>({
   const [error, setError] = useState<Error | null>(null);
   const [result, setResult] = useState<TResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [keyState, setKeyState] = useState<{
+    binding: object;
+    keys: SignerKeyDescriptor[];
+    error?: string;
+  } | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
   useEffect(() => {
@@ -165,6 +173,51 @@ export function OperationShell<TOptions, TResult>({
     snapshot.contextBinding === current.current.contextBinding &&
     snapshot.fingerprint === current.current.optionsFingerprint;
   const reviewIsCurrent = review !== null && isCurrent(review);
+  useEffect(() => {
+    if (
+      !descriptor.capability ||
+      descriptor.capability.status !== 'available' ||
+      !signer ||
+      status !== 'ready'
+    )
+      return;
+    let cancelled = false;
+    void signer
+      .availableKeys()
+      .then((keys) => {
+        if (!cancelled) setKeyState({ binding: contextBinding, keys });
+      })
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setKeyState({
+            binding: contextBinding,
+            keys: [],
+            error: error instanceof Error ? error.message : String(error),
+          });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [descriptor.capability, signer, status, contextBinding]);
+  const checkingKeys =
+    !!signer &&
+    descriptor.capability?.status === 'available' &&
+    status === 'ready' &&
+    keyState?.binding !== contextBinding;
+  const keyError = keyState?.binding === contextBinding ? keyState.error : undefined;
+  const capability = descriptor.capability
+    ? resolveOperationCapability(
+        descriptor.capability,
+        signer,
+        keyState?.binding === contextBinding ? keyState.keys : [],
+      )
+    : {
+        status: signer?.prepareSdk ? 'available' : 'requires-another-signer',
+        reason: 'Connect an SDK-compatible signer on the wallet page.',
+      };
+  const signerSessionMatches = !signer?.sdk || signer.sdk === sdk;
+  const capabilityAvailable =
+    !checkingKeys && signerSessionMatches && capability.status === 'available' && !keyError;
 
   const reset = useCallback(() => {
     setReview(null);
@@ -192,7 +245,15 @@ export function OperationShell<TOptions, TResult>({
   }, [contextBinding, review, reviewIsCurrent, submission, reset]);
 
   const onReview = () => {
-    if (!sdk || !signer || status !== 'ready' || sessionSignal?.aborted || options === null) return;
+    if (
+      !sdk ||
+      !signer ||
+      status !== 'ready' ||
+      sessionSignal?.aborted ||
+      !capabilityAvailable ||
+      options === null
+    )
+      return;
     setReview({
       descriptor,
       contextBinding,
@@ -213,7 +274,11 @@ export function OperationShell<TOptions, TResult>({
   };
   const mainnetConfirmed = network !== 'mainnet' || (mainnetAck && mainnetTyped === 'MAINNET');
   const canProceed =
-    reviewIsCurrent && (!descriptor.destructive || destructiveAck) && mainnetConfirmed && !busy;
+    reviewIsCurrent &&
+    capabilityAvailable &&
+    (!descriptor.destructive || destructiveAck) &&
+    mainnetConfirmed &&
+    !busy;
   const onExecute = async () => {
     if (!review || !canProceed || !isCurrent(review) || inFlight.current) return;
     const submitted = { ...review, submittedAt: new Date().toISOString() };
@@ -248,6 +313,33 @@ export function OperationShell<TOptions, TResult>({
     }
   };
 
+  if (
+    !submission &&
+    (capability.status === 'unsupported' || capability.status === 'external-bridge')
+  ) {
+    return (
+      <InfoBlock>
+        <VStack align="stretch" spacing={3}>
+          <Heading size="sm" color="gray.100">
+            {descriptor.title}
+          </Heading>
+          <Badge
+            alignSelf="flex-start"
+            colorScheme={capability.status === 'external-bridge' ? 'blue' : 'orange'}
+          >
+            {capability.status === 'external-bridge' ? 'External bridge' : 'Unsupported'}
+          </Badge>
+          <Text fontSize="sm" color="gray.250">
+            {capability.reason}
+          </Text>
+          {capability.status === 'external-bridge' &&
+          descriptor.operationId === 'identity.topUp' ? (
+            <IdentityTopUpForm key={formRevision} signer={signer} onOptionsChange={() => {}} />
+          ) : null}
+        </VStack>
+      </InfoBlock>
+    );
+  }
   if (!signer && !submission) {
     return (
       <InfoBlock>
@@ -324,6 +416,17 @@ export function OperationShell<TOptions, TResult>({
           {notice}
         </Text>
       ) : null}
+      {!submission && descriptor.capability ? (
+        <Text role="status" fontSize="sm" color={capabilityAvailable ? 'gray.250' : 'warning'}>
+          {!signerSessionMatches
+            ? 'Reconnect your signer for the current SDK session.'
+            : checkingKeys
+              ? 'Checking signer capabilities…'
+              : keyError
+                ? `Could not validate signer keys: ${keyError}`
+                : capability.reason}
+        </Text>
+      ) : null}
       {!submission && signer ? (
         <InfoBlock display={activeStep === 0 ? undefined : 'none'}>
           <Form
@@ -342,7 +445,7 @@ export function OperationShell<TOptions, TResult>({
               size="sm"
               colorScheme="blue"
               onClick={onReview}
-              isDisabled={options === null || status !== 'ready' || !sdk}
+              isDisabled={options === null || status !== 'ready' || !sdk || !capabilityAvailable}
             >
               Review
             </Button>

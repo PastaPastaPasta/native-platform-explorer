@@ -10,6 +10,7 @@ import {
   submitOperation,
   type ReceiptEntities,
 } from './outcomes';
+import { operationRequirement } from './capabilities';
 import type { ContractRegisterOptions } from './forms/ContractRegister';
 import type { ContractUpdateOptions } from './forms/ContractUpdate';
 import type { DocumentCreateOptions } from './forms/DocumentCreate';
@@ -106,7 +107,7 @@ async function withSigningMaterial<T>(
     throw new OperationNotSubmittedError(error);
   } finally {
     try {
-      const release = (material as SdkSigningMaterial & { release?: () => void }).release;
+      const release = material.release;
       if (release) release();
       else material.identitySigner.free();
     } catch {
@@ -130,7 +131,7 @@ export async function executeContractRegister(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+    operationRequirement('contract.register').criteria,
     async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
       const identityNonce = (await sdk.identities.nonce(material.identityId)) ?? 0n;
@@ -178,7 +179,7 @@ export async function executeContractUpdate(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+    operationRequirement('contract.update').criteria,
     async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
 
@@ -257,10 +258,7 @@ async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<I
   return identity;
 }
 
-const DOC_CRITERIA: KeySelectionCriteria = {
-  purpose: 'AUTHENTICATION',
-  minSecurityLevel: 'HIGH',
-};
+const DOC_CRITERIA = operationRequirement('document.create').criteria;
 
 export async function executeDocumentCreate(args: {
   sdk: EvoSDK;
@@ -522,30 +520,37 @@ export async function executeIdentityCreditTransfer(args: {
   options: IdentityCreditTransferOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material, submit) => {
-    const identity = await fetchExistingIdentity(sdk, material.identityId);
-    const result = (await submit(
-      () =>
-        sdk.identities.creditTransfer({
-          identity,
-          recipientId: options.recipientId,
-          amount: options.amountCredits,
-          signer: material.identitySigner,
-          signingKey: material.identityKey,
-        } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0]),
-      { identityId: material.identityId, recipientId: options.recipientId },
-      args.assertCurrent,
-    )) as unknown as {
-      senderBalance?: bigint;
-      recipientBalance?: bigint;
-    };
-    return {
-      kind: 'identity' as const,
-      identityId: material.identityId,
-      message: `Transferred ${options.amountCredits} credits to ${options.recipientId}.`,
-      newBalance: result?.senderBalance !== undefined ? String(result.senderBalance) : undefined,
-    };
-  });
+  return withSigningMaterial(
+    signer,
+    operationRequirement('identity.creditTransfer').criteria,
+    async (material, submit) => {
+      const identity = await fetchExistingIdentity(sdk, material.identityId);
+      // SDK rc.2 merges facade and raw-transition declarations with this
+      // options name. Pass the real facade shape; do not invent nonce fields
+      // to satisfy the upstream declaration collision.
+      const result = (await submit(
+        () =>
+          sdk.identities.creditTransfer({
+            identity,
+            recipientId: options.recipientId,
+            amount: options.amountCredits,
+            signer: material.identitySigner,
+            signingKey: material.identityKey,
+          } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0]),
+        { identityId: material.identityId, recipientId: options.recipientId },
+        args.assertCurrent,
+      )) as unknown as {
+        senderBalance?: bigint;
+        recipientBalance?: bigint;
+      };
+      return {
+        kind: 'identity' as const,
+        identityId: material.identityId,
+        message: `Transferred ${options.amountCredits} credits to ${options.recipientId}.`,
+        newBalance: result?.senderBalance !== undefined ? String(result.senderBalance) : undefined,
+      };
+    },
+  );
 }
 
 export async function executeIdentityCreditWithdrawal(args: {
@@ -555,28 +560,32 @@ export async function executeIdentityCreditWithdrawal(args: {
   options: IdentityCreditWithdrawalOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material, submit) => {
-    const identity = await fetchExistingIdentity(sdk, material.identityId);
-    const newBalance = await submit(
-      () =>
-        sdk.identities.creditWithdrawal({
-          identity,
-          amount: options.amountCredits,
-          toAddress: options.toAddress,
-          coreFeePerByte: options.coreFeePerByte,
-          signer: material.identitySigner,
-          signingKey: material.identityKey,
-        } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]),
-      { identityId: material.identityId },
-      args.assertCurrent,
-    );
-    return {
-      kind: 'identity' as const,
-      identityId: material.identityId,
-      message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
-      newBalance: String(newBalance),
-    };
-  });
+  return withSigningMaterial(
+    signer,
+    operationRequirement('identity.creditWithdrawal').criteria,
+    async (material, submit) => {
+      const identity = await fetchExistingIdentity(sdk, material.identityId);
+      const newBalance = await submit(
+        () =>
+          sdk.identities.creditWithdrawal({
+            identity,
+            amount: options.amountCredits,
+            toAddress: options.toAddress,
+            coreFeePerByte: options.coreFeePerByte,
+            signer: material.identitySigner,
+            signingKey: material.identityKey,
+          } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]),
+        { identityId: material.identityId },
+        args.assertCurrent,
+      );
+      return {
+        kind: 'identity' as const,
+        identityId: material.identityId,
+        message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
+        newBalance: String(newBalance),
+      };
+    },
+  );
 }
 
 export async function executeIdentityUpdateKeys(args: {
@@ -588,7 +597,7 @@ export async function executeIdentityUpdateKeys(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'MASTER' },
+    operationRequirement('identity.updateKeys').criteria,
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
       const { IdentityPublicKeyInCreation } = await import('@dashevo/evo-sdk');
