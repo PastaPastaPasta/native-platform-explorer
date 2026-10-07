@@ -21,6 +21,19 @@ function entryFiles(pages, entry) {
   if (!Array.isArray(files) || files.length === 0 || files.some((file) => typeof file !== 'string')) {
     throw new Error(`Missing or invalid app-build-manifest entry: ${entry}`);
   }
+  // Validate before filtering out CSS: URL suffixes must not conceal an
+  // unmeasured startup script. The manifest contains local physical paths.
+  for (const file of files) {
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(file)) {
+      throw new Error(`Cannot measure remote app-build-manifest asset: ${file}`);
+    }
+    if (file.includes('\\') || file.split('/').some((part) => part === '.' || part === '..')) {
+      throw new Error(`Unsafe app-build-manifest asset: ${file}`);
+    }
+    if (file.startsWith('/') || /[?#%]/.test(file)) {
+      throw new Error(`Unsupported app-build-manifest asset: ${file}`);
+    }
+  }
   return files;
 }
 

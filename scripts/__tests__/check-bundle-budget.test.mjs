@@ -70,9 +70,19 @@ test('rejects absent assets and invalid manifests', (t) => {
   assert.throws(() => measureInitialBundles(directory), /pages object/);
 });
 
-test('rejects manifest assets outside the build directory', (t) => {
-  const directory = fixture(t, { '/layout': ['../outside.js'], '/query/page': ['page.js'] }, { 'page.js': '' });
-  assert.throws(() => measureInitialBundles(directory, { '/query/page': { raw: 1000, gzip: 1000 } }), /escapes the build directory/);
+test('rejects unsafe manifest assets before initial-script filtering', (t) => {
+  const directory = fixture(t, { '/layout': ['shell.js'], '/query/page': ['page.js'] }, { 'shell.js': '', 'page.js': '' });
+  for (const file of [
+    '../outside.js', '../outside.js?version=1', 'nested/../page.js',
+    'https://cdn.example/app.js', 'https://cdn.example/app.js?version=1',
+    '//cdn.example/app.js?version=1', 'static/%2e%2e/app.js',
+    'static\\app.js', '/absolute.js', 'page.js?version=1', 'page.js#fragment',
+  ]) {
+    writeFileSync(path.join(directory, 'app-build-manifest.json'), JSON.stringify({
+      pages: { '/layout': ['shell.js'], '/query/page': ['page.js', file] },
+    }));
+    assert.throws(() => measureInitialBundles(directory, { '/query/page': { raw: 1000, gzip: 1000 } }), /app-build-manifest asset/);
+  }
 });
 
 test('checks every default route and reports a failing route', (t) => {

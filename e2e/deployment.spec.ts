@@ -25,5 +25,5 @@ test('the exported site serves its routes, assets and bundled fonts at the deplo
     expect(response.ok()).toBe(true);
     expect(await response.text()).toBe(readFileSync(`src/styles/fonts/${filename}`, 'utf8'));
   }
-  if (basePath) expect((await request.get('http://127.0.0.1:3100/about/')).status()).toBe(404);
+  if (basePath) expect((await request.get(new URL('/about/', page.url()).href)).status()).toBe(404);
 });

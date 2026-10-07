@@ -11,8 +11,8 @@ instead of importing the SDK.
 After a production build, run:
 
 ```sh
-node scripts/check-bundle-budget.mjs
-node --test scripts/__tests__/check-bundle-budget.test.mjs
+pnpm check:bundles
+pnpm test:bundles
 ```
 
 The check reads `.next/app-build-manifest.json` when available and counts the
@@ -40,6 +40,9 @@ eager SDK imports, the query, wallet, and broadcast routes each required about
 The corresponding dashboard and identity totals were about 343 and 350 KiB.
 Do not increase the budget to accommodate an accidentally eager SDK import.
 
+CI runs the bundle-check regression tests and checks the production build before
+testing or preserving the deployment artifact.
+
 ## Browser validation
 
 Serve the production export at the deployment base path. In a fresh browser
@@ -52,6 +55,11 @@ and `/broadcast/`. Before releasing that request:
 
 Release the SDK request and confirm that the connection state and data recover.
 Check the browser console for hydration, chunk-loading, and uncaught errors.
+The startup browser tests discover the provider's actual SDK chunks from the
+build manifest, hold their requests while editing controls, then release the
+unchanged files and verify real non-trusted SDK startup. External endpoints are
+aborted to keep this check independent of network availability; no successful
+query response or signer is fabricated.
 Keep shell readiness measurements separate from module loading, SDK construction,
 and SDK connection. SDK connection includes WASM initialization and network or
 quorum discovery; it must not be reported as pure WASM execution time.
