@@ -1,9 +1,27 @@
 import { describe, expect, it } from 'vitest';
 import { aggregateProof, classifyProof, describeProofState, getQuorumKeySource, isProofFallbackBlocked, isProofVerificationError, type ProofState } from '../proofs';
 import { normalizeError } from '../errors';
-import { nativeProofError, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
+import { nativeProofError, SDK_PROOF_CONTEXT_MESSAGE, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
 
 describe('classifyProof', () => {
+  it.each(['raw', 'normalized', 'wrapped'])('classifies the actual unsupported WASM context error as unavailable (%s)', (shape) => {
+    const native = nativeProofError(SDK_PROOF_CONTEXT_MESSAGE);
+    const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Epoch read failed', { cause: native });
+    expect(isProofVerificationError(error)).toBe(false);
+    expect(isProofFallbackBlocked(error)).toBe(true);
+    const state = classifyProof({ status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 }, { trusted: false, hasProofVariant: true });
+    expect(state.kind).toBe('unavailable');
+    expect(describeProofState(state)).toContain('proof verification was not completed');
+  });
+
+  it.each([
+    new Error(SDK_PROOF_CONTEXT_MESSAGE, { cause: nativeProofError('invalid quorum signature') }),
+    new Error('state root differs', { cause: nativeProofError(SDK_PROOF_CONTEXT_MESSAGE) }),
+  ])('retains cryptographic mismatch priority through unsupported WASM context wrappers', (error) => {
+    expect(isProofVerificationError(error)).toBe(true);
+    expect(isProofFallbackBlocked(error)).toBe(true);
+  });
+
   it.each(['raw', 'normalized', 'wrapped'])('classifies the live SDK decoder error as unavailable (%s)', (shape) => {
     const native = nativeProofError();
     const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Proof request failed', { cause: native });

@@ -9,7 +9,8 @@ import { createMockSdk, createSdkContextValue } from '@/test/sdk';
 import { SdkContext, type SdkContextValue } from '../SdkProvider';
 import { useEpochInfo, useEpochRange, useFinalizedEpochInfo } from '../queries';
 import { createEvidenceBundle } from '../evidence';
-import { nativeProofError, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
+import { nativeProofError, SDK_PROOF_CONTEXT_MESSAGE, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
+import { normalizeError } from '../errors';
 
 type EpochQuery = NonNullable<Parameters<EvoSDK['epoch']['epochsInfo']>[0]>;
 
@@ -49,6 +50,25 @@ function mountProbe(context: SdkContextValue, kind: 'detail' | 'finalized' | 'ra
 afterEach(() => { clients.forEach((client) => client.clear()); clients.length = 0; });
 
 describe('epoch hook SDK arguments and capture', () => {
+  it.each(['raw', 'normalized', 'wrapped'])('exports actual trusted-off WASM context unavailability without fallback (%s)', async (shape) => {
+    const native = nativeProofError(SDK_PROOF_CONTEXT_MESSAGE);
+    const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Epoch read failed', { cause: native });
+    const epochsInfo = vi.fn().mockRejectedValue(error);
+    const epochsInfoWithProof = vi.fn();
+    mountProbe(createSdkContextValue({ trusted: false, sdk: createMockSdk({ epoch: { epochsInfo, epochsInfoWithProof } }) }), 'range');
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('error:idle:'));
+    expect(screen.getByTestId('proof-state')).toHaveTextContent('unavailable');
+    expect(epochsInfo).toHaveBeenCalledOnce();
+    expect(epochsInfoWithProof).not.toHaveBeenCalled();
+    const evidence = JSON.parse(screen.getByTestId('export').textContent!);
+    expect(evidence.context).toMatchObject({ trustedMode: false });
+    expect(evidence.verification.outcome).toBe('unavailable');
+    expect(evidence.verification).not.toHaveProperty('captureNote');
+    expect(evidence).not.toHaveProperty('result');
+    expect(evidence).not.toHaveProperty('proof');
+    expect(evidence).not.toHaveProperty('metadata');
+  });
+
   it.each([true, false])('exports aggregate success with its actual trust outcome and limitation (trusted=%s)', async (trusted) => {
     const epochsInfo = vi.fn((query: EpochQuery) => Promise.resolve(new Map([[query.startEpoch!, { blockHeight: 100n }]])));
     const epochsInfoWithProof = vi.fn();

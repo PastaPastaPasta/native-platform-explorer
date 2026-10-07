@@ -5,7 +5,8 @@ import { useQueryProofStore } from '@contexts/QueryProofStore';
 import { useTotalCreditsInPlatform } from '../queries';
 import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
-import { nativeProofError, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
+import { nativeProofError, SDK_PROOF_CONTEXT_MESSAGE, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
+import { normalizeError } from '../errors';
 import { createEvidenceBundle } from '../evidence';
 import { describeProofState } from '../proofs';
 
@@ -32,6 +33,20 @@ function TotalCreditsProbe() {
 }
 
 describe('SDK query proof flow', () => {
+  it.each(['raw', 'normalized', 'wrapped'])('never retries the actual unsupported WASM context error and exports unavailable (%s)', async (shape) => {
+    const native = nativeProofError(SDK_PROOF_CONTEXT_MESSAGE);
+    const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Proof request failed', { cause: native });
+    const ordinary = vi.fn();
+    const capture = vi.fn().mockRejectedValue(error);
+    const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: capture } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('error::unavailable'));
+    expect(ordinary).not.toHaveBeenCalled();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('proof-label')).toHaveTextContent('proof verification was not completed');
+    expect(screen.getByTestId('evidence-outcome')).toHaveTextContent('unavailable');
+  });
+
   it.each(['raw', 'wrapped'])('never falls back on the live native decoder error and exports unavailable (%s)', async (shape) => {
     const native = nativeProofError();
     const error = shape === 'raw' ? native : new Error('Proof request failed', { cause: native });
