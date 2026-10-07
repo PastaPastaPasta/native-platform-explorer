@@ -12,12 +12,22 @@
  *    2) ES6 property-style getters on the prototype — `get contenders()` etc.
  *    3) zero-arg method-style getters — `getOwnerId()` / `getFoo()` — with
  *       the `get` prefix stripped.
- *  Recurses through nested values so deeply-wrapped responses unwrap fully. */
-export function walkInstance(value: unknown, depth = 0): unknown {
+ *  Recurses through nested values so deeply-wrapped responses unwrap fully.
+ *  An optional leaf converter runs before flattening; undefined keeps the
+ *  normal walk. Converter failures propagate rather than omit captured data. */
+export function walkInstance(
+  value: unknown,
+  depth = 0,
+  convertLeaf?: (value: object) => unknown,
+): unknown {
   if (value === null || value === undefined) return value;
   if (typeof value !== 'object') return value;
+  if (convertLeaf) {
+    const leaf = convertLeaf(value);
+    if (leaf !== undefined) return leaf;
+  }
   if (value instanceof Uint8Array || value instanceof Map || value instanceof Set) return value;
-  if (Array.isArray(value)) return value.map((v) => walkInstance(v, depth + 1));
+  if (Array.isArray(value)) return value.map((v) => walkInstance(v, depth + 1, convertLeaf));
   // Bail out of pathologically deep graphs to avoid infinite recursion on
   // classes whose getters return `this` or similar self-references.
   if (depth > 6) return value;
@@ -29,8 +39,20 @@ export function walkInstance(value: unknown, depth = 0): unknown {
   //    ContestedResourceVoteState.contenders).
   for (const [k, v] of Object.entries(obj)) {
     if (k === '__wbg_ptr') continue; // skip wasm pointer noise
-    out[k] = walkInstance(v, depth + 1);
+    out[k] = walkInstance(v, depth + 1, convertLeaf);
   }
+
+  const readGetter = (key: string, read: () => unknown) => {
+    let raw: unknown;
+    try {
+      raw = read();
+      if (!convertLeaf) out[key] = walkInstance(raw, depth + 1);
+    } catch {
+      return; // Preserve getter fallback and the default traversal tolerance.
+    }
+    // Opt-in conversion failures must escape to the caller's capture error.
+    if (convertLeaf) out[key] = walkInstance(raw, depth + 1, convertLeaf);
+  };
 
   // 2) + 3) Walk prototype chain for getters we can read.
   let proto: object | null = Object.getPrototypeOf(obj) as object | null;
@@ -45,12 +67,7 @@ export function walkInstance(value: unknown, depth = 0): unknown {
       // ES6 getter: `get foo()` — read via obj[name].
       if (typeof desc.get === 'function') {
         if (name in out) continue;
-        try {
-          const raw = (obj as Record<string, unknown>)[name];
-          out[name] = walkInstance(raw, depth + 1);
-        } catch {
-          /* skip getters that throw */
-        }
+        readGetter(name, () => obj[name]);
         continue;
       }
 
@@ -60,12 +77,7 @@ export function walkInstance(value: unknown, depth = 0): unknown {
         if (fn.length !== 0) continue;
         const key = name[3]!.toLowerCase() + name.slice(4);
         if (key in out) continue;
-        try {
-          const raw = (fn as () => unknown).call(obj);
-          out[key] = walkInstance(raw, depth + 1);
-        } catch {
-          /* skip getters that throw */
-        }
+        readGetter(key, () => fn.call(obj));
       }
     }
     proto = Object.getPrototypeOf(proto) as object | null;
