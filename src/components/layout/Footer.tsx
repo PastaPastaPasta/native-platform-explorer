@@ -77,6 +77,9 @@ export function Footer() {
           </HStack>
           {inspectorEnabled ? (
             <Button
+              aria-label="Open Query Inspector"
+              minW="44px"
+              minH="44px"
               variant="link"
               fontFamily="mono"
               fontSize="xs"
