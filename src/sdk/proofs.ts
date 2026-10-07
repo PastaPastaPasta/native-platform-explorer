@@ -19,15 +19,19 @@ export interface ClassifyOptions {
 /** Only explicit SDK verification failures warrant a cryptographic-failure label.
  * Transport, parsing, missing context, and unavailable quorum-key errors do not. */
 export function isProofVerificationError(error: unknown): boolean {
+  const explicitMessage = /\b(?:proof verification (?:failed|error)|invalid (?:grovedb |merkle )?proof|invalid quorum signature)\b/i;
+  if (typeof error === 'string') return explicitMessage.test(error);
   const seen = new Set<object>();
   let current = error;
   while (current && typeof current === 'object' && !seen.has(current)) {
     seen.add(current);
-    const e = current as { code?: unknown; kind?: unknown; message?: unknown; cause?: unknown };
-    const explicitFailure = /^(ProofVerificationFailed|InvalidProof|InvalidSignature|PROOF_VERIFICATION_FAILED)$/;
-    if (explicitFailure.test(String(e.code ?? '')) || explicitFailure.test(String(e.kind ?? ''))) return true;
-    if (typeof e.message === 'string' &&
-        /\b(?:proof verification failed|invalid (?:grovedb|merkle) proof|invalid quorum signature)\b/i.test(e.message)) return true;
+    const e = current as { code?: unknown; kind?: unknown; name?: unknown; message?: unknown; cause?: unknown };
+    const explicitFailure = /^(ProofVerificationFailed|InvalidProof|InvalidSignature|PROOF_VERIFICATION_FAILED|DriveProofError|Proof|InvalidProvedResponse)$/;
+    if ([e.code, e.kind, e.name].some((tag) => explicitFailure.test(String(tag ?? '')))) return true;
+    // WasmSdkErrorKind in the pinned 4.0.0-rc.2 SDK: DriveProofError=2,
+    // Proof=4, InvalidProvedResponse=5. Do not import its runtime/WASM bundle.
+    if (typeof e.kind === 'number' && [2, 4, 5].includes(e.kind)) return true;
+    if (typeof e.message === 'string' && explicitMessage.test(e.message)) return true;
     current = e.cause;
   }
   return false;

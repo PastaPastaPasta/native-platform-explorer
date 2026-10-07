@@ -57,6 +57,10 @@ describe('classifyProof', () => {
     a.cause = b;
     expect(isProofVerificationError(a)).toBe(false);
     expect(isProofVerificationError({ code: 123, kind: 'InvalidProof' })).toBe(true);
+    expect(isProofVerificationError({ kind: 4, name: 'Proof', message: 'State root differs' })).toBe(true);
+    expect(isProofVerificationError({ kind: 5, name: 'InvalidProvedResponse' })).toBe(true);
+    expect(isProofVerificationError({ kind: 18, name: 'ContextProviderError', message: 'quorum key unavailable' })).toBe(false);
+    expect(isProofVerificationError({ kind: 6, name: 'DapiClientError', message: 'network failure' })).toBe(false);
   });
 
   it('reports outages even on non-proof methods or with trusted mode off', () => {
