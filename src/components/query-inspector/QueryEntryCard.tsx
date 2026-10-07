@@ -139,9 +139,10 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
     return (
       <VStack align="stretch" spacing={2}>
         <Text fontSize="xs" color="gray.400">
-          No proof captured. {entry.error
-            ? 'The proof variant errored — the data above came from the unproven fallback path.'
-            : 'Either trusted mode is off or the inspector was disabled when this query ran.'}
+          {entry.captureNote ?? <>No proof captured. {entry.status === 'error'
+            ? 'The query did not complete.'
+            : entry.error ? 'The proof variant errored — the data above came from the unproven fallback path.'
+              : 'Either trusted mode is off or the inspector was disabled when this query ran.'}</>}
         </Text>
         {entry.error ? (
           <Text fontSize="2xs" color="red.300" fontFamily="mono">
@@ -299,6 +300,9 @@ export function QueryEntryDetail({
             </Box>
             {annotation ? (
               <Text fontSize="xs" color="gray.400" lineHeight="1.5">{annotation}</Text>
+            ) : null}
+            {entry.captureNote ? (
+              <Text fontSize="xs" color="gray.400" lineHeight="1.5">{entry.captureNote}</Text>
             ) : null}
             <Box>
               <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Parameters</Text>
