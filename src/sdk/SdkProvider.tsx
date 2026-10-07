@@ -22,6 +22,7 @@ import {
   type Network,
 } from './networks';
 import { getConfig } from '@/config';
+import { measureSdkPhase } from './timing';
 
 /** Shape of the devnet args we hand to `EvoSDK.devnet` / `EvoSDK.devnetTrusted`.
  *  Exported only so the SdkProvider unit test can pin the resolution rules. */
@@ -109,24 +110,31 @@ function readStoredTrusted(fallback: boolean): boolean {
   return fallback;
 }
 
-async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKType> {
+async function constructSdk(
+  network: Network,
+  trusted: boolean,
+  sessionId: number,
+  signal: AbortSignal,
+): Promise<EvoSDKType> {
   // Dynamically import so the heavy WASM module does not block the initial app paint.
-  const mod = await import('@dashevo/evo-sdk');
-  const EvoSDK = mod.EvoSDK;
-  const cfg = getNetwork(network);
-  if (cfg.type === 'mainnet') {
-    return trusted ? EvoSDK.mainnetTrusted() : EvoSDK.mainnet();
-  }
-  if (cfg.type === 'testnet') {
-    return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
-  }
-  // Devnet: dev.7+ SDK has first-class devnet factories. Trusted mode uses
-  // the quorums service for proof verification + masternode discovery;
-  // non-trusted mode requires explicit DAPI addresses.
-  const args = getDevnetSdkArgs(network, trusted);
-  return args.trusted
-    ? EvoSDK.devnetTrusted(args.name, args.quorumUrl ? { quorumUrl: args.quorumUrl } : undefined)
-    : EvoSDK.devnet(args.name, { addresses: args.addresses });
+  const mod = await measureSdkPhase('module-load', sessionId, signal, () => import('@dashevo/evo-sdk'));
+  return measureSdkPhase('construct', sessionId, signal, () => {
+    const EvoSDK = mod.EvoSDK;
+    const cfg = getNetwork(network);
+    if (cfg.type === 'mainnet') {
+      return trusted ? EvoSDK.mainnetTrusted() : EvoSDK.mainnet();
+    }
+    if (cfg.type === 'testnet') {
+      return trusted ? EvoSDK.testnetTrusted() : EvoSDK.testnet();
+    }
+    // Devnet: dev.7+ SDK has first-class devnet factories. Trusted mode uses
+    // the quorums service for proof verification + masternode discovery;
+    // non-trusted mode requires explicit DAPI addresses.
+    const args = getDevnetSdkArgs(network, trusted);
+    return args.trusted
+      ? EvoSDK.devnetTrusted(args.name, args.quorumUrl ? { quorumUrl: args.quorumUrl } : undefined)
+      : EvoSDK.devnet(args.name, { addresses: args.addresses });
+  });
 }
 
 export function SdkProvider({ children }: { children: ReactNode }) {
@@ -195,15 +203,16 @@ export function SdkProvider({ children }: { children: ReactNode }) {
       sessionController.current?.abort();
       const controller = new AbortController();
       sessionController.current = controller;
-      setSessionId(++nextSessionId);
+      const attemptId = ++nextSessionId;
+      setSessionId(attemptId);
       setSessionSignal(controller.signal);
       setSdk(null);
       setStatus('connecting');
       setError(null);
       try {
-        const instance = await constructSdk(net, isTrusted);
+        const instance = await constructSdk(net, isTrusted, attemptId, controller.signal);
         if (controller.signal.aborted) return;
-        await instance.connect();
+        await measureSdkPhase('connect', attemptId, controller.signal, () => instance.connect());
         if (controller.signal.aborted) return;
         setSdk(instance);
         setStatus('ready');

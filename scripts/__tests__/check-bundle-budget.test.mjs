@@ -6,17 +6,20 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { fileURLToPath } from 'node:url';
 import { gzipSync } from 'node:zlib';
-import { checkBundleBudgets, initialRouteFiles, measureInitialBundles, ROUTE_BUDGETS } from '../check-bundle-budget.mjs';
+import { checkBundleBudgets, exportedRouteFiles, initialRouteFiles, measureInitialBundles, ROUTE_BUDGETS } from '../check-bundle-budget.mjs';
 
-function fixture(t, pages, assets) {
+function writeFixture(t, files) {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'npe-bundle-budget-'));
   t.after(() => rmSync(directory, { recursive: true, force: true }));
-  writeFileSync(path.join(directory, 'app-build-manifest.json'), JSON.stringify({ pages }));
-  for (const [file, content] of Object.entries(assets)) {
+  for (const [file, content] of Object.entries(files)) {
     mkdirSync(path.dirname(path.join(directory, file)), { recursive: true });
     writeFileSync(path.join(directory, file), content);
   }
   return directory;
+}
+
+function fixture(t, pages, assets) {
+  return writeFixture(t, { 'app-build-manifest.json': JSON.stringify({ pages }), ...assets });
 }
 
 test('counts root and nested layouts once while excluding CSS and unrelated async chunks', (t) => {
@@ -90,4 +93,67 @@ test('CLI exits unsuccessfully when the build artifact is missing', (t) => {
   const result = spawnSync(process.execPath, [script, path.join(directory, 'missing')], { encoding: 'utf8' });
   assert.equal(result.status, 1);
   assert.match(result.stderr, /Bundle budget check failed/);
+});
+
+test('reads Next 16 exported initial scripts including layouts and polyfills with a base path', (t) => {
+  const shell = 'const shell = true;';
+  const page = 'const page = true;';
+  const polyfill = 'const polyfill = true;';
+  const directory = writeFixture(t, { 'query/index.html': `
+    <script src="/native-platform-explorer/_next/static/shell.js" async></script>
+    <script async src='/native-platform-explorer/_next/static/page.js?x=1&amp;y=2'></script>
+    <script src="/native-platform-explorer/_next/static/shell.js"></script>
+    <script src=/_next/static/polyfill.js></script>
+    <script>self.__next_f.push([1, "<script src='/_next/static/async-sdk.js'>"])</script>
+    <!-- <script src="/_next/static/async-sdk.js"></script> -->
+    <link rel="preload" href="/_next/static/async-sdk.js" as="script">
+  `,
+    '_next/static/shell.js': shell,
+    '_next/static/page.js': page,
+    '_next/static/polyfill.js': polyfill,
+    '_next/static/async-sdk.js': Buffer.alloc(3 * 1024 * 1024),
+  });
+  const [result] = measureInitialBundles(directory, { '/query/page': { raw: 1000, gzip: 1000 } });
+  assert.equal(result.raw, shell.length + page.length + polyfill.length);
+  assert.equal(result.gzip, [shell, page, polyfill].reduce((sum, text) => sum + gzipSync(text).length, 0));
+  assert.equal(result.passed, true);
+});
+
+test('falls back from a Next 16 .next directory to its sibling export', (t) => {
+  const directory = writeFixture(t, {
+    'out/index.html': '<script src="/_next/static/shell.js"></script>',
+    'out/_next/static/shell.js': 'const shell = true;',
+  });
+  mkdirSync(path.join(directory, '.next'));
+  const [result] = measureInitialBundles(path.join(directory, '.next'), { '/page': { raw: 1000, gzip: 1000 } });
+  assert.equal(result.passed, true);
+});
+
+test('fails for missing exported pages, absent startup scripts, and missing script files', (t) => {
+  const directory = writeFixture(t, { 'index.html': '<script>inlineOnly()</script>' });
+  assert.throws(() => measureInitialBundles(directory, { '/page': { raw: 1000, gzip: 1000 } }), /no initial script/);
+  assert.throws(() => measureInitialBundles(directory, { '/query/page': { raw: 1000, gzip: 1000 } }), /ENOENT/);
+  writeFileSync(path.join(directory, 'index.html'), '<script src="/_next/static/missing.js"></script>');
+  assert.throws(() => measureInitialBundles(directory, { '/page': { raw: 1000, gzip: 1000 } }), /ENOENT/);
+});
+
+test('rejects traversal, remote scripts, unsupported assets, and malformed encoding', () => {
+  for (const source of [
+    '/_next/static/../outside.js', '/_next/static/%2e%2e/outside.js',
+    '/_next/static/%2e%2e%2foutside.js', '/_next/static/%5coutside.js',
+  ]) {
+    assert.throws(() => exportedRouteFiles(`<script src="${source}"></script>`), /Unsafe initial script/);
+  }
+  assert.throws(() => exportedRouteFiles('<script src="https://cdn.example/app.js"></script>'), /remote initial script/);
+  assert.throws(() => exportedRouteFiles('<script src="//cdn.example/app.js"></script>'), /remote initial script/);
+  assert.throws(() => exportedRouteFiles('<script src="/app.js"></script>'), /Unsupported initial script/);
+  assert.throws(() => exportedRouteFiles('<script src="_next/static/app.js"></script>'), /Unsupported initial script/);
+  assert.throws(() => exportedRouteFiles('<script src="/_next/static/asset.wasm"></script>'), /Unsupported initial script/);
+  assert.throws(() => exportedRouteFiles('<script src="/_next/static/%xx.js"></script>'), /URI malformed/);
+});
+
+test('ignores data-src attributes and rejects route traversal in export mode', (t) => {
+  assert.throws(() => exportedRouteFiles('<script data-src="/_next/static/app.js"></script>'), /no initial script/);
+  const directory = writeFixture(t, {});
+  assert.throws(() => measureInitialBundles(directory, { '/../page': { raw: 1000, gzip: 1000 } }), /Unsupported route entry/);
 });

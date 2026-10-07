@@ -15,16 +15,24 @@ node scripts/check-bundle-budget.mjs
 node --test scripts/__tests__/check-bundle-budget.test.mjs
 ```
 
-The check reads `.next/app-build-manifest.json` and counts the JavaScript in each
-route and all ancestor layouts, with shared chunks counted once per route. The
-dashboard, identity, query, wallet, and broadcast routes each have limits of
-**512 KiB gzip and 2 MiB uncompressed**. CSS and chunks imported asynchronously
-after hydration are excluded. Missing manifests, routes, or assets fail the
-check. An optional argument selects another build directory:
+The check reads `.next/app-build-manifest.json` when available and counts the
+JavaScript in each route and all ancestor layouts. On Next 16 it reads the
+exported `out/<route>/index.html` instead: its script tags include the initial
+layout, page, runtime, and polyfill scripts. Shared chunks count once per route.
+The dashboard, identity, query, wallet, and broadcast routes each have limits of
+**512 KiB gzip and 2 MiB uncompressed**. CSS, preloads, and chunks imported
+asynchronously after hydration are excluded. Missing pages, startup scripts, or
+assets fail the check; remote or unsupported script URLs also fail rather than
+escaping measurement. GitHub Pages base paths map to the same local exported
+assets. An optional argument selects a build or export directory:
 
 ```sh
 node scripts/check-bundle-budget.mjs /path/to/.next
+node scripts/check-bundle-budget.mjs /path/to/out
 ```
+
+HTML mode conservatively counts any listed `nomodule` polyfill, which an older
+app build manifest may omit. Compare measurements using the same artifact format.
 
 These are compressed artifact sizes, not browser load times. Before removing the
 eager SDK imports, the query, wallet, and broadcast routes each required about
@@ -47,6 +55,26 @@ Check the browser console for hydration, chunk-loading, and uncaught errors.
 Keep shell readiness measurements separate from module loading, SDK construction,
 and SDK connection. SDK connection includes WASM initialization and network or
 quorum discovery; it must not be reported as pure WASM execution time.
+
+The browser User Timing timeline exposes these measurements:
+
+| Name | Measures |
+| --- | --- |
+| `npe:app-shell` | Navigation start to the first mounted application shell |
+| `npe:sdk:module-load` | Asynchronous SDK module loading and evaluation |
+| `npe:sdk:construct` | SDK factory and configuration |
+| `npe:sdk:connect` | SDK connection, including runtime initialization and network setup |
+
+SDK measurements have `detail.sessionId` and `detail.outcome` (`success`, `error`,
+or `superseded`) so completed obsolete attempts cannot be mistaken for the active
+session. Each phase retains at most 20 completed measures; the next sample clears
+that phase's prior entries. The shell measure appears once per document. Timing
+is optional and cannot change an SDK result or error in unsupported browsers.
+Inspect the measurements in browser developer tools or the console:
+
+```js
+performance.getEntriesByType('measure').filter((entry) => entry.name.startsWith('npe:'))
+```
 
 ## Proof inspection
 

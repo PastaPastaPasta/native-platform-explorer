@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { gzipSync } from 'node:zlib';
@@ -39,18 +39,69 @@ export function initialRouteFiles(pages, route) {
   return scripts;
 }
 
-export function measureInitialBundles(nextDirectory, budgets = ROUTE_BUDGETS) {
-  const { pages } = JSON.parse(readFileSync(path.join(nextDirectory, 'app-build-manifest.json'), 'utf8'));
-  if (!pages || typeof pages !== 'object' || Array.isArray(pages)) {
-    throw new Error('app-build-manifest.json must contain a pages object');
+/** Exported HTML includes ancestor layouts and only scripts requested at startup. */
+export function exportedRouteFiles(html) {
+  const files = new Set();
+  for (const [element] of html.matchAll(/<!--[\s\S]*?-->|<script\b[^>]*>(?:[\s\S]*?<\/script\s*>|$)/gi)) {
+    if (element.startsWith('<!--')) continue;
+    const tag = element.slice(0, element.indexOf('>') + 1);
+    const match = tag.match(/\ssrc\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/i);
+    if (!match) continue; // Inline React hydration instructions are not files.
+    const source = (match[1] ?? match[2] ?? match[3]).replace(/&amp;/gi, '&');
+    if (/^(?:[a-z][a-z\d+.-]*:|\/\/)/i.test(source)) {
+      throw new Error(`Cannot measure remote initial script: ${source}`);
+    }
+    if (!source.startsWith('/')) throw new Error(`Unsupported initial script: ${source}`);
+    const pathname = decodeURIComponent(source.split(/[?#]/)[0]);
+    if (pathname.includes('\\') || pathname.split('/').some((part) => part === '.' || part === '..')) {
+      throw new Error(`Unsafe initial script path: ${source}`);
+    }
+    const normalized = `/${pathname.replace(/^\/+/, '')}`;
+    const marker = normalized.indexOf('/_next/static/');
+    if (marker === -1 || !normalized.endsWith('.js')) {
+      throw new Error(`Unsupported initial script: ${source}`);
+    }
+    // A GitHub Pages base path is a URL prefix, not a physical export directory.
+    files.add(normalized.slice(marker + 1));
+  }
+  if (files.size === 0) throw new Error('Exported page has no initial script files');
+  return [...files];
+}
+
+function routeAssets(buildDirectory) {
+  const manifest = path.join(buildDirectory, 'app-build-manifest.json');
+  if (existsSync(manifest)) {
+    const { pages } = JSON.parse(readFileSync(manifest, 'utf8'));
+    if (!pages || typeof pages !== 'object' || Array.isArray(pages)) {
+      throw new Error('app-build-manifest.json must contain a pages object');
+    }
+    return { directory: buildDirectory, filesForRoute: (route) => initialRouteFiles(pages, route) };
   }
 
+  // Next 16 no longer emits app-build-manifest.json. Use the shipped HTML
+  // instead of evaluating executable client-reference manifests.
+  const directory = path.basename(buildDirectory) === '.next'
+    ? path.resolve(buildDirectory, '../out')
+    : buildDirectory;
+  return {
+    directory,
+    filesForRoute(route) {
+      if (!/^\/(?:[\w-]+\/)*page$/.test(route)) throw new Error(`Unsupported route entry: ${route}`);
+      const segments = route.split('/').filter(Boolean).slice(0, -1);
+      const html = readFileSync(path.join(directory, ...segments, 'index.html'), 'utf8');
+      return exportedRouteFiles(html);
+    },
+  };
+}
+
+export function measureInitialBundles(buildDirectory, budgets = ROUTE_BUDGETS) {
+  const { directory, filesForRoute } = routeAssets(path.resolve(buildDirectory));
   const sizes = new Map();
   return Object.entries(budgets).map(([route, budget]) => {
-    const files = initialRouteFiles(pages, route).map((file) => {
+    const files = filesForRoute(route).map((file) => {
       if (!sizes.has(file)) {
-        const absolute = path.resolve(nextDirectory, file);
-        const relative = path.relative(path.resolve(nextDirectory), absolute);
+        const absolute = path.resolve(directory, file);
+        const relative = path.relative(path.resolve(directory), absolute);
         if (relative.startsWith(`..${path.sep}`) || relative === '..' || path.isAbsolute(relative)) {
           throw new Error(`Build manifest asset escapes the build directory: ${file}`);
         }
