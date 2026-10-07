@@ -40,23 +40,13 @@ import type { ProofStatus } from '@components/proof/ProofInspectorContext';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 import type { ProofState } from '@sdk/proofs';
 
-// Map a query's real proof state to the glyph's three-way status, so a value
-// only reads "verified" when a proof was actually verified — not for endpoints
-// that return no proof (e.g. system.status, currentQuorumsInfo) or when trusted
-// mode is off.
-function glyphStatus(s: ProofState, entry?: QueryProofEntry): ProofStatus {
-  // A proof variant that threw and fell back to the non-proof path returns data
-  // (proofState 'verified') but captured no proof — the entry carries the
-  // capture error. Don't paint that green; the proof genuinely failed.
-  if (s.kind === 'verified' && entry?.error) return 'failed';
+// Verification follows the SDK outcome; captured bytes are optional.
+function glyphStatus(s: ProofState): ProofStatus {
   switch (s.kind) {
-    case 'verified':
-      return 'verified';
-    case 'failed':
-      return 'failed';
-    default:
-      // no-variant, trusted-off, in-flight, unknown — nothing was proven.
-      return 'trusted';
+    case 'verified': return 'verified';
+    case 'failed': return 'failed';
+    case 'unavailable': return 'unavailable';
+    default: return 'trusted';
   }
 }
 
@@ -111,7 +101,7 @@ function StatCell({
 }) {
   const errored = !loading && !!error;
   const effectiveStatus: ProofStatus | undefined = errored
-    ? 'failed'
+    ? proofStatus === 'failed' ? 'failed' : 'unavailable'
     : proofStatus;
   return (
     <Box
@@ -137,7 +127,7 @@ function StatCell({
             }
             payload={
               errored
-                ? { title: proofTitle ?? label, status: 'failed', notes: error?.message }
+                ? { title: proofTitle ?? label, status: effectiveStatus, notes: error?.message, entry: proofEntry }
                 : proofTitle
                   ? { title: proofTitle, status: effectiveStatus, entry: proofEntry }
                   : undefined
@@ -249,7 +239,7 @@ export default function HomePage() {
         <SimpleGrid columns={{ base: 1, lg: 5 }} spacing={0}>
           <StatCell
             label="Block height"
-            proofStatus={glyphStatus(statusQ.proofState, statusQ.proofEntry)}
+            proofStatus={glyphStatus(statusQ.proofState)}
             proofTitle="Block height proof"
             proofEntry={statusQ.proofEntry}
             loading={statusQ.isLoading}
@@ -270,7 +260,7 @@ export default function HomePage() {
 
           <StatCell
             label="Current epoch"
-            proofStatus={glyphStatus(epochQ.proofState, epochQ.proofEntry)}
+            proofStatus={glyphStatus(epochQ.proofState)}
             proofTitle="Epoch proof"
             proofEntry={epochQ.proofEntry}
             loading={epochQ.isLoading}
@@ -295,7 +285,7 @@ export default function HomePage() {
 
           <StatCell
             label="Total credits"
-            proofStatus={glyphStatus(creditsQ.proofState, creditsQ.proofEntry)}
+            proofStatus={glyphStatus(creditsQ.proofState)}
             proofTitle="Total credits proof"
             proofEntry={creditsQ.proofEntry}
             loading={creditsQ.isLoading}
@@ -306,7 +296,7 @@ export default function HomePage() {
 
           <StatCell
             label="Protocol version"
-            proofStatus={glyphStatus(protocolQ.proofState, protocolQ.proofEntry)}
+            proofStatus={glyphStatus(protocolQ.proofState)}
             proofTitle="Protocol version proof"
             proofEntry={protocolQ.proofEntry}
             loading={protocolQ.isLoading}
@@ -335,7 +325,7 @@ export default function HomePage() {
 
           <StatCell
             label="Active quorums"
-            proofStatus={glyphStatus(quorumsQ.proofState, quorumsQ.proofEntry)}
+            proofStatus={glyphStatus(quorumsQ.proofState)}
             proofTitle="Active quorums proof"
             proofEntry={quorumsQ.proofEntry}
             loading={quorumsQ.isLoading}
