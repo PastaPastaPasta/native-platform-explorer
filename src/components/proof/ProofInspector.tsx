@@ -18,8 +18,9 @@ import { QueryEntryDetail } from '@components/query-inspector/QueryEntryCard';
 
 const STATUS_LABEL: Record<ProofStatus, string> = {
   verified: 'VERIFIED',
-  trusted: 'TRUST MODE',
+  trusted: 'NOT VERIFIED',
   failed: 'FAILED',
+  unavailable: 'QUERY UNAVAILABLE',
 };
 
 const STATUS_COLOR: Record<ProofStatus, string> = {
@@ -27,6 +28,7 @@ const STATUS_COLOR: Record<ProofStatus, string> = {
   // Grey, not yellow — "served without a proof" is informational, not a warning.
   trusted: 'muted',
   failed: 'failed',
+  unavailable: 'muted',
 };
 
 /**
@@ -54,7 +56,7 @@ export function ProofInspector() {
     <Drawer isOpen={isOpen} placement="right" onClose={close} size="lg">
       <DrawerOverlay bg="blackAlpha.500" />
       <DrawerContent bg="surface" color="ink">
-        <DrawerCloseButton color="muted" _hover={{ color: 'ink' }} />
+        <DrawerCloseButton aria-label="Close proof inspector" minW="44px" minH="44px" color="muted" _hover={{ color: 'ink' }} />
         <DrawerHeader
           borderBottom="1px solid"
           borderColor="hairline"

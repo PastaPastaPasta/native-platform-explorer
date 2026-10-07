@@ -13,11 +13,12 @@ import {
   HStack,
   Text,
   VStack,
+  useToast,
 } from '@chakra-ui/react';
 import { useEffect, useMemo } from 'react';
 import { useQueryProofStore } from '@/contexts/QueryProofStore';
 import { useSdk } from '@sdk/hooks';
-import { safeStringify } from '@util/wasm-json';
+import { downloadEvidenceBundle, serializeEvidenceBundle } from '@sdk/evidence';
 import { QueryEntryCard } from './QueryEntryCard';
 import { OVERVIEW_TEXT } from './annotations';
 
@@ -28,7 +29,8 @@ function isEditableTarget(target: EventTarget | null): boolean {
 }
 
 export function QueryInspectorDrawer() {
-  const { entries, clear, enabled, drawerOpen, openDrawer, closeDrawer } = useQueryProofStore();
+  const toast = useToast();
+  const { entries, retainedBytes, droppedEntries, clear, enabled, drawerOpen, openDrawer, closeDrawer } = useQueryProofStore();
   const { network, trusted, status } = useSdk();
 
   useEffect(() => {
@@ -46,24 +48,26 @@ export function QueryInspectorDrawer() {
   }, [openDrawer, closeDrawer, drawerOpen, enabled]);
 
   const stats = useMemo(() => {
-    let proven = 0;
+    let captured = 0;
+    let verified = 0;
     let maxHeight = 0;
     let maxEpoch = 0;
     for (const e of entries) {
-      if (e.proof) proven++;
+      if (e.proof) captured++;
+      if (e.verification === 'verified') verified++;
       if (e.metadata) {
         if (e.metadata.height > maxHeight) maxHeight = e.metadata.height;
         if (e.metadata.epoch > maxEpoch) maxEpoch = e.metadata.epoch;
       }
     }
-    return { total: entries.length, proven, maxHeight, maxEpoch };
+    return { total: entries.length, captured, verified, maxHeight, maxEpoch };
   }, [entries]);
 
   return (
     <Drawer isOpen={drawerOpen} placement="right" size="full" onClose={closeDrawer}>
       <DrawerOverlay />
       <DrawerContent bg="gray.900">
-        <DrawerCloseButton />
+        <DrawerCloseButton aria-label="Close query inspector" minW="44px" minH="44px" />
         <DrawerHeader color="gray.100" pb={2} maxW="1400px" mx="auto" w="100%">
           <Text fontSize="md">Query Inspector</Text>
         </DrawerHeader>
@@ -73,8 +77,8 @@ export function QueryInspectorDrawer() {
               <Text fontSize="xs" color="gray.400">
                 {stats.total} queries
               </Text>
-              <Text fontSize="xs" color={stats.proven > 0 ? 'success' : 'gray.400'}>
-                {stats.proven} proven
+              <Text fontSize="xs" color={stats.verified > 0 ? 'success' : 'gray.400'}>
+                {stats.verified} SDK verified · {stats.captured} proofs captured
               </Text>
               {stats.maxHeight > 0 ? (
                 <Text fontSize="xs" color="gray.400">
@@ -87,20 +91,34 @@ export function QueryInspectorDrawer() {
                 </Text>
               ) : null}
               <Text fontSize="xs" color="gray.500">
-                {network} · {trusted ? 'trusted' : 'untrusted'} · {status}
+                Current SDK: {network} · {trusted ? 'trusted' : 'untrusted'} · {status}
               </Text>
             </HStack>
-            <HStack spacing={2}>
+            <Text fontSize="xs" color="gray.400">
+              Inspector data: {(retainedBytes / 1024 / 1024).toFixed(2)} MiB of 8 MiB estimated retained data · up to 200 queries
+              {droppedEntries ? ` · ${droppedEntries} oversized entries skipped` : ''}
+            </Text>
+            <HStack spacing={2} flexWrap="wrap">
+              <Button size="sm" minH="44px" variant="outline" isDisabled={!entries.length} onClick={() => downloadEvidenceBundle(entries)}>
+                Export all evidence JSON
+              </Button>
               <Button
-                size="xs"
+                size="sm"
+                minH="44px"
+                isDisabled={!entries.length}
                 variant="outline"
-                onClick={() => {
-                  navigator.clipboard?.writeText(safeStringify(entries));
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(serializeEvidenceBundle(entries));
+                    toast({ title: 'Evidence copied', status: 'success' });
+                  } catch {
+                    toast({ title: 'Could not copy evidence', description: 'Use Export all evidence JSON to save the file.', status: 'error' });
+                  }
                 }}
               >
-                Copy All
+                Copy all evidence JSON
               </Button>
-              <Button size="xs" variant="outline" onClick={clear}>
+              <Button size="sm" minH="44px" variant="outline" onClick={clear}>
                 Clear
               </Button>
             </HStack>
