@@ -1,4 +1,4 @@
-import { act, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createQueryProofStore, estimateProofEntryBytes, QueryProofStoreProvider,
@@ -91,4 +91,73 @@ it('keeps recorder consumers stable and only updates the matching entry subscrib
   expect(screen.getByText('specific query')).toBeInTheDocument();
   expect(recorderRender).toHaveBeenCalledTimes(initialRecorderRenders);
   expect(entryRender).toHaveBeenCalledTimes(initialEntryRenders + 1);
+});
+
+function PreferenceProbe() {
+  const store = useQueryProofStore();
+  return <>
+    <div data-testid="preference-state">
+      {String(store.enabled)}:{store.entries.length}:{store.retainedBytes}:{String(store.drawerOpen)}
+    </div>
+    <button onClick={() => store.record('a', entry())}>Record query</button>
+    <button onClick={store.openDrawer}>Open inspector</button>
+    <button onClick={() => store.setEnabled(false)}>Disable capture</button>
+    <button onClick={() => store.setEnabled(true)}>Enable capture</button>
+  </>;
+}
+
+describe('proof preferences with denied browser storage', () => {
+  it.each(['getter', 'getItem', 'setItem'] as const)('keeps the provider and in-memory controls usable when %s throws', (failure) => {
+    const descriptor = Object.getOwnPropertyDescriptor(window, 'localStorage')!;
+    const denied = () => { throw new DOMException('Storage denied', 'SecurityError'); };
+    try {
+      if (failure === 'getter') {
+        Object.defineProperty(window, 'localStorage', { configurable: true, get: denied });
+      } else {
+        vi.spyOn(window.localStorage, failure).mockImplementation(denied);
+      }
+      const { rerender } = render(<QueryProofStoreProvider><PreferenceProbe /></QueryProofStoreProvider>);
+      expect(screen.getByTestId('preference-state')).toHaveTextContent('true:0:0:false');
+      fireEvent.click(screen.getByRole('button', { name: 'Record query' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Open inspector' }));
+      expect(screen.getByTestId('preference-state')).toHaveTextContent(/^true:1:\d+:true$/);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Disable capture' }));
+      expect(screen.getByTestId('preference-state')).toHaveTextContent('false:0:0:false');
+      fireEvent.click(screen.getByRole('button', { name: 'Record query' }));
+      rerender(<QueryProofStoreProvider><PreferenceProbe /></QueryProofStoreProvider>);
+      expect(screen.getByTestId('preference-state')).toHaveTextContent('false:0:0:false');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enable capture' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Record query' }));
+      expect(screen.getByTestId('preference-state')).toHaveTextContent(/^true:1:\d+:false$/);
+    } finally {
+      Object.defineProperty(window, 'localStorage', descriptor);
+      vi.restoreAllMocks();
+    }
+  });
+
+  it('hydrates a saved disabled preference and preserves in-memory changes when writes are denied', () => {
+    window.localStorage.setItem('npe:queryInspector', 'false');
+    const setItem = vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage quota exceeded', 'QuotaExceededError');
+    });
+    try {
+      const { rerender } = render(<QueryProofStoreProvider><PreferenceProbe /></QueryProofStoreProvider>);
+      expect(screen.getByTestId('preference-state')).toHaveTextContent('false:0:0:false');
+      fireEvent.click(screen.getByRole('button', { name: 'Record query' }));
+      expect(screen.getByTestId('preference-state')).toHaveTextContent('false:0:0:false');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Enable capture' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Record query' }));
+      rerender(<QueryProofStoreProvider><PreferenceProbe /></QueryProofStoreProvider>);
+      expect(screen.getByTestId('preference-state')).toHaveTextContent(/^true:1:\d+:false$/);
+      expect(window.localStorage.getItem('npe:queryInspector')).toBe('false');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Disable capture' }));
+      expect(screen.getByTestId('preference-state')).toHaveTextContent('false:0:0:false');
+    } finally {
+      setItem.mockRestore();
+    }
+  });
 });
