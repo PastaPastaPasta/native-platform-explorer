@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import {
   Button,
+  FormControl,
+  FormLabel,
   Heading,
   HStack,
   Input,
@@ -23,10 +25,8 @@ import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
 import { useSigner } from '@/signer/SignerProvider';
 import { useSdk } from '@sdk/hooks';
+import { normalizeError } from '@sdk/errors';
 import { getDerivationNetwork } from '@sdk/networks';
-import { createExtensionSigner, detectExtension } from '@/signer/extension';
-import { createMnemonicSigner } from '@/signer/mnemonic';
-import { createWifSigner } from '@/signer/wif';
 import { BridgeImportPane } from '@components/wallet/BridgeImportPane';
 import { BridgeLaunchCard } from '@components/wallet/BridgeLaunchCard';
 import { getConfig } from '@/config';
@@ -36,9 +36,11 @@ function SafetyBanner() {
   return (
     <InfoBlock>
       <Text fontSize="sm" color="gray.250">
-        The explorer never stores your keys. Mnemonic / WIF inputs live only in this
-        tab&apos;s memory and are cleared on disconnect, navigation, inactivity
-        (&gt; 10 minutes hidden), or reload.
+        The explorer never persists your keys. Imported keys stay in this tab&apos;s memory.
+        Disconnect, inactivity (&gt; 10 minutes hidden), or reload clears the local signer.
+        An operation already in progress can retain signing material until it finishes.
+        Mnemonic and WIF fields are cleared after each connection attempt. JavaScript cannot
+        guarantee that every copy of a secret is erased from memory.
       </Text>
     </InfoBlock>
   );
@@ -51,9 +53,9 @@ function ReconnectHint() {
     <InfoBlock>
       <HStack justify="space-between" flexWrap="wrap" spacing={3}>
         <Text fontSize="sm" color="gray.250">
-          You were previously connected via <strong>{stash.kind}</strong> as
-          identity <code>{stash.identityId}</code>. Key material was cleared on
-          reload — reconnect below to sign again.
+          You were previously connected via <strong>{stash.kind}</strong> as identity{' '}
+          <code>{stash.identityId}</code>. Key material was cleared on reload — reconnect below to
+          sign again.
         </Text>
         <Button size="xs" variant="ghost" onClick={clearStash}>
           Dismiss
@@ -64,68 +66,46 @@ function ReconnectHint() {
 }
 
 function ExtensionPane() {
-  const { connect } = useSigner();
-  const [error, setError] = useState<Error | null>(null);
-  const [busy, setBusy] = useState(false);
-
-  const onConnect = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const present = await detectExtension();
-      if (!present) throw new Error('Dash Platform Extension not detected in this browser.');
-      const signer = await createExtensionSigner();
-      connect(signer);
-    } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
-    } finally {
-      setBusy(false);
-    }
-  };
-
   return (
-    <VStack align="stretch" spacing={3}>
-      <Text fontSize="sm" color="gray.250">
-        Delegates signing to the Dash Platform Extension. The extension prompts you
-        to approve each signature; no key material ever leaves it.
-      </Text>
-      <HStack>
-        <Button size="sm" colorScheme="blue" onClick={onConnect} isLoading={busy}>
-          Connect extension
-        </Button>
-      </HStack>
-      {error ? <ErrorCard error={error} /> : null}
-    </VStack>
+    <Text fontSize="sm" color="gray.250" role="status">
+      Extension signing is unavailable for SDK operations in this explorer. Use a bridge backup,
+      mnemonic, or WIF signer whose private keys match enabled on-chain identity keys.
+    </Text>
   );
 }
 
 function MnemonicPane() {
   const { connect } = useSigner();
-  const { sdk, network } = useSdk();
+  const { sdk, network, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [mnemonic, setMnemonic] = useState('');
+  const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const onConnect = async () => {
-    if (!sdk) {
+    if (!sdk || status !== 'ready') {
+      setMnemonic('');
       setError(new Error('SDK not ready.'));
       return;
     }
     setBusy(true);
     setError(null);
     try {
+      const { createMnemonicSigner } = await import('@/signer/mnemonic');
       const signer = await createMnemonicSigner(
         sdk,
         mnemonic.trim(),
         identityId.trim(),
         getDerivationNetwork(network),
+        0,
+        path.trim() || undefined,
       );
-      setMnemonic(''); // blank the controlled input once the signer captured the seed
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
+      setMnemonic('');
       setBusy(false);
     }
   };
@@ -133,34 +113,62 @@ function MnemonicPane() {
   return (
     <VStack align="stretch" spacing={3}>
       <Text fontSize="sm" color="gray.250">
-        Paste a BIP-39 mnemonic and the identity ID it controls. The seed lives only
-        in this tab&apos;s memory. We use DIP-13 account 0 by default.
+        Paste a BIP-39 mnemonic and the identity ID it controls. The seed lives only in this
+        tab&apos;s memory. We use DIP-13 account 0 by default; enter the exact path used by your
+        wallet if it differs. The derived key must match an enabled on-chain key.
       </Text>
-      <Input
-        size="sm"
-        placeholder="Identity ID"
-        value={identityId}
-        onChange={(e) => setIdentityId(e.target.value)}
-        fontFamily="mono"
-        bg="gray.800"
-        borderColor="gray.700"
-      />
-      <Textarea
-        size="sm"
-        placeholder="twelve or twenty-four words …"
-        value={mnemonic}
-        onChange={(e) => setMnemonic(e.target.value)}
-        fontFamily="mono"
-        bg="gray.800"
-        borderColor="gray.700"
-      />
+      <FormControl isRequired>
+        <FormLabel fontSize="sm">Identity ID</FormLabel>
+        <Input
+          aria-label="Identity ID"
+          size="sm"
+          placeholder="Identity ID"
+          value={identityId}
+          onChange={(e) => setIdentityId(e.target.value)}
+          fontFamily="mono"
+          bg="gray.800"
+          borderColor="gray.700"
+        />
+      </FormControl>
+      <FormControl isRequired>
+        <FormLabel fontSize="sm">Mnemonic</FormLabel>
+        <Textarea
+          aria-label="Mnemonic"
+          autoComplete="off"
+          spellCheck={false}
+          isDisabled={busy}
+          size="sm"
+          placeholder="twelve or twenty-four words …"
+          value={mnemonic}
+          onChange={(e) => setMnemonic(e.target.value)}
+          fontFamily="mono"
+          bg="gray.800"
+          borderColor="gray.700"
+        />
+      </FormControl>
+      <FormControl>
+        <FormLabel fontSize="sm">Derivation path (optional)</FormLabel>
+        <Input
+          aria-label="Derivation path"
+          value={path}
+          onChange={(e) => setPath(e.target.value)}
+          placeholder="Default: DIP-13 account 0"
+          isDisabled={busy}
+          fontFamily="mono"
+        />
+      </FormControl>
       <HStack>
         <Button
           size="sm"
           colorScheme="blue"
           onClick={() => void onConnect()}
           isLoading={busy}
-          isDisabled={!isBase58Identifier(identityId.trim()) || mnemonic.trim().split(/\s+/).length < 12}
+          isDisabled={
+            !sdk ||
+            status !== 'ready' ||
+            !isBase58Identifier(identityId.trim()) ||
+            mnemonic.trim().split(/\s+/).length < 12
+          }
         >
           Connect mnemonic
         </Button>
@@ -172,26 +180,28 @@ function MnemonicPane() {
 
 function WifPane() {
   const { connect } = useSigner();
-  const { sdk } = useSdk();
+  const { sdk, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [wif, setWif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const onConnect = async () => {
-    if (!sdk) {
+    if (!sdk || status !== 'ready') {
+      setWif('');
       setError(new Error('SDK not ready.'));
       return;
     }
     setBusy(true);
     setError(null);
     try {
+      const { createWifSigner } = await import('@/signer/wif');
       const signer = await createWifSigner(sdk, wif.trim(), identityId.trim());
-      setWif('');
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
+      setWif('');
       setBusy(false);
     }
   };
@@ -199,35 +209,51 @@ function WifPane() {
   return (
     <VStack align="stretch" spacing={3}>
       <Text fontSize="sm" color="gray.250">
-        Paste a single WIF-encoded private key plus the identity ID it controls. For
-        one-off operations only; treat it like a burn credential.
+        Paste a single WIF-encoded private key plus the identity ID it controls. For one-off
+        operations only; treat it like a burn credential.
       </Text>
-      <Input
-        size="sm"
-        placeholder="Identity ID"
-        value={identityId}
-        onChange={(e) => setIdentityId(e.target.value)}
-        fontFamily="mono"
-        bg="gray.800"
-        borderColor="gray.700"
-      />
-      <Input
-        size="sm"
-        placeholder="WIF"
-        value={wif}
-        onChange={(e) => setWif(e.target.value)}
-        fontFamily="mono"
-        bg="gray.800"
-        borderColor="gray.700"
-        type="password"
-      />
+      <FormControl isRequired>
+        <FormLabel fontSize="sm">Identity ID</FormLabel>
+        <Input
+          aria-label="Identity ID"
+          size="sm"
+          placeholder="Identity ID"
+          value={identityId}
+          onChange={(e) => setIdentityId(e.target.value)}
+          fontFamily="mono"
+          bg="gray.800"
+          borderColor="gray.700"
+        />
+      </FormControl>
+      <FormControl isRequired>
+        <FormLabel fontSize="sm">WIF private key</FormLabel>
+        <Input
+          aria-label="WIF private key"
+          autoComplete="off"
+          spellCheck={false}
+          isDisabled={busy}
+          size="sm"
+          placeholder="WIF"
+          value={wif}
+          onChange={(e) => setWif(e.target.value)}
+          fontFamily="mono"
+          bg="gray.800"
+          borderColor="gray.700"
+          type="password"
+        />
+      </FormControl>
       <HStack>
         <Button
           size="sm"
           colorScheme="blue"
           onClick={() => void onConnect()}
           isLoading={busy}
-          isDisabled={!isBase58Identifier(identityId.trim()) || wif.trim().length === 0}
+          isDisabled={
+            !sdk ||
+            status !== 'ready' ||
+            !isBase58Identifier(identityId.trim()) ||
+            wif.trim().length === 0
+          }
         >
           Connect WIF
         </Button>
@@ -253,8 +279,7 @@ export default function Page() {
             Wallet
           </Heading>
           <Text fontSize="sm" color="gray.250" mt={1}>
-            Connect a signer so the broadcast console can sign state transitions on
-            your behalf.
+            Connect a signer so the broadcast console can sign state transitions on your behalf.
           </Text>
         </InfoBlock>
 
@@ -271,10 +296,18 @@ export default function Page() {
               <Tab fontSize="sm">WIF</Tab>
             </TabList>
             <TabPanels>
-              <TabPanel px={0}><BridgeImportPane /></TabPanel>
-              <TabPanel px={0}><ExtensionPane /></TabPanel>
-              <TabPanel px={0}><MnemonicPane /></TabPanel>
-              <TabPanel px={0}><WifPane /></TabPanel>
+              <TabPanel px={0}>
+                <BridgeImportPane />
+              </TabPanel>
+              <TabPanel px={0}>
+                <ExtensionPane />
+              </TabPanel>
+              <TabPanel px={0}>
+                <MnemonicPane />
+              </TabPanel>
+              <TabPanel px={0}>
+                <WifPane />
+              </TabPanel>
             </TabPanels>
           </Tabs>
         </InfoBlock>

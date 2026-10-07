@@ -8,6 +8,7 @@ import {
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
 import type { EvoSDK, Identity } from '@dashevo/evo-sdk';
+import { operationRequirement } from './capabilities';
 import type {
   ExplorerSigner,
   KeySelectionCriteria,
@@ -60,36 +61,30 @@ export interface IdentityResult {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-async function prepareSigning(
+// wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
+// only release on explicit `free()`. Every executor now goes through this
+// helper so the IdentitySigner is freed after the broadcast resolves (or
+// throws). Local adapters also own the selected public key and provide a
+// release callback for both objects. Keep the signer-only fallback for adapters
+// that do not provide that callback.
+async function withSigningMaterial<T>(
   signer: ExplorerSigner,
-  criteria?: KeySelectionCriteria,
-) {
+  criteria: KeySelectionCriteria | undefined,
+  fn: (material: SdkSigningMaterial) => Promise<T>,
+): Promise<T> {
   if (!signer.prepareSdk) {
     throw new Error(
       `The "${signer.kind}" signer does not support SDK signing yet. ` +
         'Connect via the Bridge backup tab on /wallet to enable writes.',
     );
   }
-  return signer.prepareSdk(criteria);
-}
-
-// wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
-// only release on explicit `free()`. Every executor now goes through this
-// helper so the IdentitySigner is freed after the broadcast resolves (or
-// throws). The IdentityPublicKey is owned by the on-chain Identity instance
-// returned from `identities.fetch` and is freed when that Identity is GC'd,
-// so we only need to manage the signer here.
-async function withSigningMaterial<T>(
-  signer: ExplorerSigner,
-  criteria: KeySelectionCriteria | undefined,
-  fn: (material: SdkSigningMaterial) => Promise<T>,
-): Promise<T> {
-  const material = await prepareSigning(signer, criteria);
+  const material = await signer.prepareSdk(criteria);
   try {
     return await fn(material);
   } finally {
     try {
-      material.identitySigner.free();
+      if (material.release) material.release();
+      else material.identitySigner.free();
     } catch {
       /* already freed or build without free — best-effort */
     }
@@ -110,7 +105,7 @@ export async function executeContractRegister(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+    operationRequirement('contract.register').criteria,
     async (material) => {
       const platformVersion = await getPlatformVersion(sdk);
       const identityNonce =
@@ -153,7 +148,7 @@ export async function executeContractUpdate(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+    operationRequirement('contract.update').criteria,
     async (material) => {
       const platformVersion = await getPlatformVersion(sdk);
 
@@ -226,18 +221,13 @@ async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<I
   return identity;
 }
 
-const DOC_CRITERIA: KeySelectionCriteria = {
-  purpose: 'AUTHENTICATION',
-  minSecurityLevel: 'HIGH',
-};
-
 export async function executeDocumentCreate(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
   options: DocumentCreateOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('document.create').criteria, async (material) => {
     const document = buildDocument(
       options.contractId,
       options.documentType,
@@ -266,7 +256,7 @@ export async function executeDocumentReplace(args: {
   options: DocumentReplaceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('document.replace').criteria, async (material) => {
     const document = buildDocument(
       options.contractId,
       options.documentType,
@@ -297,7 +287,7 @@ export async function executeDocumentDelete(args: {
   options: DocumentDeleteOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('document.delete').criteria, async (material) => {
     await sdk.documents.delete({
       document: {
         id: options.documentId,
@@ -325,7 +315,7 @@ export async function executeDocumentTransfer(args: {
   options: DocumentTransferOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('document.transfer').criteria, async (material) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
@@ -357,7 +347,7 @@ export async function executeDocumentSetPrice(args: {
   options: DocumentSetPriceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('document.setPrice').criteria, async (material) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
@@ -387,7 +377,7 @@ export async function executeDocumentPurchase(args: {
   options: DocumentPurchaseOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('document.purchase').criteria, async (material) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
@@ -424,7 +414,7 @@ export async function executeIdentityCreditTransfer(args: {
   options: IdentityCreditTransferOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('identity.creditTransfer').criteria, async (material) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
     const result = (await sdk.identities.creditTransfer({
       identity,
@@ -451,7 +441,7 @@ export async function executeIdentityCreditWithdrawal(args: {
   options: IdentityCreditWithdrawalOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, { purpose: 'TRANSFER' }, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('identity.creditWithdrawal').criteria, async (material) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
     const newBalance = await sdk.identities.creditWithdrawal({
       identity,
@@ -478,7 +468,7 @@ export async function executeIdentityUpdateKeys(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    { purpose: 'AUTHENTICATION', minSecurityLevel: 'MASTER' },
+    operationRequirement('identity.updateKeys').criteria,
     async (material) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
       const addPublicKeys: IdentityPublicKeyInCreation[] | undefined =
@@ -532,7 +522,7 @@ export async function executeDpnsRegister(args: {
   options: DpnsRegisterOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material) => {
+  return withSigningMaterial(signer, operationRequirement('dpns.registerName').criteria, async (material) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
     await sdk.dpns.registerName({
       label: options.label,
@@ -550,21 +540,11 @@ export async function executeDpnsRegister(args: {
 
 // ─── voting ─────────────────────────────────────────────────────────────
 
-export async function executeVotingCastVote(args: {
+export async function executeVotingCastVote(_args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
   options: VotingCastVoteOptions;
 }): Promise<IdentityResult> {
-  const { sdk, signer, options } = args;
-  void sdk;
-  void options;
-  // Voting requires a masternode voting key (Purpose: VOTING) — most users
-  // signed in via a Bridge backup won't have one. Surfacing a clear error now
-  // is better than calling the SDK with the wrong key purpose. Full wiring is
-  // tracked under the voting follow-up.
-  await prepareSigning(signer, { purpose: 'VOTING' });
-  throw new Error(
-    'Vote broadcast is not yet wired through this signer. You need a masternode ' +
-      'voting key (purpose = VOTING) to cast a vote.',
-  );
+  // Unsupported execution must fail before allocating any signing material.
+  throw new Error(operationRequirement('voting.castVote').reason);
 }

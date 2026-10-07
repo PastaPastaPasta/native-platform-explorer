@@ -52,9 +52,9 @@ describe('parseBridgeBackup', () => {
   });
 
   it('rejects when keys are missing', () => {
-    expect(() =>
-      parseBridgeBackup({ identityId: VALID_ID, identityKeys: [] }),
-    ).toThrow(/identityKeys/);
+    expect(() => parseBridgeBackup({ identityId: VALID_ID, identityKeys: [] })).toThrow(
+      /identityKeys/,
+    );
   });
 
   it('rejects a key without a WIF', () => {
@@ -76,5 +76,22 @@ describe('parseBridgeBackup', () => {
     expect(() => parseBridgeBackup('hello')).toThrow();
     expect(() => parseBridgeBackup(null)).toThrow();
     expect(() => parseBridgeBackup([])).toThrow();
+  });
+
+  it('rejects duplicate or invalid key IDs instead of silently replacing credentials', () => {
+    const key = {
+      id: 0,
+      purpose: 'AUTHENTICATION',
+      securityLevel: 'HIGH',
+      privateKeyWif: 'test-key',
+    };
+    expect(() => parseBridgeBackup({ identityId: VALID_ID, identityKeys: [key, key] })).toThrow(
+      /duplicate/,
+    );
+    for (const id of [-1, 0.5, Number.MAX_SAFE_INTEGER + 1]) {
+      expect(() =>
+        parseBridgeBackup({ identityId: VALID_ID, identityKeys: [{ ...key, id }] }),
+      ).toThrow(/id/);
+    }
   });
 });
