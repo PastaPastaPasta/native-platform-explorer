@@ -207,6 +207,8 @@ function CurrentProbe() {
     <div data-testid="current-note">{store.entries[0]?.captureNote}</div>
     <div data-testid="current-count">{store.entries.length}</div>
     <div data-testid="current-network">{store.entries[0]?.queryKey[1] as string}</div>
+    <div data-testid="current-proof-state">{q.proofState.kind}</div>
+    <div data-testid="current-export">{JSON.stringify(createEvidenceBundle(store.entries).queries)}</div>
   </>;
 }
 
@@ -273,6 +275,14 @@ describe('current epoch selection integrity', () => {
     expect(screen.getByTestId('current-result')).toHaveTextContent('"index":2');
     expect(screen.getByTestId('current-count')).toHaveTextContent('1');
     expect(screen.getByTestId('current-network')).toHaveTextContent('testnet');
+    expect(screen.getByTestId('current-proof-state')).toHaveTextContent('verified');
+    const exported = JSON.parse(screen.getByTestId('current-export').textContent!);
+    expect(exported).toHaveLength(1);
+    expect(exported[0].context).toMatchObject({ network: 'testnet', trustedMode: true });
+    expect(exported[0].result.index).toBe(2);
+    expect(exported[0].verification).toMatchObject({ outcome: 'verified', captureNote: expect.stringContaining('No single proof payload or response height') });
+    expect(exported[0]).not.toHaveProperty('proof');
+    expect(exported[0]).not.toHaveProperty('metadata');
     expect(testnetFetch.mock.calls.map(([query]) => query.startEpoch)).toEqual([0, 2]);
   });
 });
