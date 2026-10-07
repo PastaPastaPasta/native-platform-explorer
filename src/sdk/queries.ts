@@ -11,7 +11,8 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery } from './hooks';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
-import { walkInstance, safeStringify } from '@util/wasm-json';
+import { walkInstance } from '@util/wasm-json';
+import { extractErrorMessage, normalizeError } from './errors';
 import {
   useQueryProofStore,
   type ProofData,
@@ -77,54 +78,6 @@ function extractMetadata(meta: unknown): ResponseMeta | undefined {
   };
 }
 
-/**
- * Pull a human-readable message out of an SDK error. The WASM SDK throws
- * objects like WasmSdkError / ConsensusError / WasmDppError that are NOT
- * Error instances and whose state (message, code, kind, name) lives behind
- * prototype getters. `String(err)` on them returns "[object Object]", which
- * is why the Query Inspector used to show that for failures. `walkInstance`
- * reads the getters; we then format the most useful fields into one line.
- */
-function extractErrorMessage(err: unknown): string {
-  if (err === null || err === undefined) return String(err);
-  if (typeof err === 'string') return err;
-  if (err instanceof Error) return err.message || err.name || 'Error';
-  if (typeof err !== 'object') return String(err);
-  try {
-    const walked = walkInstance(err) as Record<string, unknown>;
-    const ctorName = (err as { constructor?: { name?: string } }).constructor?.name;
-    const name = typeof walked.name === 'string' ? walked.name : undefined;
-    const kind = typeof walked.kind === 'string' ? walked.kind : undefined;
-    const code =
-      walked.code !== undefined && walked.code !== null ? String(walked.code) : undefined;
-    const message = typeof walked.message === 'string' ? walked.message : undefined;
-
-    const label = name ?? (ctorName && ctorName !== 'Object' ? ctorName : undefined);
-    const tagParts: string[] = [];
-    if (label) tagParts.push(label);
-    if (kind && kind !== label) tagParts.push(`(${kind})`);
-    if (code) tagParts.push(`[${code}]`);
-    const tag = tagParts.join(' ');
-
-    if (message) return tag ? `${tag}: ${message}` : message;
-    const dump = safeStringify(walked, 0);
-    if (dump && dump !== '{}') return tag ? `${tag}: ${dump}` : dump;
-    if (tag) return tag;
-  } catch {
-    /* fall through */
-  }
-  return String(err);
-}
-
-/** Wrap a thrown value in a proper Error so React Query and consumers get
- *  a usable `.message`. Keeps the original on `.cause` for debugging. */
-function normalizeError(err: unknown): Error {
-  if (err instanceof Error) return err;
-  const wrapped = new Error(extractErrorMessage(err));
-  (wrapped as Error & { cause?: unknown }).cause = err;
-  return wrapped;
-}
-
 function extractProof(proof: unknown): ProofData | undefined {
   if (!proof || typeof proof !== 'object') return undefined;
   const p = proof as Record<string, unknown>;
@@ -165,10 +118,10 @@ function useSdkQuery<TData>(
   proofStoreRef.current = proofStore;
 
   const fullKey = getSdkQueryKey(context, key);
+  const storeKey = JSON.stringify(fullKey);
 
   const q = useSessionQuery<TData>(key, async (sdk, { assertActive }) => {
     const store = proofStoreRef.current;
-    const storeKey = JSON.stringify(fullKey);
     const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
     const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
     const t0 = performance.now();
@@ -304,13 +257,12 @@ function useSdkQuery<TData>(
   // ProofGlyph can open the inspector with the real proof. Keyed on the
   // stringified `fullKey` (matching how the store records it) and recomputed
   // only when the store changes, not on every render.
-  const fullKeyStr = JSON.stringify(fullKey);
   // O(1) Map lookup keyed on the same stringified key the store records under.
   // `proofStore` gets a fresh identity on every version bump (see its value
   // useMemo), so this stays reactive without scanning the entries array.
   const proofEntry = useMemo(
-    () => proofStore.getEntry(fullKeyStr),
-    [proofStore, fullKeyStr],
+    () => proofStore.getEntry(storeKey),
+    [proofStore, storeKey],
   );
 
   return Object.assign(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled });

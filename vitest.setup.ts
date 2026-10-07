@@ -8,6 +8,7 @@ import { installStorageMock } from './src/test/storage';
 (globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 beforeEach(() => {
+  if (typeof window === 'undefined') return;
   installStorageMock('localStorage');
   installStorageMock('sessionStorage');
 });
