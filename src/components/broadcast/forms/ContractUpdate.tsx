@@ -73,6 +73,7 @@ export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<Contr
           value={contractId}
           onChange={(id) => {
             setContractId(id);
+            if (id.trim() === contractId.trim()) return;
             setLoaded(false);
             setSchemasText('');
           }}
