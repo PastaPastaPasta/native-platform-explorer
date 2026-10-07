@@ -1,8 +1,8 @@
 # Supported framework baseline
 
 The explorer uses Next.js **16.3.8** and React / React DOM **19.3.0**, with Node.js
-**20.9.0 or newer**. Next.js 16 is the active LTS major; Next.js 15 is maintenance
-LTS and Next.js 14 is unsupported under the [official support policy](https://nextjs.org/support-policy).
+**22.13.0+ on the Node 22 LTS line, or Node 24+**. Next.js 16 is the active LTS
+major; Next.js 15 is maintenance LTS and Next.js 14 is unsupported under the [official support policy](https://nextjs.org/support-policy).
 The browser baseline is Chrome / Edge / Firefox 111+ and Safari 16.4+, matching
 the [Next.js 16 requirements](https://nextjs.org/docs/app/guides/upgrading/version-16).
 
@@ -14,6 +14,11 @@ for Next.js 15, so staying on that major would not avoid the React migration.
 
 ## Compatibility choices
 
+- The project Node requirement follows the complete locked development toolchain.
+  In particular, `eslint-visitor-keys` 5.0.1 requires `^20.19.0 || ^22.13.0 || >=24`.
+  The project uses the maintained Node 22 LTS line or Node 24+, excluding Node 23,
+  which that dependency does not support. Next.js itself has a lower runtime
+  minimum of Node 20.9.0; it does not define the project's build and lint minimum.
 - Development and production explicitly use Webpack (`next dev --webpack` and
   `next build --webpack`). This preserves the existing asynchronous WASM and raw
   Markdown handling instead of silently switching to Next.js 16's Turbopack
