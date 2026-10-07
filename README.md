@@ -51,13 +51,15 @@ superseded builds are not deployed. No rebuild happens during deployment.
 
 Fraunces and JetBrains Mono are bundled locally with their OFL licenses;
 Geist is bundled by its npm package. Builds do not fetch Google Fonts.
+CI includes the complete font licenses in the validated deployment artifact.
 The package manager is pinned in `package.json`.
 
-The current custom domain uses the root prefix. Run `pnpm build && pnpm e2e`
-to reproduce it locally. Project-prefix hosting is also covered:
+The current custom domain uses the root prefix. To reproduce it locally, omit
+`NEXT_PUBLIC_BASE_PATH` from the commands below. Project-prefix hosting is also covered:
 
 ```sh
 NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm build
+cp src/styles/fonts/Fraunces-OFL.txt src/styles/fonts/JetBrainsMono-OFL.txt out/
 NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
 ```
 

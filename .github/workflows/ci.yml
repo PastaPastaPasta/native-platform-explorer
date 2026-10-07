@@ -34,13 +34,15 @@ jobs:
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: pnpm build
+      - name: Prepare Pages files and font licenses
+        run: |
+          touch out/.nojekyll
+          cp src/styles/fonts/Fraunces-OFL.txt src/styles/fonts/JetBrainsMono-OFL.txt out/
       - run: pnpm exec playwright install --with-deps chromium
       - name: Test the exact export at its deployment prefix
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: pnpm e2e
-      - name: Prepare Pages files
-        run: touch out/.nojekyll
       - name: Preserve the validated build
         uses: actions/upload-artifact@v4
         with:

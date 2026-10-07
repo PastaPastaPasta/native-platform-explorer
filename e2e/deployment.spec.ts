@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { readFileSync } from 'node:fs';
 
 test('the exported site serves its routes, assets and bundled fonts at the deployment prefix', async ({ page, request }) => {
   const failures: string[] = [];
@@ -19,5 +20,10 @@ test('the exported site serves its routes, assets and bundled fonts at the deplo
     expect((await request.get(fontUrl)).ok()).toBe(true);
   }
   expect(failures).toEqual([]);
+  for (const filename of ['Fraunces-OFL.txt', 'JetBrainsMono-OFL.txt']) {
+    const response = await request.get(filename);
+    expect(response.ok()).toBe(true);
+    expect(await response.text()).toBe(readFileSync(`src/styles/fonts/${filename}`, 'utf8'));
+  }
   if (basePath) expect((await request.get('http://127.0.0.1:3100/about/')).status()).toBe(404);
 });

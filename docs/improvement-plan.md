@@ -1,7 +1,9 @@
 # Explorer improvements
 
-This work follows the October 6, 2026 project review. Each theme is implemented
-and reviewed independently, with regression coverage and browser validation.
+This work follows the October 6, 2026 project review. The themes below define
+design and acceptance criteria for separate implementations and reviews.
+Some criteria, including enforced initial-JavaScript bundle budgets, remain
+outstanding. Regression coverage and browser validation accompany each change.
 The explorer continues to read directly through the SDK without an indexer.
 
 | Theme | Design and acceptance |
