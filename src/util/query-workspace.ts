@@ -347,6 +347,27 @@ export function saveSavedQueries(
   }
 }
 
+/** Re-read committed changes before an explicit action; localStorage writes are not transactional. */
+export function updateSavedQueries(
+  network: string,
+  contractId: string,
+  update: (queries: SavedQuery[]) => SavedQuery[],
+  storage: Storage | null = queryStorage(),
+): { status: 'saved' | 'limit'; queries: SavedQuery[] } | { status: 'unavailable' } {
+  if (!storage) return { status: 'unavailable' };
+  try {
+    const current = parseSavedQueries(storage.getItem(savedQueriesKey(network, contractId)));
+    const next = update(current);
+    // Reject rather than silently truncating another tab's persisted entries.
+    if (next.length > MAX_SAVED_QUERIES) return { status: 'limit', queries: current };
+    if (!saveSavedQueries(network, contractId, next, storage)) return { status: 'unavailable' };
+    return { status: 'saved', queries: validatedSavedQueries(next) };
+  } catch {
+    // A denied read must not become an empty list that overwrites existing storage.
+    return { status: 'unavailable' };
+  }
+}
+
 /** Quote one SQL identifier, including reserved words and punctuation. */
 export function quoteSqlIdentifier(identifier: string): string {
   return '`' + identifier.replace(/`/g, '``') + '`';

@@ -7,7 +7,9 @@ import {
   MAX_SAVED_QUERY_NAME_LENGTH,
   MAX_SAVED_QUERY_SQL_LENGTH,
   loadSavedQueries,
-  saveSavedQueries,
+  parseSavedQueries,
+  savedQueriesKey,
+  updateSavedQueries,
   type SavedQuery,
 } from '@util/query-workspace';
 
@@ -33,15 +35,34 @@ export function SavedQueries({
     setLoadedScope(scope);
     setName('');
     setMessage('');
+    const key = savedQueriesKey(network, contractId);
+    function syncSaved(event: StorageEvent) {
+      try {
+        const storage = window.localStorage;
+        if (event.storageArea === storage && (event.key === key || event.key === null)) {
+          // Queued events can be older than a local action; read the latest committed value.
+          setSaved(parseSavedQueries(storage.getItem(key)));
+        }
+      } catch {
+        // Keep the visible list and drafts if browser storage becomes unavailable.
+      }
+    }
+    window.addEventListener('storage', syncSaved);
+    return () => window.removeEventListener('storage', syncSaved);
   }, [network, contractId, scope]);
 
-  function store(queries: SavedQuery[]) {
-    if (!saveSavedQueries(network, contractId, queries)) {
+  function store(update: (queries: SavedQuery[]) => SavedQuery[]) {
+    const result = updateSavedQueries(network, contractId, update);
+    if (result.status === 'unavailable') {
       setMessage('Could not save queries. Browser storage may be unavailable or full.');
       return;
     }
-    setSaved(queries);
-    setMessage('Saved queries updated.');
+    setSaved(result.queries);
+    setMessage(
+      result.status === 'limit'
+        ? `You can save up to ${MAX_SAVED_QUERIES} queries for this contract. Delete one or replace an existing name.`
+        : 'Saved queries updated.',
+    );
   }
 
   return (
@@ -79,8 +100,8 @@ export function SavedQueries({
                 !currentSaved.some((query) => query.name === name.trim()))
             }
             onClick={() =>
-              store([
-                ...currentSaved.filter((query) => query.name !== name.trim()),
+              store((queries) => [
+                ...queries.filter((query) => query.name !== name.trim()),
                 { name: name.trim(), sql },
               ])
             }
@@ -91,7 +112,7 @@ export function SavedQueries({
             size="sm"
             variant="ghost"
             isDisabled={!currentSaved.length}
-            onClick={() => store([])}
+            onClick={() => store(() => [])}
           >
             Clear saved queries for this contract
           </Button>
@@ -106,7 +127,7 @@ export function SavedQueries({
             size="xs"
             variant="ghost"
             aria-label={`Delete saved query ${query.name}`}
-            onClick={() => store(currentSaved.filter((entry) => entry.name !== query.name))}
+            onClick={() => store((queries) => queries.filter((entry) => entry.name !== query.name))}
           >
             Delete
           </Button>

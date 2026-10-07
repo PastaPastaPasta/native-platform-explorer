@@ -14,6 +14,13 @@ const entry: QueryProofEntry = {
 };
 
 describe('query provenance', () => {
+  it.each([0, 2])('shows an aggregate limitation independently of the selected lazy tab %s', (defaultTabIndex) => {
+    const captureNote = 'Combined results from separate SDK-verified batches. No single proof payload or response height covers this range.';
+    renderWithProviders(<QueryEntryDetail entry={{ ...entry, captureNote }} defaultTabIndex={defaultTabIndex} />);
+    expect(screen.getByText(captureNote)).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Export evidence JSON' })).toBeVisible();
+  });
+
   it('shows captured network context rather than the currently selected SDK network', () => {
     renderWithProviders(<QueryEntryDetail entry={entry} />, { sdk: { network: 'testnet' } });
     expect(screen.getByText('mainnet')).toBeInTheDocument();

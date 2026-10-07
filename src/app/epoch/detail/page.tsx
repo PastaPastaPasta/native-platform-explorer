@@ -9,13 +9,14 @@ import { LoadingCard } from '@ui/LoadingCard';
 import { EpochView } from '@components/epoch/EpochView';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useEpochInfo, useEvonodesBlocksByRange, useFinalizedEpochInfo } from '@sdk/queries';
+import { isEpochIndex, MAX_EPOCH_INDEX } from '@sdk/epoch-queries';
 import { normaliseEpoch } from '@util/epoch';
 
 function Content() {
   const params = useSearchParams();
   const raw = params.get('index') ?? '';
   const idx = Number(raw);
-  const valid = Number.isFinite(idx) && idx >= 0;
+  const valid = raw.trim() !== '' && isEpochIndex(idx);
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -29,8 +30,7 @@ function Content() {
 
   const mapData = epochQ.data as Map<unknown, unknown> | null | undefined;
   const fallback = finalizedQ.data as Map<unknown, unknown> | null | undefined;
-  const raws = [...(mapData?.values() ?? []), ...(fallback?.values() ?? [])].filter(Boolean);
-  const epochEntry = raws[0];
+  const epochEntry = mapData?.get(idx) ?? fallback?.get(idx);
   const epoch = epochEntry ? normaliseEpoch(epochEntry) : null;
 
   if (!valid) {
@@ -38,7 +38,7 @@ function Content() {
       <Container py={8}>
         <InfoBlock>
           <Text color="gray.250">
-            Provide an epoch index as <code>?index=…</code>.
+            Provide a whole epoch index from 0 to {MAX_EPOCH_INDEX} as <code>?index=…</code>.
           </Text>
         </InfoBlock>
       </Container>

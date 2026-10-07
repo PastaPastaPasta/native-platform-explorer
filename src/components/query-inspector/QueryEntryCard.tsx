@@ -289,6 +289,9 @@ export function QueryEntryDetail({
         <FieldRow label="Freshness" value="Snapshot at retrieval; current network state may differ" />
         <FieldRow label="Response height" value={entry.metadata ? String(entry.metadata.height) : 'Not returned'} />
       </VStack>
+      {entry.captureNote ? (
+        <Text fontSize="xs" color="gray.400" lineHeight="1.5">{entry.captureNote}</Text>
+      ) : null}
       <Text fontSize="xs" color="gray.400">{EVIDENCE_TRUST_NOTICE}</Text>
       <Button size="sm" minH="44px" alignSelf="flex-start" variant="outline" onClick={() => downloadEvidenceBundle([entry])}>
         Export evidence JSON
