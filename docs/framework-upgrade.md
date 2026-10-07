@@ -15,6 +15,7 @@ for Next.js 15, so staying on that major would not avoid the React migration.
 ## Compatibility choices
 
 - The project Node requirement follows the complete locked development toolchain.
+  `.nvmrc` selects the minimum supported Node version, 22.13.0.
   In particular, `eslint-visitor-keys` 5.0.1 requires `^20.19.0 || ^22.13.0 || >=24`.
   The project uses the maintained Node 22 LTS line or Node 24+, excluding Node 23,
   which that dependency does not support. Next.js itself has a lower runtime
@@ -33,6 +34,10 @@ for Next.js 15, so staying on that major would not avoid the React migration.
 - Chakra UI 2, Emotion, Framer Motion 11, TanStack Query, and the nuqs App Router
   adapter declare React 19 compatible peers. Chromium coverage checks real
   drawer navigation, modal focus restoration, and query URL state after reload.
+- Existing SDK session and signer callback tests capture hook values after React
+  commits using effects. The static navigation regression checks Next.js 16's
+  exported page segment payload while retaining its document and header-control
+  continuity assertions.
 - Next.js 16 removes `next lint`, so `pnpm lint` calls ESLint directly with a flat
   config. Rules of Hooks, exhaustive dependencies, Next.js Web Vitals checks, and
   TypeScript checks remain enabled. Four new React Compiler diagnostics
@@ -59,3 +64,12 @@ compatibility tests. Root-domain deployments leave the base path empty.
 Next.js 16 no longer emits `.next/app-build-manifest.json`. Bundle checks should
 use the script resources in the exported HTML to measure each route's initial
 JavaScript, rather than depending on that removed internal manifest.
+
+Integration with main `ea3b7fdfec49a0bade5df39704ceae17ec4f0f56` was validated on
+Node 22.13.0 with the pinned pnpm 9.15.9: frozen installation, lint, application
+and browser types, 257 unit tests with coverage, and production builds at root
+and `/native-platform-explorer` passed. All 19 Chromium cases passed at each
+deployment path against the packaged export, including local fonts and licenses.
+Actual SDK initialization and invalid-credential handling passed without browser
+SDK-success fixtures or transaction broadcasts. Later product integrations must
+repeat these checks against their combined source.

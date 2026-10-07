@@ -1,13 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/$/, '');
-const appPath = (path: string) => `${basePath}${path}`;
-
 test('mobile navigation drawer supports focus restoration and client navigation', async ({ page }) => {
   const errors: Error[] = [];
   page.on('pageerror', (error) => errors.push(error));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(appPath('/about/'));
+  await page.goto('about/');
 
   const openMenu = page.getByRole('button', { name: 'Open menu' });
   await openMenu.click();
@@ -19,7 +16,7 @@ test('mobile navigation drawer supports focus restoration and client navigation'
 
   await openMenu.click();
   await drawer.getByRole('link', { name: 'Search', exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`${basePath}/search/?$`));
+  await expect(page).toHaveURL(/\/search\/?$/);
   await expect(page.getByRole('heading', { name: 'Search', exact: true })).toBeVisible();
   await expect(drawer).toBeHidden();
   expect(errors).toEqual([]);
@@ -28,7 +25,7 @@ test('mobile navigation drawer supports focus restoration and client navigation'
 test('settings modal retains controlled input and restores focus on close', async ({ page }) => {
   const errors: Error[] = [];
   page.on('pageerror', (error) => errors.push(error));
-  await page.goto(appPath('/settings/'));
+  await page.goto('settings/');
 
   const openModal = page.getByRole('button', { name: 'Add custom devnet…' });
   await openModal.click();
@@ -47,7 +44,7 @@ test('query editor preserves URL state through a client update and reload', asyn
   const errors: Error[] = [];
   page.on('pageerror', (error) => errors.push(error));
   const initialSql = 'not valid SQL';
-  await page.goto(appPath(`/query/?q=${encodeURIComponent(initialSql)}`));
+  await page.goto(`query/?q=${encodeURIComponent(initialSql)}`);
 
   const editor = page.getByRole('textbox', { name: 'SQL Query' });
   await expect(editor).toHaveValue(initialSql);
