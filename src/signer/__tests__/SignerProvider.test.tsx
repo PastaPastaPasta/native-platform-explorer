@@ -41,6 +41,8 @@ describe('SignerProvider', () => {
       status: 'connecting',
       network: 'testnet',
       trusted: true,
+      sessionId: 1,
+      sessionSignal: null,
       error: null,
       setNetwork: vi.fn(),
       setTrusted: vi.fn(),
