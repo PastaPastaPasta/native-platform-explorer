@@ -7,8 +7,11 @@ import {
   useMemo,
   useRef,
   useState,
+  Suspense,
   type ReactNode,
 } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Alert, AlertDescription, AlertIcon } from '@chakra-ui/react';
 import type { EvoSDK as EvoSDKType } from '@dashevo/evo-sdk';
 import {
   DEFAULT_NETWORK,
@@ -57,6 +60,10 @@ export interface SdkContextValue {
   status: SdkStatus;
   network: Network;
   trusted: boolean;
+  /** Changes for every connection attempt, including same-network reconnects. */
+  sessionId: number;
+  /** Aborted synchronously when this connection is superseded or unmounted. */
+  sessionSignal: AbortSignal | null;
   error: Error | null;
   setNetwork: (n: Network) => void;
   setTrusted: (t: boolean) => void;
@@ -67,36 +74,67 @@ export const SdkContext = createContext<SdkContextValue | null>(null);
 
 const NETWORK_KEY = 'npe:network';
 const TRUSTED_KEY = 'npe:trusted';
+// Unique across provider remounts sharing the same React Query client too.
+let nextSessionId = 0;
 
 function readStoredNetwork(fallback: Network): Network {
-  if (typeof window === 'undefined') return fallback;
-  const raw = window.localStorage.getItem(NETWORK_KEY);
+  const raw = readPreference(NETWORK_KEY);
   return raw && hasNetwork(raw) ? raw : fallback;
 }
 
-function readUrlNetwork(): Network | null {
+function readPreference(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    // Browsers may block the Storage getter itself or individual operations.
+    // Continue with configured defaults and keep choices in memory.
+    return null;
+  }
+}
+
+function storePreference(key: string, value: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Persistence is optional; a quota/security error must not prevent a switch.
+  }
+}
+
+function readUrlNetwork(): string | null {
   if (typeof window === 'undefined') return null;
   try {
     const param = new URL(window.location.href).searchParams.get('network');
-    return param && hasNetwork(param) ? param : null;
+    return param || null;
   } catch {
     return null;
   }
 }
 
+/** Isolate useSearchParams' static-export Suspense boundary from app content. */
+function UrlNetworkSync({ onChange }: { onChange: (network: string | null) => void }) {
+  const params = useSearchParams();
+  const requested = params.get('network');
+  useEffect(() => { onChange(requested); }, [onChange, requested]);
+  return null;
+}
+
 function readStoredTrusted(fallback: boolean): boolean {
-  if (typeof window === 'undefined') return fallback;
-  const raw = window.localStorage.getItem(TRUSTED_KEY);
+  const raw = readPreference(TRUSTED_KEY);
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   return fallback;
 }
 
 async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKType> {
+  // getNetwork tolerates unknown names for display, so never use its fallback
+  // when choosing the actual network transport.
+  if (!hasNetwork(network)) throw new Error(`Unknown network "${network}". Choose a configured network.`);
+  const cfg = getNetwork(network);
   // Dynamically import so the heavy WASM module does not block the initial app paint.
   const mod = await import('@dashevo/evo-sdk');
   const EvoSDK = mod.EvoSDK;
-  const cfg = getNetwork(network);
   if (cfg.type === 'mainnet') {
     return trusted ? EvoSDK.mainnetTrusted() : EvoSDK.mainnet();
   }
@@ -125,6 +163,9 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   const [sdk, setSdk] = useState<EvoSDKType | null>(null);
   const [status, setStatus] = useState<SdkStatus>('idle');
   const [error, setError] = useState<Error | null>(null);
+  const [sessionId, setSessionId] = useState(0);
+  const [sessionSignal, setSessionSignal] = useState<AbortSignal | null>(null);
+  const sessionController = useRef<AbortController | null>(null);
   // Mirror the (network, trusted) selection so `setNetwork` / `setTrusted` can
   // detect no-op calls without re-creating the callback every render.
   const networkRef = useRef(network);
@@ -138,19 +179,35 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   // (`quorums.testnet.networks.dash.org/*`) — making it look like devnet
   // pages are still talking to testnet.
   const [hydrated, setHydrated] = useState(false);
-  const connectSeq = useRef(0);
+  const [networkError, setNetworkError] = useState<string | null>(null);
+  const networkErrorRef = useRef<{ name: string; source: 'url' | 'default' | 'selection' } | null>(null);
+
+  const blockUnknownNetwork = useCallback((requested: string, source: 'url' | 'default' | 'selection') => {
+    if (networkErrorRef.current?.name === requested && networkErrorRef.current.source === source) return;
+    networkErrorRef.current = { name: requested, source };
+    sessionController.current?.abort();
+    setSessionId(++nextSessionId);
+    setNetworkError(requested);
+    setSdk(null);
+    setStatus('error');
+    const label = source === 'default' ? 'Unknown configured default network' : 'Unknown network';
+    setError(new Error(`${label} "${requested}". Choose a configured network.`));
+  }, []);
 
   // Hydrate the stored preferences after mount. Registry must be loaded first
   // so URL-param / localStorage validation can see custom devnets.
   useEffect(() => {
     initNetworkRegistry();
     const urlNet = readUrlNetwork();
-    const storedNet = urlNet ?? readStoredNetwork(defaultNetwork);
+    const validUrlNet = urlNet && hasNetwork(urlNet) ? urlNet : null;
+    const storedNet = validUrlNet ?? readStoredNetwork(defaultNetwork);
     const storedTrust = readStoredTrusted(defaultTrusted);
-    if (urlNet) {
+    if (validUrlNet) {
       // Persist the URL-param choice so a reload without the param keeps it.
-      window.localStorage.setItem(NETWORK_KEY, urlNet);
+      storePreference(NETWORK_KEY, validUrlNet);
     }
+    if (urlNet && !validUrlNet) blockUnknownNetwork(urlNet, 'url');
+    else if (!hasNetwork(storedNet)) blockUnknownNetwork(storedNet, 'default');
     if (storedNet !== defaultNetwork) setNetworkState(storedNet);
     if (storedTrust !== defaultTrusted) setTrustedState(storedTrust);
     setHydrated(true);
@@ -159,17 +216,23 @@ export function SdkProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(
     async (net: Network, isTrusted: boolean) => {
-      const seq = ++connectSeq.current;
+      sessionController.current?.abort();
+      const controller = new AbortController();
+      sessionController.current = controller;
+      setSessionId(++nextSessionId);
+      setSessionSignal(controller.signal);
+      setSdk(null);
       setStatus('connecting');
       setError(null);
       try {
         const instance = await constructSdk(net, isTrusted);
+        if (controller.signal.aborted) return;
         await instance.connect();
-        if (seq !== connectSeq.current) return; // superseded
+        if (controller.signal.aborted) return;
         setSdk(instance);
         setStatus('ready');
       } catch (err) {
-        if (seq !== connectSeq.current) return;
+        if (controller.signal.aborted) return;
         setError(err instanceof Error ? err : new Error(String(err)));
         setStatus('error');
       }
@@ -177,47 +240,74 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  useEffect(() => () => {
+    sessionController.current?.abort();
+  }, []);
+
   useEffect(() => {
-    if (!hydrated) return;
+    if (!hydrated || networkError !== null) return;
     void connect(network, trusted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, trusted, hydrated]);
+  }, [network, trusted, hydrated, networkError]);
 
   const setNetwork = useCallback((next: Network) => {
-    if (networkRef.current === next) return;
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(NETWORK_KEY, next);
+    initNetworkRegistry();
+    if (!hasNetwork(next)) {
+      blockUnknownNetwork(next, 'selection');
+      return;
     }
-    // Drop the outgoing SDK in the same React batch as the network change so
-    // children that re-render with the new `network` see `status !== 'ready'`
-    // and don't fire a `useSdkQuery` against the old SDK — that race poisoned
-    // the cache with old-network data keyed under the new network, surfacing
-    // as "stale until reload". Also bump connectSeq so any in-flight connect
-    // for the previous network is orphaned immediately rather than briefly
-    // resolving as `ready` in the window between this commit and the
-    // connect-on-change effect.
+    if (networkRef.current === next && !networkErrorRef.current) return;
+    storePreference(NETWORK_KEY, next);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      if (url.searchParams.has('network')) {
+        url.searchParams.set('network', next);
+        // Passing Next's internal __NA state makes it skip useSearchParams
+        // synchronization. Let the patched API copy router state itself.
+        window.history.replaceState(null, '', url);
+      }
+    }
+    networkErrorRef.current = null;
+    setNetworkError(null);
+    // Retire outgoing requests before children see the next selection. The
+    // connect-on-change effect starts a new session after this state commits.
     networkRef.current = next;
-    connectSeq.current += 1;
+    sessionController.current?.abort();
     setSdk(null);
     setStatus('connecting');
     setError(null);
     setNetworkState(next);
-  }, []);
+  }, [blockUnknownNetwork]);
+
+  const syncUrlNetwork = useCallback((requested: string | null) => {
+    if (requested && !hasNetwork(requested)) {
+      blockUnknownNetwork(requested, 'url');
+    } else if (requested) {
+      setNetwork(requested);
+    } else if (networkErrorRef.current?.source === 'url') {
+      if (hasNetwork(networkRef.current)) {
+        networkErrorRef.current = null;
+        setNetworkError(null);
+      } else {
+        blockUnknownNetwork(networkRef.current, 'default');
+      }
+    }
+  }, [blockUnknownNetwork, setNetwork]);
 
   const setTrusted = useCallback((next: boolean) => {
     if (trustedRef.current === next) return;
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(TRUSTED_KEY, String(next));
-    }
+    storePreference(TRUSTED_KEY, String(next));
     trustedRef.current = next;
-    connectSeq.current += 1;
+    setTrustedState(next);
+    if (networkErrorRef.current) return;
+    sessionController.current?.abort();
     setSdk(null);
     setStatus('connecting');
     setError(null);
-    setTrustedState(next);
   }, []);
 
   const reconnect = useCallback(() => {
+    if (networkErrorRef.current) return;
     void connect(network, trusted);
   }, [connect, network, trusted]);
 
@@ -227,13 +317,21 @@ export function SdkProvider({ children }: { children: ReactNode }) {
       status,
       network,
       trusted,
+      sessionId,
+      sessionSignal,
       error,
       setNetwork,
       setTrusted,
       reconnect,
     }),
-    [sdk, status, network, trusted, error, setNetwork, setTrusted, reconnect],
+    [sdk, status, network, trusted, sessionId, sessionSignal, error, setNetwork, setTrusted, reconnect],
   );
 
-  return <SdkContext.Provider value={value}>{children}</SdkContext.Provider>;
+  return (
+    <SdkContext.Provider value={value}>
+      {hydrated && <Suspense fallback={null}><UrlNetworkSync onChange={syncUrlNetwork} /></Suspense>}
+      {error && <Alert status="error" role="alert"><AlertIcon /><AlertDescription>{error.message}</AlertDescription></Alert>}
+      {children}
+    </SdkContext.Provider>
+  );
 }
