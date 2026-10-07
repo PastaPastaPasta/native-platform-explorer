@@ -22,7 +22,7 @@ describe('parseSql', () => {
   });
 
   it('is case-insensitive for keywords', () => {
-    const r = parseSql('select * from domain where label == \'x\' order by label asc limit 10');
+    const r = parseSql("select * from domain where label == 'x' order by label asc limit 10");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(r.query.from).toBe('domain');
@@ -95,9 +95,7 @@ describe('parseSql', () => {
     const r = parseSql("SELECT * FROM domain WHERE label = 'test'");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.query.where).toEqual([
-      { field: 'label', operator: '==', value: 'test' },
-    ]);
+    expect(r.query.where).toEqual([{ field: 'label', operator: '==', value: 'test' }]);
   });
 
   it('parses WHERE with equality (==)', () => {
@@ -111,9 +109,7 @@ describe('parseSql', () => {
     const r = parseSql('SELECT * FROM domain WHERE price >= 100');
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.query.where).toEqual([
-      { field: 'price', operator: '>=', value: 100 },
-    ]);
+    expect(r.query.where).toEqual([{ field: 'price', operator: '>=', value: 100 }]);
   });
 
   it('parses WHERE with multiple AND conditions', () => {
@@ -124,10 +120,14 @@ describe('parseSql', () => {
     if (!r.ok) return;
     expect(r.query.where).toHaveLength(2);
     expect(r.query.where[0]).toEqual({
-      field: 'normalizedParentDomainName', operator: '==', value: 'dash',
+      field: 'normalizedParentDomainName',
+      operator: '==',
+      value: 'dash',
     });
     expect(r.query.where[1]).toEqual({
-      field: 'normalizedLabel', operator: 'startsWith', value: 'a',
+      field: 'normalizedLabel',
+      operator: 'startsWith',
+      value: 'a',
     });
   });
 
@@ -135,18 +135,14 @@ describe('parseSql', () => {
     const r = parseSql('SELECT * FROM tx WHERE amount BETWEEN 10 AND 100');
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.query.where).toEqual([
-      { field: 'amount', operator: 'between', value: [10, 100] },
-    ]);
+    expect(r.query.where).toEqual([{ field: 'amount', operator: 'between', value: [10, 100] }]);
   });
 
   it('parses IN with value list', () => {
     const r = parseSql("SELECT * FROM domain WHERE label IN ('a', 'b', 'c')");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.query.where).toEqual([
-      { field: 'label', operator: 'in', value: ['a', 'b', 'c'] },
-    ]);
+    expect(r.query.where).toEqual([{ field: 'label', operator: 'in', value: ['a', 'b', 'c'] }]);
   });
 
   it('parses IN with numeric values', () => {
@@ -160,9 +156,7 @@ describe('parseSql', () => {
     const r = parseSql("SELECT * FROM domain WHERE label STARTS WITH 'dash'");
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.query.where).toEqual([
-      { field: 'label', operator: 'startsWith', value: 'dash' },
-    ]);
+    expect(r.query.where).toEqual([{ field: 'label', operator: 'startsWith', value: 'dash' }]);
   });
 
   it('parses startsWith as single identifier', () => {
@@ -383,19 +377,23 @@ describe('toDocumentsQuery', () => {
 
   it('converts a simple SELECT', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain', where: [], orderBy: [],
+      select: 'documents',
+      from: 'domain',
+      where: [],
+      orderBy: [],
     };
     const q = toDocumentsQuery(parsed, contractId);
     expect(q.dataContractId).toBe(contractId);
     expect(q.documentTypeName).toBe('domain');
     expect(q.where).toBeUndefined();
     expect(q.orderBy).toBeUndefined();
-    expect(q.limit).toBeUndefined();
+    expect(q.limit).toBe(25);
   });
 
   it('converts WHERE conditions to SDK tuples', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain',
+      select: 'documents',
+      from: 'domain',
       where: [
         { field: 'label', operator: '==', value: 'test' },
         { field: 'price', operator: '>=', value: 100 },
@@ -411,7 +409,8 @@ describe('toDocumentsQuery', () => {
 
   it('converts BETWEEN to SDK format', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain',
+      select: 'documents',
+      from: 'domain',
       where: [{ field: 'amount', operator: 'between', value: [10, 100] }],
       orderBy: [],
     };
@@ -421,7 +420,8 @@ describe('toDocumentsQuery', () => {
 
   it('converts STARTS WITH to SDK format', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain',
+      select: 'documents',
+      from: 'domain',
       where: [{ field: 'label', operator: 'startsWith', value: 'dash' }],
       orderBy: [],
     };
@@ -431,7 +431,8 @@ describe('toDocumentsQuery', () => {
 
   it('converts IN to SDK format', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain',
+      select: 'documents',
+      from: 'domain',
       where: [{ field: 'label', operator: 'in', value: ['a', 'b'] }],
       orderBy: [],
     };
@@ -441,7 +442,9 @@ describe('toDocumentsQuery', () => {
 
   it('converts ORDER BY', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain', where: [],
+      select: 'documents',
+      from: 'domain',
+      where: [],
       orderBy: [{ field: 'label', direction: 'desc' }],
     };
     const q = toDocumentsQuery(parsed, contractId);
@@ -450,7 +453,11 @@ describe('toDocumentsQuery', () => {
 
   it('passes limit through', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain', where: [], orderBy: [], limit: 10,
+      select: 'documents',
+      from: 'domain',
+      where: [],
+      orderBy: [],
+      limit: 10,
     };
     const q = toDocumentsQuery(parsed, contractId);
     expect(q.limit).toBe(10);
@@ -458,9 +465,56 @@ describe('toDocumentsQuery', () => {
 
   it('applies startAfter override', () => {
     const parsed: ParsedQuery = {
-      select: 'documents', from: 'domain', where: [], orderBy: [],
+      select: 'documents',
+      from: 'domain',
+      where: [],
+      orderBy: [],
     };
     const q = toDocumentsQuery(parsed, contractId, { startAfter: 'cursor123' });
     expect(q.startAfter).toBe('cursor123');
   });
+});
+
+describe('workspace SQL validation', () => {
+  it.each([
+    'SELECT label FROM domain',
+    'SELECT DISTINCT label FROM domain',
+    'SELECT * FROM domain JOIN owner',
+    "SELECT * FROM domain WHERE label = 'a' OR label = 'b'",
+    'SELECT * FROM domain OFFSET 10',
+    'SELECT * FROM domain GROUP BY label',
+    'SELECT * FROM domain LIMIT 0',
+    'SELECT * FROM domain LIMIT -1',
+    'SELECT * FROM domain LIMIT 101',
+    'SELECT * FROM domain WHERE amount = 9007199254740993',
+    'SELECT * FROM domain WHERE amount = 9007199254740990.5',
+    'SELECT * FROM domain WHERE amount = 0.' + '0'.repeat(400) + '1',
+    'SELECT * FROM domain WHERE amount = 1.2.3',
+    "SELECT * FROM domain WHERE label = 'unterminated",
+    'SELECT * FROM `unterminated',
+  ])('rejects unsupported or lossy SQL: %s', (sql) => {
+    expect(parseSql(sql).ok).toBe(false);
+    expect(parseSqlMulti(sql).ok).toBe(false);
+  });
+
+  it('preserves error offsets for leading whitespace', () => {
+    const parsed = parseSql('  SELECT label FROM domain');
+    expect(parsed).toEqual(expect.objectContaining({ ok: false, position: 9 }));
+  });
+
+  it('parses nested aggregate properties', () => {
+    const parsed = parseSql('SELECT SUM(stats.score) FROM grade');
+    expect(parsed).toEqual(
+      expect.objectContaining({
+        ok: true,
+        query: expect.objectContaining({ aggregateField: 'stats.score' }),
+      }),
+    );
+  });
+});
+
+
+it('preserves escaped SQL identifier punctuation', () => {
+  const parsed = parseSql('SELECT * FROM `odd``name` ORDER BY `group` ASC LIMIT 25');
+  expect(parsed).toEqual(expect.objectContaining({ ok: true, query: expect.objectContaining({ from: 'odd`name' }) }));
 });

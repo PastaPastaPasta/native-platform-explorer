@@ -5,27 +5,10 @@ import { HStack, Text } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import {
-  DocumentsResultsTable,
-  getLastDocId,
-} from '@components/contract/DocumentsResultsTable';
+import { DocumentsResultsTable, getLastDocId } from '@components/contract/DocumentsResultsTable';
 import { CursorPagination } from '@components/pagination/CursorPagination';
 import type { HeuristicColumn } from '@util/schema';
-
-function extractRows(data: unknown): Array<Record<string, unknown>> {
-  if (!data) return [];
-  if (data instanceof Map) {
-    const out: Array<Record<string, unknown>> = [];
-    for (const [, doc] of data) {
-      if (doc && typeof doc === 'object') out.push(doc as Record<string, unknown>);
-    }
-    return out;
-  }
-  if (Array.isArray(data)) {
-    return data.filter((x) => x && typeof x === 'object') as Array<Record<string, unknown>>;
-  }
-  return [];
-}
+import { extractDocumentRows } from '@util/query-workspace';
 
 export interface QueryResultsProps {
   data: unknown;
@@ -54,7 +37,7 @@ export function QueryResults({
   cursorStack,
   onCursorStackChange,
 }: QueryResultsProps) {
-  const rows = useMemo(() => extractRows(data), [data]);
+  const rows = useMemo(() => extractDocumentRows(data), [data]);
 
   return (
     <InfoBlock>
@@ -77,7 +60,7 @@ export function QueryResults({
             <CursorPagination
               pageIndex={cursorStack.length - 1}
               hasPrev={cursorStack.length > 1}
-              hasNext={rows.length === limit}
+              hasNext={rows.length === limit && !!getLastDocId(rows)}
               onPrev={() => onCursorStackChange(cursorStack.slice(0, -1))}
               onNext={() => {
                 const lastId = getLastDocId(rows);

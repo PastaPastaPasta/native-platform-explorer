@@ -18,28 +18,41 @@ export interface SqlEditorProps {
   onRun: () => void;
   parseError?: { message: string; position: number } | null;
   isLoading?: boolean;
+  isDisabled?: boolean;
+  onCancel?: () => void;
 }
 
-export function SqlEditor({ value, onChange, onRun, parseError, isLoading }: SqlEditorProps) {
+export function SqlEditor({
+  value,
+  onChange,
+  onRun,
+  parseError,
+  isLoading,
+  isDisabled,
+  onCancel,
+}: SqlEditorProps) {
   const [isMac, setIsMac] = useState(false);
-  useEffect(() => { setIsMac(/Mac|iPhone|iPad/.test(navigator.userAgent)); }, []);
+  useEffect(() => {
+    setIsMac(/Mac|iPhone|iPad/.test(navigator.userAgent));
+  }, []);
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+      if (!isDisabled && !isLoading && e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         onRun();
       }
     },
-    [onRun],
+    [onRun, isDisabled, isLoading],
   );
 
   return (
     <FormControl>
-      <FormLabel fontSize="xs" color="gray.400" mb={1}>
+      <FormLabel htmlFor="query-sql" fontSize="xs" color="gray.400" mb={1}>
         SQL Query
       </FormLabel>
       <Textarea
+        id="query-sql"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={handleKeyDown}
@@ -85,11 +98,16 @@ export function SqlEditor({ value, onChange, onRun, parseError, isLoading }: Sql
           colorScheme="blue"
           size="sm"
           onClick={onRun}
-          isLoading={isLoading}
+          isDisabled={isDisabled || isLoading || !value.trim()}
           flexShrink={0}
         >
           Run
         </Button>
+        {isLoading && onCancel && (
+          <Button size="sm" variant="outline" onClick={onCancel}>
+            Cancel run
+          </Button>
+        )}
       </HStack>
       <Text fontSize="2xs" color="gray.500" mt={1}>
         {isMac ? '⌘' : 'Ctrl'}+Enter to run
