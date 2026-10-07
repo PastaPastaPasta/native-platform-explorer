@@ -1,6 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
-import { executeDocumentCreate } from '../executors';
+import {
+  executeDocumentCreate,
+  executeDocumentTransfer,
+  executeIdentityCreditTransfer,
+} from '../executors';
+import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../outcomes';
 
 vi.mock('@dashevo/evo-sdk', () => {
   class Document {
@@ -40,6 +45,7 @@ describe('broadcast executors', () => {
       identitySigner: { free } as never,
     });
     const signer = createMockSigner({
+      identityId: 'owner-1',
       prepareSdk: vi.fn().mockResolvedValue(material),
     });
     const create = vi.fn().mockResolvedValue(undefined);
@@ -108,5 +114,119 @@ describe('broadcast executors', () => {
 
     expect(free).toHaveBeenCalledOnce();
   });
-});
 
+  it('preserves the document identifier when the broadcast outcome is unknown', async () => {
+    const sdk = {
+      documents: { create: vi.fn().mockRejectedValue(new Error('request timed out')) },
+    };
+    const error = await executeDocumentCreate({
+      sdk: sdk as never,
+      signer: createMockSigner(),
+      options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+    }).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
+    expect((error as BroadcastOutcomeUnknownError).entities).toEqual({
+      identityId: 'identity-1',
+      contractId: 'contract-1',
+      documentType: 'note',
+      documentId: 'generated-document-id',
+    });
+  });
+
+  it('classifies signing preparation failures as not submitted', async () => {
+    const create = vi.fn();
+    await expect(
+      executeDocumentCreate({
+        sdk: { documents: { create } } as never,
+        signer: createMockSigner({
+          prepareSdk: vi.fn().mockRejectedValue(new Error('No eligible key')),
+        }),
+        options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+      }),
+    ).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('rejects signing material for a different identity before submission', async () => {
+    const create = vi.fn();
+    const material = createSigningMaterial({ identityId: 'another-identity' });
+    await expect(
+      executeDocumentCreate({
+        sdk: { documents: { create } } as never,
+        signer: createMockSigner({ prepareSdk: vi.fn().mockResolvedValue(material) }),
+        options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+      }),
+    ).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    expect(create).not.toHaveBeenCalled();
+    expect(material.identitySigner.free).toHaveBeenCalledOnce();
+  });
+
+  it('keeps read failures before the write distinct from submission errors', async () => {
+    const transfer = vi.fn();
+    await expect(
+      executeDocumentTransfer({
+        sdk: {
+          documents: { get: vi.fn().mockRejectedValue(new Error('read timeout')), transfer },
+        } as never,
+        signer: createMockSigner(),
+        options: {
+          contractId: 'contract-1',
+          documentType: 'note',
+          documentId: 'doc-1',
+          recipientId: 'recipient-1',
+        },
+      }),
+    ).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
+  it('rechecks the reviewed context immediately before submitting and releases all material', async () => {
+    const release = vi.fn();
+    const material = { ...createSigningMaterial(), release };
+    const create = vi.fn();
+    await expect(
+      executeDocumentCreate({
+        sdk: { documents: { create } } as never,
+        signer: createMockSigner({ prepareSdk: vi.fn().mockResolvedValue(material) }),
+        options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+        assertCurrent: () => {
+          throw new OperationNotSubmittedError('Session changed');
+        },
+      }),
+    ).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    expect(create).not.toHaveBeenCalled();
+    expect(release).toHaveBeenCalledOnce();
+    expect(material.identitySigner.free).not.toHaveBeenCalled();
+  });
+
+  it('does not label post-submission receipt errors as a local rejection', async () => {
+    const create = vi.fn().mockImplementation(async ({ document }) => {
+      Object.defineProperty(document, 'id', {
+        get: () => {
+          throw new Error('Unable to read receipt');
+        },
+      });
+    });
+    await expect(
+      executeDocumentCreate({
+        sdk: { documents: { create } } as never,
+        signer: createMockSigner(),
+        options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+      }),
+    ).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
+  });
+
+  it('includes a zero credit balance in the successful transfer receipt', async () => {
+    const result = await executeIdentityCreditTransfer({
+      sdk: {
+        identities: {
+          fetch: vi.fn().mockResolvedValue({}),
+          creditTransfer: vi.fn().mockResolvedValue({ senderBalance: 0n }),
+        },
+      } as never,
+      signer: createMockSigner(),
+      options: { recipientId: 'recipient-1', amountCredits: 100n },
+    });
+    expect(result.newBalance).toBe('0');
+  });
+});
