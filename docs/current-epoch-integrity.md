@@ -20,8 +20,26 @@ The derivation also depends on supported network deployment configuration:
 Mainnet uses 788400 seconds per epoch; Testnet uses 3600 seconds. These values
 come from pinned Platform/Dashmate configuration, not a cryptographically
 discovered configuration field. An unknown custom devnet duration fails closed;
-users can still browse an explicit epoch. Trusted-off reads use the local clock
-and retain the application's unverified status.
+users can still browse an explicit epoch.
+
+Trusted mode succeeded in two finite live Testnet checks, each selecting epoch
+19454 through exactly two explicit proved reads, epoch zero then 19454. Some
+other discovered endpoints returned gRPC status 12 before proof verification.
+These observations establish the helper's operation on those reachable
+endpoints, without a network-wide availability guarantee. Passing and failing
+endpoints used the same unchanged RPC path, so these failures do not establish
+a URL-normalization cause. With this SDK, trusted context discovery replaces
+an address list supplied through `withAddresses`; that call does not pin the
+trusted endpoint.
+
+The trusted-off branch attempts ordinary explicit queries and would use the
+local clock after a successful genesis read, retaining an unverified status.
+Actual Mainnet controls with this pinned WASM SDK fail on that initial read:
+the ordinary API still requests a proof, then cannot verify it without trusted
+quorum context. No successful trusted-off epoch result was observed. Enable
+trusted mode to provide the context required by the pinned SDK. Proof errors
+propagate without disabling verification, attaching context under an
+unverified label, or falling back to an implicit current query.
 
 This establishes **currentness at the authenticated response state/time**. It
 does not establish that a signed root is the newest network state. Replaying an
