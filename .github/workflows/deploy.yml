@@ -1,61 +1,74 @@
-name: Deploy to GitHub Pages
+name: Deploy validated GitHub Pages artifact
 
 on:
-  push:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
     branches: [main]
-  workflow_dispatch:
-
-# One-at-a-time; cancel stale runs so a fresh push supersedes an in-flight deploy.
-concurrency:
-  group: pages
-  cancel-in-progress: true
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
+  actions: read
 
 jobs:
-  build:
+  current:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_repository.full_name == github.repository &&
+      github.event.workflow_run.head_branch == 'main' &&
+      (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch')
     runs-on: ubuntu-latest
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 9
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-
-      - run: pnpm install --frozen-lockfile
-
-      - name: Resolve base path from repository name
-        id: pages
-        uses: actions/configure-pages@v5
-        # Sets steps.pages.outputs.base_path (e.g. '/native-platform-explorer')
-        # for project sites; empty for user/org sites.
-
-      - name: Build (static export)
+      - name: Ignore superseded validated commits
+        id: check
         env:
-          NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
-        run: pnpm build
-
-      - name: Add .nojekyll so GitHub Pages serves /_next/ folders as-is
-        run: touch out/.nojekyll
-
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: out
+          GH_TOKEN: ${{ github.token }}
+          NPE_VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          latest_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          if [ "$latest_sha" = "$NPE_VALIDATED_SHA" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
 
   deploy:
-    needs: build
+    needs: current
+    if: needs.current.outputs.ready == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    permissions:
+      contents: read
+      actions: read
+      pages: write
+      id-token: write
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: validated-pages
+          path: out
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ github.token }}
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: out
+      - name: Recheck the published revision after any environment wait
+        id: current
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NPE_VALIDATED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          latest_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          if [ "$latest_sha" = "$NPE_VALIDATED_SHA" ]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+          fi
       - id: deployment
+        if: steps.current.outputs.ready == 'true'
         uses: actions/deploy-pages@v4

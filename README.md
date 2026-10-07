@@ -6,12 +6,11 @@ Designed as a sibling of [`pshenmic/platform-explorer`](https://github.com/pshen
 
 ## Status
 
-All six build stages shipped. The read surface is fully covered; write mode
-is wired through a representative set of state-transition forms (identity
-top-up, DPNS register, raw broadcast) that exercise the shared
-`OperationShell` flow. Remaining forms — document CRUD, contract publish /
-update, every token action, masternode vote, address-based funding — plug
-into the same shell and are tracked as follow-up polish.
+The explorer includes entity details, schema-aware SQL and aggregate queries,
+proof inspection, governance views, and opt-in write tools. Write operations
+use the SDK's identity-signing bridge; availability depends on the connected
+signer's eligible keys and the SDK's operation support. Unsupported funding,
+raw-broadcast and extension paths are labeled in the interface.
 
 - Full product requirements: [`docs/PRD.md`](docs/PRD.md)
 - Per-stage progress + commit SHAs: [`docs/progress.md`](docs/progress.md)
@@ -44,10 +43,25 @@ for the full proof + privacy explainer.
 
 ## Deploy
 
-The build output is a plain `out/` directory. Any static host works — Vercel,
-Netlify, Cloudflare Pages, GitHub Pages, IPFS. A deploy workflow
-(`.github/workflows/deploy.yml`) is a follow-up; the existing `ci.yml`
-already runs lint / typecheck / test / build / e2e on every push.
+The build output is a plain `out/` directory. CI resolves the current GitHub Pages configuration (including custom
+domains) and builds once at that deployment prefix, runs lint, type checking, unit coverage and Chromium
+browser checks, then preserves `validated-pages`. Deployment downloads that
+exact successful CI artifact for the current `main` commit. Failed or
+superseded builds are not deployed. No rebuild happens during deployment.
+
+Fraunces and JetBrains Mono are bundled locally with their OFL licenses;
+Geist is bundled by its npm package. Builds do not fetch Google Fonts.
+CI includes the complete font licenses in the validated deployment artifact.
+The package manager is pinned in `package.json`.
+
+The current custom domain uses the root prefix. To reproduce it locally, omit
+`NEXT_PUBLIC_BASE_PATH` from the commands below. Project-prefix hosting is also covered:
+
+```sh
+NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm build
+cp src/styles/fonts/Fraunces-OFL.txt src/styles/fonts/JetBrainsMono-OFL.txt out/
+NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
+```
 
 ## Build plan
 
