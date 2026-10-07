@@ -34,7 +34,7 @@ import {
   receiptEntities,
 } from './outcomes';
 import { useSigner } from '@/signer/SignerProvider';
-import { useSdk } from '@sdk/hooks';
+import { invalidateNetworkQueries, useSdk } from '@sdk/hooks';
 import { getDerivationNetwork, type Network } from '@sdk/networks';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import type { ExplorerSigner, SignerKeyDescriptor } from '@/signer/types';
@@ -60,7 +60,6 @@ export interface OperationDescriptor<TOptions, TResult> {
     /** Recheck the approved session immediately before entering a write call. */
     assertCurrent?: () => void;
   }) => Promise<TResult>;
-  renderResult?: (result: TResult) => React.ReactNode;
 }
 
 // Tag every primitive so bigint credits cannot collide with a string or JSON
@@ -100,13 +99,7 @@ export function OperationShell<TOptions, TResult>({
   descriptor: OperationDescriptor<TOptions, TResult>;
 }) {
   const { signer } = useSigner();
-  const context = useSdk();
-  const { sdk, network, trusted, status } = context;
-  // SDK object equality covers the baseline provider; the session token also
-  // handles reconnects whose provider retains the same SDK object.
-  const sessionId = 'sessionId' in context ? context.sessionId : sdk;
-  const sessionSignal =
-    'sessionSignal' in context ? (context.sessionSignal as AbortSignal | null) : null;
+  const { sdk, network, trusted, status, sessionId, sessionSignal } = useSdk();
   const queryClient = useQueryClient();
   const [options, setOptions] = useState<TOptions | null>(null);
   const [review, setReview] = useState<Review<TOptions, TResult> | null>(null);
@@ -301,7 +294,7 @@ export function OperationShell<TOptions, TResult>({
       });
       // Refresh only the network the operation actually used, even if the user
       // switched networks while the SDK was waiting for confirmation.
-      void queryClient.invalidateQueries({ queryKey: ['npe', submitted.network] });
+      void invalidateNetworkQueries(queryClient, submitted.network);
       if (!mounted.current) return;
       setResult(r);
       setActiveStep(3);

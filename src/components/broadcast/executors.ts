@@ -258,8 +258,6 @@ async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<I
   return identity;
 }
 
-const DOC_CRITERIA = operationRequirement('document.create').criteria;
-
 export async function executeDocumentCreate(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
@@ -267,7 +265,8 @@ export async function executeDocumentCreate(args: {
   options: DocumentCreateOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('document.create').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const document = await buildDocument(
       options.contractId,
       options.documentType,
@@ -307,7 +306,8 @@ export async function executeDocumentReplace(args: {
   options: DocumentReplaceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('document.replace').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const document = await buildDocument(
       options.contractId,
       options.documentType,
@@ -349,7 +349,8 @@ export async function executeDocumentDelete(args: {
   options: DocumentDeleteOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('document.delete').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     await submit(
       () =>
         sdk.documents.delete({
@@ -388,7 +389,8 @@ export async function executeDocumentTransfer(args: {
   options: DocumentTransferOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('document.transfer').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
@@ -431,7 +433,8 @@ export async function executeDocumentSetPrice(args: {
   options: DocumentSetPriceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('document.setPrice').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
@@ -472,7 +475,8 @@ export async function executeDocumentPurchase(args: {
   options: DocumentPurchaseOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('document.purchase').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
       options.contractId,
@@ -659,7 +663,8 @@ export async function executeDpnsRegister(args: {
   options: DpnsRegisterOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(signer, DOC_CRITERIA, async (material, submit) => {
+  const criteria = operationRequirement('dpns.registerName').criteria;
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
     await submit(
       () =>
