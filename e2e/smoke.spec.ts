@@ -1,13 +1,13 @@
 import { test, expect } from '@playwright/test';
 
 test('home page renders with brand mark', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
   // The Field Manual brand mark in the header (BrandRow → Logotype).
   await expect(page.getByText('native_explorer')).toBeVisible();
 });
 
 test('desktop sidebar exposes core deterministic routes', async ({ page }) => {
-  await page.goto('/');
+  await page.goto('./');
 
   await expect(page.getByRole('link', { name: 'Dashboard' })).toBeVisible();
   const searchLink = page.getByRole('link', { name: 'Search', exact: true });
@@ -19,21 +19,25 @@ test('desktop sidebar exposes core deterministic routes', async ({ page }) => {
 });
 
 test('search shows an empty deterministic result for unclassified input', async ({ page }) => {
-  await page.goto('/search/?q=%3F%3F%3F');
+  await page.goto('search/?q=%3F%3F%3F');
 
   await expect(page.getByText('Classified as: nothing recognisable')).toBeVisible();
   await expect(page.getByText('No matches')).toBeVisible();
 });
 
 test('search redirects single static epoch matches without live SDK data', async ({ page }) => {
-  await page.goto('/search/?q=42');
+  await page.goto('search/?q=42');
 
-  await expect(page).toHaveURL(/\/epoch\/detail\/\?index=42$/);
+  await expect(page).toHaveURL(/\/epoch\/detail\/?\?index=42$/);
 });
 
 test('settings persist network preference in localStorage', async ({ page }) => {
-  await page.goto('/settings/');
+  await page.goto('settings/');
 
+  // The server-rendered native select accepts input before React attaches its
+  // change handler. A non-idle provider state also confirms preference hydration
+  // completed; it does not require a successful live SDK connection.
+  await expect(page.getByText(/^SDK status: (connecting|ready|error)$/)).toBeVisible();
   const settingsNetworkSelect = page.locator('main select').first();
   const nextNetwork = (await settingsNetworkSelect.inputValue()) === 'mainnet' ? 'testnet' : 'mainnet';
   await settingsNetworkSelect.selectOption(nextNetwork);
@@ -47,7 +51,7 @@ test('settings persist network preference in localStorage', async ({ page }) => 
 
 test('mobile viewport renders the primary app chrome without desktop sidebar', async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto('/about/');
+  await page.goto('about/');
 
   await expect(page.getByText('native_explorer')).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Native Platform Explorer' })).toBeVisible();
