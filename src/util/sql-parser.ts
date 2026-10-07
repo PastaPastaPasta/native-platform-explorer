@@ -64,9 +64,28 @@ interface Token {
 }
 
 const KEYWORDS = new Set([
-  'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'ORDER', 'BY', 'GROUP',
-  'LIMIT', 'ASC', 'DESC', 'BETWEEN', 'IN', 'STARTS', 'WITH',
-  'COUNT', 'SUM', 'AVG', 'NOT', 'NULL', 'TRUE', 'FALSE',
+  'SELECT',
+  'FROM',
+  'WHERE',
+  'AND',
+  'OR',
+  'ORDER',
+  'BY',
+  'GROUP',
+  'LIMIT',
+  'ASC',
+  'DESC',
+  'BETWEEN',
+  'IN',
+  'STARTS',
+  'WITH',
+  'COUNT',
+  'SUM',
+  'AVG',
+  'NOT',
+  'NULL',
+  'TRUE',
+  'FALSE',
 ]);
 
 function tokenize(sql: string): Token[] {
@@ -75,23 +94,53 @@ function tokenize(sql: string): Token[] {
 
   while (i < sql.length) {
     // skip whitespace
-    if (/\s/.test(sql[i]!)) { i++; continue; }
+    if (/\s/.test(sql[i]!)) {
+      i++;
+      continue;
+    }
 
     const ch = sql[i]!;
     const pos = i;
 
     // single-char tokens
-    if (ch === '(') { tokens.push({ type: TT.LParen, value: '(', pos }); i++; continue; }
-    if (ch === ')') { tokens.push({ type: TT.RParen, value: ')', pos }); i++; continue; }
-    if (ch === ',') { tokens.push({ type: TT.Comma, value: ',', pos }); i++; continue; }
-    if (ch === '*') { tokens.push({ type: TT.Star, value: '*', pos }); i++; continue; }
-    if (ch === '.') { tokens.push({ type: TT.Dot, value: '.', pos }); i++; continue; }
-    if (ch === ';') { tokens.push({ type: TT.Semicolon, value: ';', pos }); i++; continue; }
+    if (ch === '(') {
+      tokens.push({ type: TT.LParen, value: '(', pos });
+      i++;
+      continue;
+    }
+    if (ch === ')') {
+      tokens.push({ type: TT.RParen, value: ')', pos });
+      i++;
+      continue;
+    }
+    if (ch === ',') {
+      tokens.push({ type: TT.Comma, value: ',', pos });
+      i++;
+      continue;
+    }
+    if (ch === '*') {
+      tokens.push({ type: TT.Star, value: '*', pos });
+      i++;
+      continue;
+    }
+    if (ch === '.') {
+      tokens.push({ type: TT.Dot, value: '.', pos });
+      i++;
+      continue;
+    }
+    if (ch === ';') {
+      tokens.push({ type: TT.Semicolon, value: ';', pos });
+      i++;
+      continue;
+    }
 
     // operators: >=, <=, ==, !=, >, <, =
     if (ch === '>' || ch === '<' || ch === '=' || ch === '!') {
       let op = ch;
-      if (i + 1 < sql.length && sql[i + 1] === '=') { op += '='; i++; }
+      if (i + 1 < sql.length && sql[i + 1] === '=') {
+        op += '=';
+        i++;
+      }
       tokens.push({ type: TT.Operator, value: op, pos });
       i++;
       continue;
@@ -101,6 +150,7 @@ function tokenize(sql: string): Token[] {
     if (ch === "'") {
       i++;
       let s = '';
+      let closed = false;
       while (i < sql.length) {
         if (sql[i] === "'") {
           if (i + 1 < sql.length && sql[i + 1] === "'") {
@@ -108,6 +158,7 @@ function tokenize(sql: string): Token[] {
             i += 2;
           } else {
             i++;
+            closed = true;
             break;
           }
         } else {
@@ -115,15 +166,22 @@ function tokenize(sql: string): Token[] {
           i++;
         }
       }
+      if (!closed) throw new ParseError('Unterminated string literal.', pos);
       tokens.push({ type: TT.String, value: s, pos });
       continue;
     }
 
     // numeric literal (including negative when preceded by operator/keyword/comma/lparen or at start)
-    if (/[0-9]/.test(ch) || (ch === '-' && i + 1 < sql.length && /[0-9]/.test(sql[i + 1]!) && canBeNegativeNumber(tokens))) {
+    if (
+      /[0-9]/.test(ch) ||
+      (ch === '-' && i + 1 < sql.length && /[0-9]/.test(sql[i + 1]!) && canBeNegativeNumber(tokens))
+    ) {
       let num = ch;
       i++;
-      while (i < sql.length && /[0-9.]/.test(sql[i]!)) { num += sql[i]; i++; }
+      while (i < sql.length && /[0-9.]/.test(sql[i]!)) {
+        num += sql[i];
+        i++;
+      }
       tokens.push({ type: TT.Number, value: num, pos });
       continue;
     }
@@ -132,8 +190,17 @@ function tokenize(sql: string): Token[] {
     if (ch === '`') {
       i++;
       let id = '';
-      while (i < sql.length && sql[i] !== '`') { id += sql[i]; i++; }
-      if (i < sql.length) i++; // consume closing backtick
+      let closed = false;
+      while (i < sql.length) {
+        if (sql[i] === '`') {
+          if (sql[i + 1] === '`') { id += '`'; i += 2; continue; }
+          i++;
+          closed = true;
+          break;
+        }
+        id += sql[i++];
+      }
+      if (!closed) throw new ParseError('Unterminated quoted identifier.', pos);
       tokens.push({ type: TT.Identifier, value: id, pos });
       continue;
     }
@@ -141,7 +208,10 @@ function tokenize(sql: string): Token[] {
     // identifier or keyword
     if (/[a-zA-Z_$]/.test(ch)) {
       let id = '';
-      while (i < sql.length && /[a-zA-Z0-9_$]/.test(sql[i]!)) { id += sql[i]; i++; }
+      while (i < sql.length && /[a-zA-Z0-9_$]/.test(sql[i]!)) {
+        id += sql[i];
+        i++;
+      }
       const upper = id.toUpperCase();
       if (KEYWORDS.has(upper)) {
         tokens.push({ type: TT.Keyword, value: upper, pos });
@@ -163,8 +233,12 @@ function tokenize(sql: string): Token[] {
 function canBeNegativeNumber(tokens: Token[]): boolean {
   if (tokens.length === 0) return true;
   const last = tokens[tokens.length - 1]!;
-  return last.type === TT.Operator || last.type === TT.Keyword ||
-         last.type === TT.Comma || last.type === TT.LParen;
+  return (
+    last.type === TT.Operator ||
+    last.type === TT.Keyword ||
+    last.type === TT.Comma ||
+    last.type === TT.LParen
+  );
 }
 
 // ── Parser ─────────────────────────────────────────────────────────────
@@ -243,10 +317,35 @@ class Parser {
     let limit: number | undefined;
     if (this.peekKeyword('LIMIT')) {
       this.advance();
+      const limitPosition = this.peek().pos;
       limit = this.expectNumber();
+      if (limit < 1 || limit > 100) {
+        throw new ParseError('LIMIT must be between 1 and 100.', limitPosition);
+      }
     }
 
-    return { select, aggregateField, groupBy, from: docType, contractAlias: alias, where, orderBy, limit };
+    if (select === 'documents' && groupBy) {
+      throw new ParseError(
+        'GROUP BY requires COUNT(*), SUM(field), or AVG(field).',
+        this.peek().pos,
+      );
+    }
+    if (this.peek().type !== TT.EOF && this.peek().type !== TT.Semicolon) {
+      throw new ParseError(
+        `Unsupported SQL clause '${this.peek().value}'. Use AND filters and index-compatible ORDER BY; JOIN, OR, and OFFSET are unavailable.`,
+        this.peek().pos,
+      );
+    }
+    return {
+      select,
+      aggregateField,
+      groupBy,
+      from: docType,
+      contractAlias: alias,
+      where,
+      orderBy,
+      limit,
+    };
   }
 
   private parseSelectList(): { select: ParsedQuery['select']; aggregateField?: string } {
@@ -264,16 +363,14 @@ class Parser {
     if (this.peekKeyword('SUM') || this.peekKeyword('AVG')) {
       const kw = this.advance().value;
       this.expect(TT.LParen, '(');
-      const field = this.expectIdentifier();
+      const field = this.parseFieldPath();
       this.expect(TT.RParen, ')');
       return { select: kw.toLowerCase() as AggregateKind, aggregateField: field };
     }
-    // bare field list — treat as documents select
-    // (skip field names until we hit FROM)
-    while (!this.peekKeyword('FROM') && this.peek().type !== TT.EOF) {
-      this.advance();
-    }
-    return { select: 'documents' };
+    throw new ParseError(
+      'Unsupported SELECT expression. Use SELECT *, COUNT(*), SUM(field), or AVG(field); field projections and DISTINCT are unavailable.',
+      this.peek().pos,
+    );
   }
 
   private parseFieldList(): string[] {
@@ -302,7 +399,10 @@ class Parser {
       conditions.push(this.parseCondition());
     }
     if (this.peekKeyword('OR')) {
-      throw new ParseError('OR is not supported — Dash Platform requires all conditions to use AND', this.peek().pos);
+      throw new ParseError(
+        'OR is not supported — Dash Platform requires all conditions to use AND',
+        this.peek().pos,
+      );
     }
     return conditions;
   }
@@ -359,12 +459,19 @@ class Parser {
     if (tok.type === TT.Operator) {
       this.advance();
       switch (tok.value) {
-        case '=': case '==': return '==';
-        case '>': return '>';
-        case '>=': return '>=';
-        case '<': return '<';
-        case '<=': return '<=';
-        default: throw new ParseError(`Unknown operator '${tok.value}'`, tok.pos);
+        case '=':
+        case '==':
+          return '==';
+        case '>':
+          return '>';
+        case '>=':
+          return '>=';
+        case '<':
+          return '<';
+        case '<=':
+          return '<=';
+        default:
+          throw new ParseError(`Unknown operator '${tok.value}'`, tok.pos);
       }
     }
     throw new ParseError(`Expected operator, got '${tok.value}'`, tok.pos);
@@ -372,13 +479,38 @@ class Parser {
 
   private parseValue(): unknown {
     const tok = this.peek();
-    if (tok.type === TT.String) { this.advance(); return tok.value; }
-    if (tok.type === TT.Number) { this.advance(); return parseFloat(tok.value); }
-    if (tok.type === TT.Keyword && tok.value === 'TRUE') { this.advance(); return true; }
-    if (tok.type === TT.Keyword && tok.value === 'FALSE') { this.advance(); return false; }
-    if (tok.type === TT.Keyword && tok.value === 'NULL') { this.advance(); return null; }
+    if (tok.type === TT.String) {
+      this.advance();
+      return tok.value;
+    }
+    if (tok.type === TT.Number) {
+      this.advance();
+      const n = Number(tok.value);
+      if (!Number.isFinite(n) || (Number.isInteger(n) && (!Number.isSafeInteger(n) || /\.\d*[1-9]/.test(tok.value)))) {
+        throw new ParseError(
+          'Numeric literal exceeds safe JavaScript precision. Use the SDK directly for exact large-integer filters.',
+          tok.pos,
+        );
+      }
+      return n;
+    }
+    if (tok.type === TT.Keyword && tok.value === 'TRUE') {
+      this.advance();
+      return true;
+    }
+    if (tok.type === TT.Keyword && tok.value === 'FALSE') {
+      this.advance();
+      return false;
+    }
+    if (tok.type === TT.Keyword && tok.value === 'NULL') {
+      this.advance();
+      return null;
+    }
     // allow unquoted identifiers as string values (e.g. base58 IDs)
-    if (tok.type === TT.Identifier) { this.advance(); return tok.value; }
+    if (tok.type === TT.Identifier) {
+      this.advance();
+      return tok.value;
+    }
     throw new ParseError(`Expected value, got '${tok.value}'`, tok.pos);
   }
 
@@ -403,8 +535,13 @@ class Parser {
   private parseOrderByItem(): { field: string; direction: 'asc' | 'desc' } {
     const field = this.parseFieldPath();
     let direction: 'asc' | 'desc' = 'asc';
-    if (this.peekKeyword('ASC')) { this.advance(); direction = 'asc'; }
-    else if (this.peekKeyword('DESC')) { this.advance(); direction = 'desc'; }
+    if (this.peekKeyword('ASC')) {
+      this.advance();
+      direction = 'asc';
+    } else if (this.peekKeyword('DESC')) {
+      this.advance();
+      direction = 'desc';
+    }
     return { field, direction };
   }
 
@@ -450,7 +587,7 @@ class Parser {
     }
     this.advance();
     const n = Number(tok.value);
-    if (!Number.isInteger(n)) {
+    if (!Number.isSafeInteger(n)) {
       throw new ParseError(`Expected integer, got '${tok.value}'`, tok.pos);
     }
     return n;
@@ -473,24 +610,32 @@ class ParseError extends Error {
 // ── Public API ─────────────────────────────────────────────────────────
 
 export function parseSql(sql: string): ParseResult {
-  const tokens = tokenize(sql.trim());
-  return new Parser(tokens).parse();
+  try {
+    return new Parser(tokenize(sql)).parse();
+  } catch (error) {
+    if (error instanceof ParseError)
+      return { ok: false, message: error.message, position: error.position };
+    throw error;
+  }
 }
 
 /** Parse one or more `;`-separated queries. Trailing `;` is allowed; an
  *  empty trailing statement is ignored. Errors point at the first failed
  *  statement and abort parsing — same as multi-statement Postgres input. */
 export function parseSqlMulti(sql: string): MultiParseResult {
-  const tokens = tokenize(sql.trim());
-  return new Parser(tokens).parseMulti();
+  try {
+    return new Parser(tokenize(sql)).parseMulti();
+  } catch (error) {
+    if (error instanceof ParseError)
+      return { ok: false, message: error.message, position: error.position };
+    throw error;
+  }
 }
 
 // ── Contract alias resolution ──────────────────────────────────────────
 
 const ALIAS_MAP = new Map<string, string>(
-  SYSTEM_DATA_CONTRACTS
-    .filter((c) => c.testnetId)
-    .map((c) => [c.key.toLowerCase(), c.testnetId]),
+  SYSTEM_DATA_CONTRACTS.filter((c) => c.testnetId).map((c) => [c.key.toLowerCase(), c.testnetId]),
 );
 
 export function resolveContractAlias(alias: string): string | undefined {
@@ -522,7 +667,7 @@ export function toDocumentsQuery(
     documentTypeName: parsed.from,
     where: parsed.where.length ? parsed.where.map(conditionToWhere) : undefined,
     orderBy: parsed.orderBy.length ? parsed.orderBy.map((o) => [o.field, o.direction]) : undefined,
-    limit: parsed.limit,
+    limit: parsed.limit ?? (parsed.select === 'documents' ? 25 : undefined),
     startAfter: overrides?.startAfter,
     groupBy: parsed.groupBy,
   };

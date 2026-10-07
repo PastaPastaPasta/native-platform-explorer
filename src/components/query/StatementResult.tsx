@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AlertDescription,
@@ -15,19 +15,16 @@ import {
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronUpIcon } from '@chakra-ui/icons';
 import { InfoBlock } from '@ui/InfoBlock';
-import { LoadingCard } from '@ui/LoadingCard';
 import {
   useContract,
   useDocumentsQuery,
   useDocumentsAggregate,
   type AggregateKind,
 } from '@sdk/queries';
-import {
-  resolveContractId,
-  toDocumentsQuery,
-  type ParsedQuery,
-} from '@util/sql-parser';
+import { resolveContractId, toDocumentsQuery, type ParsedQuery } from '@util/sql-parser';
 import { toError } from '@util/errors';
+import { useSdk } from '@sdk/hooks';
+import { ResultActions } from './ResultActions';
 import {
   getDocumentTypeSchema,
   getIndicesForType,
@@ -44,27 +41,41 @@ export interface StatementResultProps {
   /** Contract picked in the UI; only used when the statement doesn't carry
    *  its own `alias.docType` FROM clause. */
   pickerContractId: string | undefined;
-  /** When the surrounding page only has one statement, expose cursor
-   *  pagination for document queries; multi-statement mode disables it. */
-  cursorStack?: Array<string | undefined>;
-  onCursorStackChange?: (stack: Array<string | undefined>) => void;
+  executionId: string;
+  active: boolean;
+  executionState: 'queued' | 'running' | 'done';
+  onStateChange: (state: 'queued' | 'running' | 'done') => void;
 }
 
 export function StatementResult({
   parsed,
   pickerContractId,
-  cursorStack,
-  onCursorStackChange,
+  executionId,
+  active,
+  executionState,
+  onStateChange,
 }: StatementResultProps) {
   const [showParams, setShowParams] = useState(false);
+  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
+  const [result, setResult] = useState<{
+    data: unknown;
+    error: Error | null;
+    retrievedAt: number;
+  } | null>(null);
+  const { network } = useSdk();
+  const stateChangeRef = useRef(onStateChange);
+  stateChangeRef.current = onStateChange;
 
   const { contractId: effectiveContractId, source: contractSource } = useMemo(() => {
     return resolveContractId(parsed, pickerContractId);
   }, [parsed, pickerContractId]);
 
-  const aliasError = parsed.contractAlias && !effectiveContractId
-    ? `Unknown contract alias '${parsed.contractAlias}'. Available: ${SYSTEM_DATA_CONTRACTS.map((c) => c.key).join(', ')}`
-    : null;
+  const aliasError =
+    parsed.contractAlias && !effectiveContractId
+      ? `Unknown contract alias '${parsed.contractAlias}'. Available: ${SYSTEM_DATA_CONTRACTS.map((c) => c.key).join(', ')}`
+      : !effectiveContractId
+        ? 'Select a data contract or use FROM alias.documentType before running this statement.'
+        : null;
 
   const contractQ = useContract(effectiveContractId || undefined);
   const docSchema = useMemo(
@@ -84,9 +95,7 @@ export function StatementResult({
     [whereFields, indices],
   );
 
-  // Pagination only makes sense for single-statement document queries.
-  const paginationEnabled = !!cursorStack && !!onCursorStackChange;
-  const startAfter = paginationEnabled ? cursorStack![cursorStack!.length - 1] : undefined;
+  const startAfter = cursorStack[cursorStack.length - 1];
 
   const queryParams = useMemo(() => {
     if (!effectiveContractId || aliasError) return undefined;
@@ -104,15 +113,54 @@ export function StatementResult({
     parsed.select === 'documents' ? undefined : parsed.select;
   const isAggregate = aggregateKind !== undefined;
 
-  const docsQ = useDocumentsQuery(queryParams);
+  const docsQ = useDocumentsQuery(active ? queryParams : undefined, executionId);
   const aggQ = useDocumentsAggregate(
-    isAggregate ? aggregateParams : undefined,
+    active && isAggregate ? aggregateParams : undefined,
     aggregateKind,
     parsed.aggregateField,
+    executionId,
   );
 
+  const refetch = isAggregate ? aggQ.refetch : docsQ.refetch;
+  const params = isAggregate ? aggregateParams : queryParams;
+  useEffect(() => {
+    if (!active) return;
+    if (!params || aliasError) {
+      stateChangeRef.current('done');
+      return;
+    }
+    let cancelled = false;
+    stateChangeRef.current('running');
+    // Deduplicate with the hook's initial fetch, but always refetch cached
+    // results for an explicit Run. Later responses from removed runs are ignored.
+    void refetch({ cancelRefetch: false })
+      .then((response) => {
+        if (cancelled) return;
+        setResult({ data: response.data, error: toError(response.error), retrievedAt: Date.now() });
+        stateChangeRef.current('done');
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        setResult({ data: undefined, error: toError(error), retrievedAt: Date.now() });
+        stateChangeRef.current('done');
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [active, params, aliasError, refetch]);
+
+  function changePage(stack: Array<string | undefined>) {
+    setResult(null);
+    setCursorStack(stack);
+    stateChangeRef.current('queued');
+  }
+
+  function retry() {
+    setResult(null);
+    stateChangeRef.current('queued');
+  }
+
   const limit = parsed.limit ?? 25;
-  const previewParams = isAggregate ? aggregateParams : queryParams;
   const resolvedAlias = contractSource === 'alias' ? parsed.contractAlias : undefined;
 
   return (
@@ -123,11 +171,11 @@ export function StatementResult({
           {parsed.select === 'documents'
             ? 'SELECT *'
             : parsed.select === 'count'
-            ? 'COUNT(*)'
-            : `${parsed.select.toUpperCase()}(${parsed.aggregateField ?? '?'})`
-          }
+              ? 'COUNT(*)'
+              : `${parsed.select.toUpperCase()}(${parsed.aggregateField ?? '?'})`}
           {' FROM '}
-          {resolvedAlias ? `${resolvedAlias}.` : ''}{parsed.from}
+          {resolvedAlias ? `${resolvedAlias}.` : ''}
+          {parsed.from}
           {parsed.where.length > 0 && ' WHERE …'}
           {parsed.groupBy && parsed.groupBy.length > 0 && ` GROUP BY ${parsed.groupBy.join(', ')}`}
         </Text>
@@ -144,12 +192,14 @@ export function StatementResult({
         <Alert status="warning" borderRadius="md" bg="rgba(255,200,0,0.06)">
           <AlertIcon />
           <AlertDescription fontSize="sm">
-            WHERE fields [{whereFields.join(', ')}] don&apos;t match any declared index prefix.
-            The query may be rejected by the platform.
+            WHERE fields [{whereFields.join(', ')}] don&apos;t match any declared index prefix. The
+            query may be rejected by the platform.
             {indices.length > 0 && (
               <Text as="span" display="block" mt={1} fontSize="xs" color="gray.400">
                 Available indices:{' '}
-                {indices.map((idx) => `${idx.name} [${idx.properties.map((p) => p.field).join(', ')}]`).join(' · ')}
+                {indices
+                  .map((idx) => `${idx.name} [${idx.properties.map((p) => p.field).join(', ')}]`)
+                  .join(' · ')}
               </Text>
             )}
           </AlertDescription>
@@ -165,10 +215,18 @@ export function StatementResult({
         </Alert>
       )}
 
-      {previewParams && (
+      {params && (
         <InfoBlock p={3}>
           <HStack
-            as="button"
+            role="button"
+            tabIndex={0}
+            aria-expanded={showParams}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                setShowParams((shown) => !shown);
+              }
+            }}
             spacing={2}
             onClick={() => setShowParams((s) => !s)}
             cursor="pointer"
@@ -178,6 +236,9 @@ export function StatementResult({
               SDK parameters
             </Text>
             <IconButton
+              as="span"
+              aria-hidden="true"
+              tabIndex={-1}
               aria-label="toggle params"
               icon={showParams ? <ChevronUpIcon /> : <ChevronDownIcon />}
               size="xs"
@@ -197,13 +258,37 @@ export function StatementResult({
               whiteSpace="pre-wrap"
               overflowX="auto"
             >
-              {JSON.stringify(previewParams, null, 2)}
+              {JSON.stringify(params, null, 2)}
             </Code>
           </Collapse>
         </InfoBlock>
       )}
 
-      {contractQ.isLoading && <LoadingCard />}
+      {executionState === 'queued' && !active && (
+        <Text fontSize="xs" color="gray.400">
+          Queued
+        </Text>
+      )}
+      {result && !result.error && params && (
+        <ResultActions
+          parsed={parsed}
+          params={params}
+          data={result.data}
+          retrievedAt={result.retrievedAt}
+        />
+      )}
+      {result?.error && (
+        <Text fontSize="xs" color="orange.300">
+          Check this network&apos;s contract and document type, then compare WHERE and ORDER BY with
+          the declared index order. Unsupported SQL is rejected in the editor; Platform errors may
+          also reflect index requirements or an unavailable endpoint.
+        </Text>
+      )}
+      {result && (
+        <Text fontSize="2xs" color="gray.500">
+          Retrieved on {network} at {new Date(result.retrievedAt).toLocaleString()}.
+        </Text>
+      )}
 
       {isAggregate && (
         <AggregateResults
@@ -211,30 +296,27 @@ export function StatementResult({
           aggregateField={parsed.aggregateField}
           groupBy={parsed.groupBy}
           groupBySchemas={groupBySchemas}
-          data={aggQ.data as AggregateResultMap | undefined}
-          isLoading={aggQ.isLoading}
-          isError={aggQ.isError}
-          error={toError(aggQ.error)}
-          refetch={() => aggQ.refetch()}
+          data={result?.data as AggregateResultMap | undefined}
+          isLoading={active || executionState === 'queued'}
+          isError={!!result?.error}
+          error={result?.error}
+          refetch={retry}
         />
       )}
 
       {!isAggregate && queryParams && (
-        // Multi-statement runs disable pagination — parallel paginated doc
-        // queries don't have a sensible UX. Single-statement mode gets the
-        // real cursor stack from QueryPage.
         <QueryResults
-          data={docsQ.data}
-          isLoading={docsQ.isLoading}
-          isError={docsQ.isError}
-          error={toError(docsQ.error)}
-          refetch={() => docsQ.refetch()}
+          data={result?.data}
+          isLoading={active || executionState === 'queued'}
+          isError={!!result?.error}
+          error={result?.error}
+          refetch={retry}
           columns={columns}
           contractId={effectiveContractId!}
           documentType={parsed.from}
           limit={limit}
-          cursorStack={paginationEnabled ? cursorStack! : [undefined]}
-          onCursorStackChange={paginationEnabled ? onCursorStackChange! : () => {}}
+          cursorStack={cursorStack}
+          onCursorStackChange={changePage}
         />
       )}
 
