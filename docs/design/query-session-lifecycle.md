@@ -16,6 +16,8 @@ Confirmed writes call `invalidateNetworkQueries(client, submittedNetwork)`. The 
 
 Network-aware links synchronize `?network=` during client navigation through a small `useSearchParams` component with its own Suspense boundary. Unknown URL networks stop SDK execution and show an accessible error; selecting a configured network repairs the parameter. History updates use Next's supported `replaceState(null, ...)` path to keep router search parameters synchronized.
 
+Initial selection follows URL, valid saved preference, then configured default precedence. The saved custom-network registry is loaded before validation, so custom devnet defaults and links work. Unknown configured defaults or explicit selections never create an SDK using `getNetwork`'s display fallback. Their visible errors remain blocked until a configured network is selected; removing an invalid URL only restores a known selection. Browser storage is optional: blocked getters/reads use configured defaults, stale saved names are ignored, and failed writes leave the selected network/trust active in memory.
+
 ## Validation
 
 Regression tests cover readiness options, delayed proof responses across network/trust/reconnect changes, cancellation without stale evidence or fallback, mutable document freshness, idle Platform polling, network-scoped invalidation, superseded connections, reconnect reset, unmount, URL hydration/navigation, and invalid-link recovery. Root browser validation must also exercise selecting a network and then submitting a search/query, because unit tests do not run Next's patched history implementation.

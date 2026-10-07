@@ -78,9 +78,28 @@ const TRUSTED_KEY = 'npe:trusted';
 let nextSessionId = 0;
 
 function readStoredNetwork(fallback: Network): Network {
-  if (typeof window === 'undefined') return fallback;
-  const raw = window.localStorage.getItem(NETWORK_KEY);
+  const raw = readPreference(NETWORK_KEY);
   return raw && hasNetwork(raw) ? raw : fallback;
+}
+
+function readPreference(key: string): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    return window.localStorage.getItem(key);
+  } catch {
+    // Browsers may block the Storage getter itself or individual operations.
+    // Continue with configured defaults and keep choices in memory.
+    return null;
+  }
+}
+
+function storePreference(key: string, value: string): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Persistence is optional; a quota/security error must not prevent a switch.
+  }
 }
 
 function readUrlNetwork(): string | null {
@@ -102,18 +121,20 @@ function UrlNetworkSync({ onChange }: { onChange: (network: string | null) => vo
 }
 
 function readStoredTrusted(fallback: boolean): boolean {
-  if (typeof window === 'undefined') return fallback;
-  const raw = window.localStorage.getItem(TRUSTED_KEY);
+  const raw = readPreference(TRUSTED_KEY);
   if (raw === 'true') return true;
   if (raw === 'false') return false;
   return fallback;
 }
 
 async function constructSdk(network: Network, trusted: boolean): Promise<EvoSDKType> {
+  // getNetwork tolerates unknown names for display, so never use its fallback
+  // when choosing the actual network transport.
+  if (!hasNetwork(network)) throw new Error(`Unknown network "${network}". Choose a configured network.`);
+  const cfg = getNetwork(network);
   // Dynamically import so the heavy WASM module does not block the initial app paint.
   const mod = await import('@dashevo/evo-sdk');
   const EvoSDK = mod.EvoSDK;
-  const cfg = getNetwork(network);
   if (cfg.type === 'mainnet') {
     return trusted ? EvoSDK.mainnetTrusted() : EvoSDK.mainnet();
   }
@@ -158,17 +179,19 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   // (`quorums.testnet.networks.dash.org/*`) — making it look like devnet
   // pages are still talking to testnet.
   const [hydrated, setHydrated] = useState(false);
-  const [urlNetworkError, setUrlNetworkError] = useState<string | null>(null);
-  const urlNetworkErrorRef = useRef(false);
+  const [networkError, setNetworkError] = useState<string | null>(null);
+  const networkErrorRef = useRef<{ name: string; source: 'url' | 'default' | 'selection' } | null>(null);
 
-  const blockUnknownNetwork = useCallback((requested: string) => {
-    urlNetworkErrorRef.current = true;
+  const blockUnknownNetwork = useCallback((requested: string, source: 'url' | 'default' | 'selection') => {
+    if (networkErrorRef.current?.name === requested && networkErrorRef.current.source === source) return;
+    networkErrorRef.current = { name: requested, source };
     sessionController.current?.abort();
     setSessionId(++nextSessionId);
-    setUrlNetworkError(requested);
+    setNetworkError(requested);
     setSdk(null);
     setStatus('error');
-    setError(new Error(`Unknown network "${requested}". Choose a configured network.`));
+    const label = source === 'default' ? 'Unknown configured default network' : 'Unknown network';
+    setError(new Error(`${label} "${requested}". Choose a configured network.`));
   }, []);
 
   // Hydrate the stored preferences after mount. Registry must be loaded first
@@ -181,9 +204,10 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     const storedTrust = readStoredTrusted(defaultTrusted);
     if (validUrlNet) {
       // Persist the URL-param choice so a reload without the param keeps it.
-      window.localStorage.setItem(NETWORK_KEY, validUrlNet);
+      storePreference(NETWORK_KEY, validUrlNet);
     }
-    if (urlNet && !validUrlNet) blockUnknownNetwork(urlNet);
+    if (urlNet && !validUrlNet) blockUnknownNetwork(urlNet, 'url');
+    else if (!hasNetwork(storedNet)) blockUnknownNetwork(storedNet, 'default');
     if (storedNet !== defaultNetwork) setNetworkState(storedNet);
     if (storedTrust !== defaultTrusted) setTrustedState(storedTrust);
     setHydrated(true);
@@ -221,15 +245,20 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (!hydrated || urlNetworkError !== null) return;
+    if (!hydrated || networkError !== null) return;
     void connect(network, trusted);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [network, trusted, hydrated, urlNetworkError]);
+  }, [network, trusted, hydrated, networkError]);
 
   const setNetwork = useCallback((next: Network) => {
-    if (networkRef.current === next && !urlNetworkErrorRef.current) return;
+    initNetworkRegistry();
+    if (!hasNetwork(next)) {
+      blockUnknownNetwork(next, 'selection');
+      return;
+    }
+    if (networkRef.current === next && !networkErrorRef.current) return;
+    storePreference(NETWORK_KEY, next);
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem(NETWORK_KEY, next);
       const url = new URL(window.location.href);
       if (url.searchParams.has('network')) {
         url.searchParams.set('network', next);
@@ -238,8 +267,8 @@ export function SdkProvider({ children }: { children: ReactNode }) {
         window.history.replaceState(null, '', url);
       }
     }
-    urlNetworkErrorRef.current = false;
-    setUrlNetworkError(null);
+    networkErrorRef.current = null;
+    setNetworkError(null);
     // Retire outgoing requests before children see the next selection. The
     // connect-on-change effect starts a new session after this state commits.
     networkRef.current = next;
@@ -248,27 +277,29 @@ export function SdkProvider({ children }: { children: ReactNode }) {
     setStatus('connecting');
     setError(null);
     setNetworkState(next);
-  }, []);
+  }, [blockUnknownNetwork]);
 
   const syncUrlNetwork = useCallback((requested: string | null) => {
     if (requested && !hasNetwork(requested)) {
-      blockUnknownNetwork(requested);
+      blockUnknownNetwork(requested, 'url');
     } else if (requested) {
       setNetwork(requested);
-    } else {
-      urlNetworkErrorRef.current = false;
-      setUrlNetworkError(null);
+    } else if (networkErrorRef.current?.source === 'url') {
+      if (hasNetwork(networkRef.current)) {
+        networkErrorRef.current = null;
+        setNetworkError(null);
+      } else {
+        blockUnknownNetwork(networkRef.current, 'default');
+      }
     }
   }, [blockUnknownNetwork, setNetwork]);
 
   const setTrusted = useCallback((next: boolean) => {
     if (trustedRef.current === next) return;
-    if (typeof window !== 'undefined') {
-      window.localStorage.setItem(TRUSTED_KEY, String(next));
-    }
+    storePreference(TRUSTED_KEY, String(next));
     trustedRef.current = next;
     setTrustedState(next);
-    if (urlNetworkErrorRef.current) return;
+    if (networkErrorRef.current) return;
     sessionController.current?.abort();
     setSdk(null);
     setStatus('connecting');
@@ -276,7 +307,7 @@ export function SdkProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const reconnect = useCallback(() => {
-    if (urlNetworkErrorRef.current) return;
+    if (networkErrorRef.current) return;
     void connect(network, trusted);
   }, [connect, network, trusted]);
 
