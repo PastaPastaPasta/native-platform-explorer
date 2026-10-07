@@ -1,15 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import {
-  FormControl,
-  FormLabel,
-  HStack,
-  Input,
-  Select,
-  Tag,
-  Text,
-} from '@chakra-ui/react';
+import { FormControl, FormLabel, HStack, Input, Select, Tag, Text } from '@chakra-ui/react';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { shortId } from '@util/identifier';
 
@@ -29,11 +21,12 @@ export function ContractPicker({ contractId, onChange, resolvedAlias }: Contract
 
   return (
     <FormControl>
-      <FormLabel fontSize="xs" color="gray.400" mb={1}>
+      <FormLabel htmlFor="query-contract-picker" fontSize="xs" color="gray.400" mb={1}>
         Data Contract
       </FormLabel>
       <HStack spacing={2}>
         <Select
+          id="query-contract-picker"
           size="sm"
           bg="gray.800"
           borderColor="gray.700"
@@ -56,6 +49,8 @@ export function ContractPicker({ contractId, onChange, resolvedAlias }: Contract
         </Select>
         {!isKnown && (
           <Input
+            id="query-contract-custom"
+            aria-label="Custom data contract ID"
             size="sm"
             bg="gray.800"
             borderColor="gray.700"
