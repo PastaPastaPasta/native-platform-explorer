@@ -73,7 +73,7 @@ test('saved items retain a configured custom network name longer than 80 charact
   const link = page.getByRole('link', { name: `Open contract ${contractId} on ${network}` });
   await expect(link).toBeVisible();
   const href = new URL((await link.getAttribute('href'))!, page.url());
-  expect(href.pathname).toBe(new URL('contract/', page.url()).pathname);
+  expect(href.pathname).toBe(new URL('../contract/', page.url()).pathname);
   expect(href.searchParams.get('id')).toBe(contractId);
   expect(href.searchParams.get('network')).toBe(network);
   await page.reload();
