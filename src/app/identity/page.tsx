@@ -64,6 +64,7 @@ function AdvancedNonceLookup({ identityId }: { identityId: string }) {
       <InputGroup size="sm">
         <Input
           placeholder="Contract ID"
+          aria-label="Contract ID for nonce lookup"
           value={contractId}
           onChange={(e) => setContractId(e.target.value)}
           fontFamily="mono"
