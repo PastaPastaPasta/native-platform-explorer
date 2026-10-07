@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Badge,
   Box,
@@ -113,14 +113,32 @@ function ParsedPreview({ parsed }: { parsed: ParsedBridgeBackup }) {
 }
 
 export function BridgeImportPane() {
-  const { sdk, network } = useSdk();
+  const { sdk, network, status } = useSdk();
   const { connect } = useSigner();
   const fileRef = useRef<HTMLInputElement | null>(null);
+  const draftGeneration = useRef(0);
   const [parsed, setParsed] = useState<ParsedBridgeBackup | null>(null);
   const [pastedText, setPastedText] = useState('');
   const [error, setError] = useState<Error | null>(null);
   const [busy, setBusy] = useState(false);
   const [dragging, setDragging] = useState(false);
+  const [reading, setReading] = useState(false);
+  const networkMismatch = Boolean(parsed?.network && parsed.network !== network);
+
+  const clearDraft = useCallback(() => {
+    draftGeneration.current += 1;
+    setParsed(null);
+    setPastedText('');
+    setReading(false);
+    if (fileRef.current) fileRef.current.value = '';
+  }, []);
+
+  useEffect(
+    () => () => {
+      draftGeneration.current += 1;
+    },
+    [],
+  );
 
   const ingest = useCallback((raw: string) => {
     setError(null);
@@ -136,8 +154,20 @@ export function BridgeImportPane() {
 
   const onFile = useCallback(
     async (file: File) => {
-      const text = await file.text();
-      ingest(text);
+      const generation = ++draftGeneration.current;
+      setParsed(null);
+      setPastedText('');
+      setError(null);
+      setReading(true);
+      try {
+        const text = await file.text();
+        if (generation === draftGeneration.current) ingest(text);
+      } catch (error) {
+        if (generation === draftGeneration.current)
+          setError(error instanceof Error ? error : new Error(String(error)));
+      } finally {
+        if (generation === draftGeneration.current) setReading(false);
+      }
     },
     [ingest],
   );
@@ -153,22 +183,29 @@ export function BridgeImportPane() {
   );
 
   const onConnect = useCallback(async () => {
-    if (!sdk || !parsed) return;
+    if (!parsed) return;
+    if (!sdk || status !== 'ready' || networkMismatch) {
+      clearDraft();
+      setError(
+        new Error(
+          networkMismatch ? 'Switch to the backup network before importing.' : 'SDK not ready.',
+        ),
+      );
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const signer = await createBackupSigner(sdk, parsed);
       connect(signer);
-      // Drop the in-page copy of the backup once the signer captures the WIFs.
-      setParsed(null);
-      setPastedText('');
-      if (fileRef.current) fileRef.current.value = '';
     } catch (e) {
       setError(e instanceof Error ? e : new Error(String(e)));
     } finally {
+      // Remove the backup's secret fields after every connection attempt.
+      clearDraft();
       setBusy(false);
     }
-  }, [sdk, parsed, connect]);
+  }, [sdk, parsed, status, networkMismatch, clearDraft, connect]);
 
   return (
     <VStack align="stretch" spacing={3}>
@@ -180,12 +217,21 @@ export function BridgeImportPane() {
       <Box
         onDragOver={(e) => {
           e.preventDefault();
-          setDragging(true);
+          if (!busy) setDragging(true);
         }}
         onDragLeave={() => setDragging(false)}
-        onDrop={onDrop}
-        onClick={() => fileRef.current?.click()}
+        onDrop={busy ? (e) => e.preventDefault() : onDrop}
+        onClick={() => {
+          if (!busy) fileRef.current?.click();
+        }}
+        onKeyDown={(e) => {
+          if (!busy && (e.key === 'Enter' || e.key === ' ')) {
+            e.preventDefault();
+            fileRef.current?.click();
+          }
+        }}
         role="button"
+        aria-disabled={busy}
         tabIndex={0}
         borderRadius="md"
         border="1px dashed"
@@ -207,7 +253,9 @@ export function BridgeImportPane() {
         <Input
           ref={fileRef}
           type="file"
+          aria-label="Bridge backup file"
           accept="application/json,.json"
+          isDisabled={busy}
           display="none"
           onChange={(e) => {
             const f = e.target.files?.[0];
@@ -221,11 +269,21 @@ export function BridgeImportPane() {
           …or paste JSON
         </Text>
         <Textarea
+          aria-label="Bridge backup JSON"
+          autoComplete="off"
+          spellCheck={false}
+          isDisabled={busy}
           size="sm"
           rows={4}
           placeholder='{ "identityId": "…", "identityKeys": [ … ] }'
           value={pastedText}
-          onChange={(e) => setPastedText(e.target.value)}
+          onChange={(e) => {
+            draftGeneration.current += 1;
+            setPastedText(e.target.value);
+            setParsed(null);
+            setReading(false);
+            setError(null);
+          }}
           onBlur={() => {
             if (pastedText.trim().length > 0) ingest(pastedText);
           }}
@@ -235,6 +293,12 @@ export function BridgeImportPane() {
         />
       </Box>
 
+      {reading ? (
+        <Text role="status" fontSize="sm">
+          Reading backup file…
+        </Text>
+      ) : null}
+
       {parsed ? (
         <>
           <NetworkMismatchBanner
@@ -242,28 +306,34 @@ export function BridgeImportPane() {
             currentNetwork={network}
           />
           <ParsedPreview parsed={parsed} />
-          <HStack justify="flex-end">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => {
-                setParsed(null);
-                setPastedText('');
-                if (fileRef.current) fileRef.current.value = '';
-              }}
-            >
-              Discard
-            </Button>
+        </>
+      ) : null}
+
+      {parsed || reading || pastedText ? (
+        <HStack justify="flex-end">
+          <Button
+            size="sm"
+            variant="ghost"
+            isDisabled={busy}
+            onClick={() => {
+              clearDraft();
+              setError(null);
+            }}
+          >
+            Discard
+          </Button>
+          {parsed ? (
             <Button
               size="sm"
               colorScheme="blue"
               isLoading={busy}
+              isDisabled={!sdk || status !== 'ready' || networkMismatch}
               onClick={() => void onConnect()}
             >
               Use this identity
             </Button>
-          </HStack>
-        </>
+          ) : null}
+        </HStack>
       ) : null}
 
       {error ? <ErrorCard error={error} /> : null}
