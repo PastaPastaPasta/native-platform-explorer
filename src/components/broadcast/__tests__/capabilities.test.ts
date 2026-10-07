@@ -60,5 +60,22 @@ describe('operation capabilities', () => {
     expect(keyMeetsCriteria({ id: 3, purpose: 3, securityLevel: 2 }, { purpose: 'TRANSFER' })).toBe(
       true,
     );
+    const critical = { id: 5, purpose: 0, securityLevel: 1 };
+    expect(
+      selectSigningKey(
+        [master, critical, AUTH],
+        operationRequirement('contract.register').criteria,
+      ),
+    ).toBe(critical);
+    expect(keyMeetsCriteria(master, operationRequirement('contract.register').criteria)).toBe(
+      false,
+    );
+    expect(keyMeetsCriteria(AUTH, operationRequirement('contract.update').criteria)).toBe(false);
+    expect(
+      keyMeetsCriteria(
+        { id: 3, purpose: 3, securityLevel: 2 },
+        operationRequirement('identity.creditTransfer').criteria,
+      ),
+    ).toBe(false);
   });
 });

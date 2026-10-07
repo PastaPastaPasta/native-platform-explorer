@@ -26,8 +26,12 @@ export interface KeySelectionCriteria {
    * Minimum security level the selected key must satisfy. MASTER is the
    * strongest, MEDIUM the weakest — a key at or stronger than the requested
    * level qualifies (so requiring HIGH also accepts CRITICAL and MASTER keys).
+   * Transitions may exclude MASTER or require an exact level; executors should
+   * use allowedSecurityLevels for those protocol requirements.
    */
   minSecurityLevel?: 'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM';
+  /** Exact levels accepted by the transition. MASTER is excluded from ordinary authentication writes. */
+  allowedSecurityLevels?: Array<'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM'>;
   /** Explicit key id; purpose and security requirements still apply. */
   keyId?: number;
 }

@@ -35,14 +35,21 @@ export function operationRequirement(id: string): OperationCapabilityRequirement
       };
     case 'identity.creditTransfer':
     case 'identity.creditWithdrawal':
-      return { status: 'available', criteria: { purpose: 'TRANSFER' } };
+      return {
+        status: 'available',
+        criteria: { purpose: 'TRANSFER', allowedSecurityLevels: ['CRITICAL'] },
+      };
     case 'identity.updateKeys':
       return {
         status: 'available',
-        criteria: { purpose: 'AUTHENTICATION', minSecurityLevel: 'MASTER' },
+        criteria: { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['MASTER'] },
+      };
+    case 'contract.update':
+      return {
+        status: 'available',
+        criteria: { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['CRITICAL'] },
       };
     case 'contract.register':
-    case 'contract.update':
     case 'document.create':
     case 'document.replace':
     case 'document.delete':
@@ -52,10 +59,13 @@ export function operationRequirement(id: string): OperationCapabilityRequirement
     case 'dpns.registerName':
       return {
         status: 'available',
-        criteria: { purpose: 'AUTHENTICATION', minSecurityLevel: 'HIGH' },
+        criteria: { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['CRITICAL', 'HIGH'] },
       };
     default:
-      return { status: 'unsupported', reason: 'This operation has no supported signing path in this explorer.' };
+      return {
+        status: 'unsupported',
+        reason: 'This operation has no supported signing path in this explorer.',
+      };
   }
 }
 
@@ -84,6 +94,7 @@ export function resolveOperationCapability(
       reason:
         `This operation needs an enabled ${requirement?.criteria?.purpose ?? 'eligible'} key` +
         `${requirement?.criteria?.minSecurityLevel ? ` at ${requirement.criteria.minSecurityLevel} security or stronger` : ''}` +
+        `${requirement?.criteria?.allowedSecurityLevels ? ` with ${requirement.criteria.allowedSecurityLevels.join(' or ')} security` : ''}` +
         '. Connect a signer with a matching on-chain key.',
     };
   }

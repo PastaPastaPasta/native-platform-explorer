@@ -24,6 +24,13 @@ export function keyMeetsCriteria(
   if (criteria?.keyId !== undefined && key.id !== criteria.keyId) return false;
   if (criteria?.purpose && enumName(key.purpose, PURPOSES) !== criteria.purpose.toUpperCase())
     return false;
+  if (
+    criteria?.allowedSecurityLevels &&
+    !criteria.allowedSecurityLevels.some(
+      (level) => level === enumName(key.securityLevel, SECURITY_LEVELS),
+    )
+  )
+    return false;
   if (criteria?.minSecurityLevel) {
     const rank = SECURITY_LEVELS.indexOf(enumName(key.securityLevel, SECURITY_LEVELS) ?? '');
     if (rank < 0 || rank > SECURITY_LEVELS.indexOf(criteria.minSecurityLevel)) return false;
@@ -48,6 +55,7 @@ export function selectSigningKey<T extends SignerKeyDescriptor>(
     throw new SignerUnavailableError(
       `No enabled matching on-chain key satisfies ${criteria?.purpose ?? 'the requested purpose'}` +
         `${criteria?.minSecurityLevel ? ` at ${criteria.minSecurityLevel} security or stronger` : ''}` +
+        `${criteria?.allowedSecurityLevels ? ` (allowed levels: ${criteria.allowedSecurityLevels.join(', ')})` : ''}` +
         `${criteria?.keyId !== undefined ? ` (key ${criteria.keyId})` : ''}. Connect a signer with an eligible key.`,
     );
   }
