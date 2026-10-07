@@ -1,7 +1,8 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { EntityActions, ShareLinkButton } from '../EntityActions';
 import { getSavedEntities } from '@util/exploration';
+import { ChakraProvider } from '@chakra-ui/react';
 
 const state = vi.hoisted(() => ({ network: 'testnet' }));
 vi.mock('@sdk/hooks', () => ({ useSdk: () => state }));
@@ -54,5 +55,29 @@ describe('entity exploration actions', () => {
     render(<ShareLinkButton />);
     fireEvent.click(screen.getByRole('button', { name: 'Copy share link' }));
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Could not copy the link.'));
+  });
+
+  it('shows visible feedback when compact sharing cannot access the clipboard', async () => {
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: undefined });
+    render(<ChakraProvider><ShareLinkButton compact /></ChakraProvider>);
+    fireEvent.click(screen.getByRole('button', { name: 'Copy page link' }));
+    const notifications = within(screen.getByRole('region', { name: 'Notifications-bottom' }));
+    await waitFor(() => expect(notifications.getByRole('status')).toBeVisible());
+    expect(notifications.getByRole('status')).toHaveTextContent('Could not copy the link.');
+  });
+
+  it('preserves the unknown network in a blocked shared URL', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText } });
+    const original = window.location.href;
+    history.replaceState(null, '', '/identity/?id=' + id + '&network=devnet-not-configured');
+    try {
+      render(<ShareLinkButton />);
+      fireEvent.click(screen.getByRole('button', { name: 'Copy share link' }));
+      await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Recipients must configure this custom devnet first.'));
+      expect(new URL(writeText.mock.calls[0]![0] as string).searchParams.get('network')).toBe('devnet-not-configured');
+    } finally {
+      history.replaceState(null, '', original);
+    }
   });
 });
