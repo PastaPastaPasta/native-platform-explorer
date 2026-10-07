@@ -17,12 +17,6 @@ vi.mock('@sdk/hooks', async (importOriginal) => ({
   ...(await importOriginal<object>()),
   useSdkQuery: (key: string[]) => ({ data: contracts.get(key[1] ?? ''), isLoading: false }),
 }));
-vi.mock('../../ContractPicker', () => ({
-  ContractPicker: ({ value, onChange }: { value: string; onChange: (value: string) => void }) => (
-    <input aria-label="Contract" value={value} onChange={(event) => onChange(event.target.value)} />
-  ),
-  rememberContract: vi.fn(),
-}));
 
 beforeEach(() => {
   contracts.clear();
@@ -58,7 +52,7 @@ describe('JSON operation forms', () => {
     expect(screen.getByRole('textbox', { name: 'Document schemas' })).toHaveValue(
       JSON.stringify({ first: { type: 'object' } }, null, 2),
     );
-    fireEvent.change(screen.getByRole('textbox', { name: 'Contract' }), {
+    fireEvent.change(screen.getByPlaceholderText('Contract ID (Base58)'), {
       target: { value: contractB },
     });
     expect(options.onOptionsChange).toHaveBeenLastCalledWith(null);
@@ -68,6 +62,52 @@ describe('JSON operation forms', () => {
     expect(options.onOptionsChange).toHaveBeenLastCalledWith({
       contractId: contractB,
       documentSchemas: { second: { type: 'object' } },
+    });
+  });
+
+  it.each(['{"draft":{"type":"object"}}', '{unfinished'])(
+    'preserves schema edits when the current recent contract is selected: %s',
+    (draft) => {
+      contracts.set(contractA, { documentSchemas: { first: { type: 'object' } } });
+      window.localStorage.setItem(
+        'npe:recentContracts',
+        JSON.stringify([{ id: contractA, ts: Date.now(), label: 'Current contract' }]),
+      );
+      const options = props();
+      renderWithProviders(<ContractUpdateForm {...options} />);
+      const schemas = screen.getByRole('textbox', { name: 'Document schemas' });
+      fireEvent.change(schemas, { target: { value: draft } });
+      const lastOptions = options.onOptionsChange.mock.lastCall;
+
+      fireEvent.click(screen.getByRole('button', { name: /Current contract/ }));
+
+      expect(screen.getByRole('textbox', { name: 'Document schemas' })).toHaveValue(draft);
+      expect(options.onOptionsChange.mock.lastCall).toEqual(lastOptions);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Reset to on-chain' }));
+      expect(screen.getByRole('textbox', { name: 'Document schemas' })).toHaveValue(
+        JSON.stringify({ first: { type: 'object' } }, null, 2),
+      );
+    },
+  );
+
+  it('preserves schema edits when only contract identifier whitespace changes', () => {
+    contracts.set(contractA, { documentSchemas: { first: { type: 'object' } } });
+    const options = props();
+    renderWithProviders(<ContractUpdateForm {...options} />);
+    const draft = { draft: { type: 'object' } };
+    const schemas = screen.getByRole('textbox', { name: 'Document schemas' });
+    fireEvent.change(schemas, { target: { value: JSON.stringify(draft) } });
+
+    fireEvent.change(screen.getByPlaceholderText('Contract ID (Base58)'), {
+      target: { value: ` ${contractA} ` },
+    });
+
+    expect(screen.getByPlaceholderText('Contract ID (Base58)')).toHaveValue(` ${contractA} `);
+    expect(screen.getByRole('textbox', { name: 'Document schemas' })).toHaveValue(JSON.stringify(draft));
+    expect(options.onOptionsChange).toHaveBeenLastCalledWith({
+      contractId: contractA,
+      documentSchemas: draft,
     });
   });
 
