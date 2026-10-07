@@ -75,24 +75,18 @@ export function ContractRegisterForm({
   onOptionsChange,
 }: OperationFormProps<ContractRegisterOptions>) {
   const ownerId = signer.identityId;
-  const [schemasText, setSchemasText] = useState(() =>
-    JSON.stringify(SAMPLE_SCHEMA, null, 2),
-  );
-  const [parseError, setParseError] = useState<string | null>(null);
+  const [schemasText, setSchemasText] = useState(() => JSON.stringify(SAMPLE_SCHEMA, null, 2));
 
-  const parsed = useMemo(() => {
+  const { parsed, parseError } = useMemo(() => {
     try {
       const json = JSON.parse(schemasText);
       const v = validateSchemasShape(json);
       if (!v.ok) {
-        setParseError(v.message ?? 'Invalid schemas.');
-        return null;
+        return { parsed: null, parseError: v.message ?? 'Invalid schemas.' };
       }
-      setParseError(null);
-      return v.schemas!;
+      return { parsed: v.schemas!, parseError: null };
     } catch (e) {
-      setParseError(e instanceof Error ? e.message : String(e));
-      return null;
+      return { parsed: null, parseError: e instanceof Error ? e.message : String(e) };
     }
   }, [schemasText]);
 
@@ -114,11 +108,19 @@ export function ContractRegisterForm({
   return (
     <VStack align="stretch" spacing={4}>
       <Box>
-        <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
+        <Text
+          as="label"
+          htmlFor="contract-register-owner"
+          fontSize="sm"
+          color="gray.100"
+          fontWeight={500}
+          mb={1}
+        >
           Owner identity
         </Text>
         <Input
           size="sm"
+          id="contract-register-owner"
           value={ownerId}
           isReadOnly
           fontFamily="mono"
@@ -127,14 +129,20 @@ export function ContractRegisterForm({
           opacity={0.85}
         />
         <Text fontSize="xs" color="gray.400" mt={1}>
-          The contract will be owned by the connected signer. Disconnect on
-          /wallet and reconnect as a different identity to change this.
+          The contract will be owned by the connected signer. Disconnect on /wallet and reconnect as
+          a different identity to change this.
         </Text>
       </Box>
 
       <Box>
         <HStack justify="space-between" align="baseline" mb={1}>
-          <Text fontSize="sm" color="gray.100" fontWeight={500}>
+          <Text
+            as="label"
+            htmlFor="contract-register-schemas"
+            fontSize="sm"
+            color="gray.100"
+            fontWeight={500}
+          >
             Document schemas
           </Text>
           <Button
@@ -146,6 +154,7 @@ export function ContractRegisterForm({
           </Button>
         </HStack>
         <Textarea
+          id="contract-register-schemas"
           rows={18}
           fontFamily="mono"
           fontSize="xs"
@@ -163,8 +172,7 @@ export function ContractRegisterForm({
             Each top-level key is a document type name. Inside, use{' '}
             <Code fontSize="xs">type: &quot;object&quot;</Code>,{' '}
             <Code fontSize="xs">properties</Code>, and optionally{' '}
-            <Code fontSize="xs">required</Code> and{' '}
-            <Code fontSize="xs">indices</Code>.
+            <Code fontSize="xs">required</Code> and <Code fontSize="xs">indices</Code>.
           </Text>
         )}
       </Box>
@@ -175,16 +183,16 @@ export function ContractRegisterForm({
         </Heading>
         <VStack align="stretch" spacing={1} fontSize="xs" color="gray.250">
           <Text>
-            • Properties get a <Code fontSize="xs">position</Code> number, 0-indexed
-            in declaration order — they pin the on-chain encoding.
+            • Properties get a <Code fontSize="xs">position</Code> number, 0-indexed in declaration
+            order — they pin the on-chain encoding.
           </Text>
           <Text>
-            • Set <Code fontSize="xs">additionalProperties: false</Code> unless
-            you really want a free-form schema.
+            • Set <Code fontSize="xs">additionalProperties: false</Code> unless you really want a
+            free-form schema.
           </Text>
           <Text>
-            • Add an <Code fontSize="xs">indices</Code> array to a type to make
-            specific fields queryable later.
+            • Add an <Code fontSize="xs">indices</Code> array to a type to make specific fields
+            queryable later.
           </Text>
         </VStack>
       </InfoBlock>
