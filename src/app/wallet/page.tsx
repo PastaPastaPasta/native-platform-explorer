@@ -25,6 +25,7 @@ import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
 import { useSigner } from '@/signer/SignerProvider';
 import { useSdk } from '@sdk/hooks';
+import { normalizeError } from '@sdk/errors';
 import { getDerivationNetwork } from '@sdk/networks';
 import { BridgeImportPane } from '@components/wallet/BridgeImportPane';
 import { BridgeLaunchCard } from '@components/wallet/BridgeLaunchCard';
@@ -35,8 +36,9 @@ function SafetyBanner() {
   return (
     <InfoBlock>
       <Text fontSize="sm" color="gray.250">
-        The explorer never persists your keys. Imported signing material stays in this tab&apos;s
-        memory and is released on disconnect, inactivity (&gt; 10 minutes hidden), or reload.
+        The explorer never persists your keys. Imported keys stay in this tab&apos;s memory.
+        Disconnect, inactivity (&gt; 10 minutes hidden), or reload clears the local signer.
+        An operation already in progress can retain signing material until it finishes.
         Mnemonic and WIF fields are cleared after each connection attempt. JavaScript cannot
         guarantee that every copy of a secret is erased from memory.
       </Text>
@@ -74,7 +76,7 @@ function ExtensionPane() {
 
 function MnemonicPane() {
   const { connect } = useSigner();
-  const { sdk, network } = useSdk();
+  const { sdk, network, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [mnemonic, setMnemonic] = useState('');
   const [path, setPath] = useState('');
@@ -82,7 +84,8 @@ function MnemonicPane() {
   const [error, setError] = useState<Error | null>(null);
 
   const onConnect = async () => {
-    if (!sdk) {
+    if (!sdk || status !== 'ready') {
+      setMnemonic('');
       setError(new Error('SDK not ready.'));
       return;
     }
@@ -100,7 +103,7 @@ function MnemonicPane() {
       );
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
       setMnemonic('');
       setBusy(false);
@@ -161,7 +164,10 @@ function MnemonicPane() {
           onClick={() => void onConnect()}
           isLoading={busy}
           isDisabled={
-            !isBase58Identifier(identityId.trim()) || mnemonic.trim().split(/\s+/).length < 12
+            !sdk ||
+            status !== 'ready' ||
+            !isBase58Identifier(identityId.trim()) ||
+            mnemonic.trim().split(/\s+/).length < 12
           }
         >
           Connect mnemonic
@@ -174,14 +180,15 @@ function MnemonicPane() {
 
 function WifPane() {
   const { connect } = useSigner();
-  const { sdk } = useSdk();
+  const { sdk, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [wif, setWif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const onConnect = async () => {
-    if (!sdk) {
+    if (!sdk || status !== 'ready') {
+      setWif('');
       setError(new Error('SDK not ready.'));
       return;
     }
@@ -192,7 +199,7 @@ function WifPane() {
       const signer = await createWifSigner(sdk, wif.trim(), identityId.trim());
       connect(signer);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setError(normalizeError(e));
     } finally {
       setWif('');
       setBusy(false);
@@ -241,7 +248,12 @@ function WifPane() {
           colorScheme="blue"
           onClick={() => void onConnect()}
           isLoading={busy}
-          isDisabled={!isBase58Identifier(identityId.trim()) || wif.trim().length === 0}
+          isDisabled={
+            !sdk ||
+            status !== 'ready' ||
+            !isBase58Identifier(identityId.trim()) ||
+            wif.trim().length === 0
+          }
         >
           Connect WIF
         </Button>

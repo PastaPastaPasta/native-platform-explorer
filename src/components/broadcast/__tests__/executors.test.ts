@@ -1,10 +1,21 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
 import {
+  executeContractRegister,
+  executeContractUpdate,
   executeDocumentCreate,
+  executeDocumentReplace,
+  executeDocumentDelete,
   executeDocumentTransfer,
+  executeDocumentSetPrice,
+  executeDocumentPurchase,
   executeIdentityCreditTransfer,
+  executeIdentityCreditWithdrawal,
+  executeIdentityUpdateKeys,
+  executeDpnsRegister,
+  executeVotingCastVote,
 } from '../executors';
+import { operationRequirement } from '../capabilities';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../outcomes';
 
 vi.mock('@dashevo/evo-sdk', () => {
@@ -38,6 +49,69 @@ vi.mock('@dashevo/evo-sdk', () => {
 });
 
 describe('broadcast executors', () => {
+  it('rejects unsupported voting without allocating signing material', async () => {
+    const prepareSdk = vi.fn();
+    await expect(executeVotingCastVote({
+      sdk: {} as never,
+      signer: createMockSigner({ prepareSdk }),
+      options: {} as never,
+    })).rejects.toThrow(/vote broadcasting is unavailable/i);
+    expect(prepareSdk).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['contract.register', executeContractRegister],
+    ['contract.update', executeContractUpdate],
+    ['document.create', executeDocumentCreate],
+    ['document.replace', executeDocumentReplace],
+    ['document.delete', executeDocumentDelete],
+    ['document.transfer', executeDocumentTransfer],
+    ['document.setPrice', executeDocumentSetPrice],
+    ['document.purchase', executeDocumentPurchase],
+    ['identity.creditTransfer', executeIdentityCreditTransfer],
+    ['identity.creditWithdrawal', executeIdentityCreditWithdrawal],
+    ['identity.updateKeys', executeIdentityUpdateKeys],
+    ['dpns.registerName', executeDpnsRegister],
+  ] as const)('applies the declared key requirements before executing %s', async (id, execute) => {
+    const stop = new Error('stop before broadcast');
+    const prepareSdk = vi.fn().mockRejectedValue(stop);
+    const signer = createMockSigner({ prepareSdk });
+
+    await expect(execute({ sdk: {} as never, signer, options: {} as never })).rejects.toThrow('stop before broadcast');
+    expect(prepareSdk).toHaveBeenCalledOnce();
+    expect(prepareSdk).toHaveBeenCalledWith(operationRequirement(id).criteria);
+  });
+
+  it.each([false, true])('releases all adapter-owned signing material (failure: %s)', async (fails) => {
+    const signerFree = vi.fn();
+    const keyFree = vi.fn();
+    const release = vi.fn(() => {
+      signerFree();
+      keyFree();
+    });
+    const signer = createMockSigner({
+      prepareSdk: vi.fn().mockResolvedValue(createSigningMaterial({
+        identitySigner: { free: signerFree } as never,
+        identityKey: { free: keyFree } as never,
+        release,
+      })),
+    });
+    const create = fails
+      ? vi.fn().mockRejectedValue(new Error('broadcast failed'))
+      : vi.fn().mockResolvedValue(undefined);
+    const execution = executeDocumentCreate({
+      sdk: { documents: { create } } as never,
+      signer,
+      options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+    });
+    if (fails) await expect(execution).rejects.toThrow('broadcast failed');
+    else await execution;
+
+    expect(release).toHaveBeenCalledOnce();
+    expect(signerFree).toHaveBeenCalledOnce();
+    expect(keyFree).toHaveBeenCalledOnce();
+  });
+
   it('creates documents with SDK signing material and frees it after success', async () => {
     const free = vi.fn();
     const material = createSigningMaterial({

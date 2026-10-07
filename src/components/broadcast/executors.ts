@@ -58,20 +58,6 @@ export interface IdentityResult {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-async function prepareSigning(signer: ExplorerSigner, criteria?: KeySelectionCriteria) {
-  if (!signer.prepareSdk) {
-    throw new OperationNotSubmittedError(
-      `The "${signer.kind}" signer does not support SDK signing yet. ` +
-        'Connect via the Bridge backup tab on /wallet to enable writes.',
-    );
-  }
-  try {
-    return await signer.prepareSdk(criteria);
-  } catch (error) {
-    throw new OperationNotSubmittedError(error);
-  }
-}
-
 // wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
 // only release on explicit `free()`. Every executor now goes through this
 // helper so the IdentitySigner is freed after the broadcast resolves (or
@@ -82,7 +68,18 @@ async function withSigningMaterial<T>(
   criteria: KeySelectionCriteria | undefined,
   fn: (material: SdkSigningMaterial, submit: typeof submitOperation) => Promise<T>,
 ): Promise<T> {
-  const material = await prepareSigning(signer, criteria);
+  if (!signer.prepareSdk) {
+    throw new OperationNotSubmittedError(
+      `The "${signer.kind}" signer does not support SDK signing yet. ` +
+        'Connect via the Bridge backup tab on /wallet to enable writes.',
+    );
+  }
+  let material: SdkSigningMaterial;
+  try {
+    material = await signer.prepareSdk(criteria);
+  } catch (error) {
+    throw new OperationNotSubmittedError(error);
+  }
   let submittedEntities: ReceiptEntities | null = null;
   const submit: typeof submitOperation = async (write, entities, assertCurrent) => {
     assertCurrent?.();
@@ -107,8 +104,7 @@ async function withSigningMaterial<T>(
     throw new OperationNotSubmittedError(error);
   } finally {
     try {
-      const release = material.release;
-      if (release) release();
+      if (material.release) material.release();
       else material.identitySigner.free();
     } catch {
       /* already freed or build without free — best-effort */
@@ -687,22 +683,12 @@ export async function executeDpnsRegister(args: {
 
 // ─── voting ─────────────────────────────────────────────────────────────
 
-export async function executeVotingCastVote(args: {
+export async function executeVotingCastVote(_args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
   assertCurrent?: () => void;
   options: VotingCastVoteOptions;
 }): Promise<IdentityResult> {
-  const { sdk, signer, options } = args;
-  void sdk;
-  void options;
-  // Voting requires a masternode voting key (Purpose: VOTING) — most users
-  // signed in via a Bridge backup won't have one. Surfacing a clear error now
-  // is better than calling the SDK with the wrong key purpose. Full wiring is
-  // tracked under the voting follow-up.
-  void signer;
-  throw new OperationNotSubmittedError(
-    'Vote broadcast is not yet wired through this signer. You need a masternode ' +
-      'voting key (purpose = VOTING) to cast a vote.',
-  );
+  // Unsupported execution must fail before allocating any signing material.
+  throw new OperationNotSubmittedError(operationRequirement('voting.castVote').reason);
 }

@@ -29,7 +29,7 @@ describe('SignerStatusCard', () => {
   it('shows failed live key checks and lets the user retry without broadcasting', async () => {
     const availableKeys = vi
       .fn()
-      .mockRejectedValueOnce(new Error('Network unavailable'))
+      .mockRejectedValueOnce(Object.create({ get message() { return 'Network unavailable'; } }))
       .mockResolvedValueOnce([{ id: 4, purpose: 'AUTHENTICATION' }]);
     context(createMockSigner({ availableKeys }));
     render(<SignerStatusCard />);

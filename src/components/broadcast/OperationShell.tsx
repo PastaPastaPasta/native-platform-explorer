@@ -116,6 +116,7 @@ export function OperationShell<TOptions, TResult>({
   const [error, setError] = useState<Error | null>(null);
   const [result, setResult] = useState<TResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [keyRefresh, setKeyRefresh] = useState(0);
   const [keyState, setKeyState] = useState<{
     binding: object;
     keys: SignerKeyDescriptor[];
@@ -192,7 +193,7 @@ export function OperationShell<TOptions, TResult>({
     return () => {
       cancelled = true;
     };
-  }, [descriptor.capability, signer, status, contextBinding]);
+  }, [descriptor.capability, signer, status, contextBinding, keyRefresh]);
   const checkingKeys =
     !!signer &&
     descriptor.capability?.status === 'available' &&
@@ -212,6 +213,10 @@ export function OperationShell<TOptions, TResult>({
   const signerSessionMatches = !signer?.sdk || signer.sdk === sdk;
   const capabilityAvailable =
     !checkingKeys && signerSessionMatches && capability.status === 'available' && !keyError;
+  const retryKeyCheck = () => {
+    setKeyState(null);
+    setKeyRefresh((value) => value + 1);
+  };
 
   const reset = useCallback(() => {
     setReview(null);
@@ -404,7 +409,7 @@ export function OperationShell<TOptions, TResult>({
           </Step>
         ))}
       </Stepper>
-      <SignerStatusCard />
+      <SignerStatusCard refreshId={keyRefresh} onRetry={retryKeyCheck} />
       {notice ? (
         <Text role="status" color="warning" fontSize="sm">
           {notice}
@@ -420,6 +425,11 @@ export function OperationShell<TOptions, TResult>({
                 ? `Could not validate signer keys: ${keyError}`
                 : capability.reason}
         </Text>
+      ) : null}
+      {!submission && keyError ? (
+        <Button size="sm" alignSelf="flex-start" onClick={retryKeyCheck}>
+          Retry signer capabilities
+        </Button>
       ) : null}
       {!submission && signer ? (
         <InfoBlock display={activeStep === 0 ? undefined : 'none'}>

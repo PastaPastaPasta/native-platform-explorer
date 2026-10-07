@@ -76,14 +76,14 @@ function removeStash() {
 const IDLE_TIMEOUT_MS = 10 * 60_000;
 
 export function SignerProvider({ children }: { children: ReactNode }) {
-  const { sdk, network, trusted, status } = useSdk();
+  const { sdk, network, trusted, status, sessionId, sessionSignal } = useSdk();
   const [signer, setSigner] = useState<ExplorerSigner | null>(null);
   const signerRef = useRef<ExplorerSigner | null>(null);
   const mountedRef = useRef(true);
   const generationRef = useRef(0);
   const [connectionGeneration, setConnectionGeneration] = useState(0);
-  const contextRef = useRef({ sdk, network, trusted });
-  contextRef.current = { sdk, network, trusted };
+  const contextRef = useRef({ sdk, network, trusted, sessionId, sessionSignal });
+  contextRef.current = { sdk, network, trusted, sessionId, sessionSignal };
   // Surfaces the previous-session hint. Initial value must be null on both
   // server and client to avoid a hydration mismatch; the useEffect below pulls
   // the real stash from sessionStorage after mount.
@@ -123,6 +123,9 @@ export function SignerProvider({ children }: { children: ReactNode }) {
         current.sdk !== sdk ||
         current.network !== network ||
         current.trusted !== trusted ||
+        current.sessionId !== sessionId ||
+        current.sessionSignal !== sessionSignal ||
+        sessionSignal?.aborted ||
         (next.sdk && next.sdk !== sdk)
       ) {
         next.destroy();
@@ -139,7 +142,7 @@ export function SignerProvider({ children }: { children: ReactNode }) {
       writeStash(next.kind, next.identityId);
       setStash({ kind: next.kind, identityId: next.identityId });
     },
-    [sdk, network, trusted, connectionGeneration],
+    [sdk, network, trusted, sessionId, sessionSignal, connectionGeneration],
   );
 
   // Idle-out: if the tab has been hidden for > IDLE_TIMEOUT_MS, disconnect.

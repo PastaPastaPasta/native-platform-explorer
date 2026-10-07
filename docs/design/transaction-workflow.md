@@ -8,6 +8,8 @@ The form remains mounted during Review so asynchronous form data cannot change i
 
 Every registered operation declares its signing path before review. The shell checks available on-chain keys and blocks review while validation is pending, unavailable, or incompatible. Executors and capability checks use the same operation requirement table. Local adapters check current keys again during signing preparation.
 
+Retrying a failed key check refreshes both the signer card and the operation's capability check. Review stays disabled until the new capability check succeeds; retrying does not submit a transaction.
+
 Top-up runs in the external bridge and has no explorer broadcast button. Raw transition broadcast and voting show their unsupported state immediately. Changing network or signer resets the external top-up identity as well.
 
 ## Outcomes
@@ -21,5 +23,7 @@ Unknown does not imply rejection, and a refreshed balance alone may not establis
 ## Receipts and navigation
 
 Receipts show the original operation, network, trust mode, signer identity, start time, result, and affected identity/recipient/contract/document links. Entity links include the origin network and the configured static base path. Full navigation rehydrates the URL network even when the shared SDK provider would otherwise survive client navigation.
+
+Successful contract registration retains document-type creation shortcuts, and successful document creation retains its repeat-creation link. Those links also keep the receipt's network and static base path.
 
 Regression tests cover context invalidation, immutable bigint inputs, mainnet confirmation reset, readiness gating, delayed preparation, session abort, unmount, duplicate clicks, unknown outcomes, signing-material cleanup, receipt errors, capability failures, and network-scoped receipts. Form tests cover pure JSON validation, contract-schema replacement, and strict disable-key identifiers.
