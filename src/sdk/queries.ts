@@ -8,7 +8,7 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import { useSdk } from './hooks';
+import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery } from './hooks';
 import { getConfig } from '@/config';
 import { classifyProof, type ProofState } from './proofs';
 import { walkInstance, safeStringify } from '@util/wasm-json';
@@ -45,7 +45,7 @@ interface SdkQueryOpts<TData>
   extends Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'> {
   /** Does the underlying SDK method expose a `…WithProof` sibling? Defaults to true. */
   hasProofVariant?: boolean;
-  /** If provided, called instead of `fn` when trusted mode + inspector are on.
+  /** If provided, called instead of `fn` when trusted mode is on.
    *  Returns ProofMetadataResponse; `.data` is unwrapped as the query result,
    *  `.proof` + `.metadata` are stored in the QueryProofStore. */
   withProofFn?: (sdk: EvoSDK) => Promise<unknown>;
@@ -144,68 +144,70 @@ function extractProof(proof: unknown): ProofData | undefined {
  * Core hook: runs a query against the current SDK only when it is ready,
  * and annotates the return with a `proofState` derived from (a) whether
  * the underlying facade method has a proof variant and (b) the current
- * trusted flag. Every cache key is prefixed with (network, trusted).
+ * trusted flag. Every cache key is prefixed with (network, trusted, session).
  *
- * When the Query Inspector is enabled and trusted mode is on, this hook
+ * When trusted mode is on, this hook
  * REPLACES the regular `fn` call with `withProofFn` (the `*WithProof`
  * facade variant) and stores the returned proof + metadata in the
- * QueryProofStore. Devnets also use the proof-returning SDK methods because
- * the current WASM SDK does not implement no-proof query transport; devnet
- * results still classify as unverified because no trusted context is attached.
+ * QueryProofStore when the inspector is enabled.
  */
 function useSdkQuery<TData>(
   key: readonly unknown[],
   fn: (sdk: EvoSDK) => Promise<TData>,
   opts?: SdkQueryOpts<TData>,
 ): SdkQueryResult<TData> {
-  const { sdk, status, network, trusted } = useSdk();
+  const context = useSdk();
+  const { network, trusted } = context;
   const { hasProofVariant = true, withProofFn, methodName, methodParams, ...rest } = opts ?? {};
   const proofStore = useQueryProofStore();
-
-  // Mirror the context's sdk onto a ref so queryFn (which runs async, outside
-  // the render cycle) can poll it. This prevents the "SDK not ready" cold-load
-  // error: on reload, a query's `enabled` flip and its `queryFn` execution
-  // can race, where queryFn closes over a pre-connect `sdk = null` and throws
-  // immediately. Polling the ref lets us wait for the SDK instead.
-  const sdkRef = useRef<EvoSDK | null>(sdk);
-  sdkRef.current = sdk;
 
   const proofStoreRef = useRef(proofStore);
   proofStoreRef.current = proofStore;
 
-  const fullKey = ['npe', network, trusted, ...key] as const;
+  const fullKey = getSdkQueryKey(context, key);
 
-  const q = useQuery<TData, Error>({
-    queryKey: fullKey,
-    queryFn: async () => {
-      if (!sdkRef.current) {
-        // Poll the ref for up to 15s waiting for SdkProvider.connect() to
-        // finish. This is a safety net: the `enabled` gate above should
-        // already prevent entry until the SDK is ready.
-        for (let i = 0; i < 150; i++) {
-          await new Promise((r) => setTimeout(r, 100));
-          if (sdkRef.current) break;
+  const q = useSessionQuery<TData>(key, async (sdk, { assertActive }) => {
+    const store = proofStoreRef.current;
+    const storeKey = JSON.stringify(fullKey);
+    const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
+    const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
+    const t0 = performance.now();
+
+    if (useProofTransport) {
+      try {
+        const response = (await withProofFn!(sdk)) as
+          | { data?: unknown; metadata?: unknown; proof?: unknown }
+          | undefined;
+        assertActive();
+        const elapsed = performance.now() - t0;
+        const data = response?.data;
+        if (store.enabled) {
+          store.record(storeKey, {
+            queryKey: fullKey,
+            methodName: inspectorMethodName,
+            methodParams: methodParams ?? {},
+            hasProofVariant: true,
+            timestamp: Date.now(),
+            durationMs: Math.round(elapsed),
+            status: 'success',
+            result: safeSerialize(data),
+            metadata: extractMetadata(response?.metadata),
+            proof: extractProof(response?.proof),
+          });
         }
-        if (!sdkRef.current) {
-          throw new Error(
-            'SDK did not become ready within 15s. Check your network connection or DAPI endpoints.',
-          );
-        }
-      }
-
-      const store = proofStoreRef.current;
-      const storeKey = JSON.stringify(fullKey);
-      const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
-      const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
-      const t0 = performance.now();
-
-      if (useProofTransport) {
+        return (data ?? null) as TData;
+      } catch (err) {
+        assertActive();
+        const proofError = extractErrorMessage(err);
+        console.error(`[NPE] ${inspectorMethodName} failed:`, proofError, err);
+        // Fall back to the non-proof variant so the explorer still works.
+        // Record the entry as a success (data was retrieved) but include the
+        // proof-capture error so the inspector can show both: "data succeeded,
+        // but proof was not captured because ...".
         try {
-          const response = (await withProofFn!(sdkRef.current)) as
-            | { data?: unknown; metadata?: unknown; proof?: unknown }
-            | undefined;
+          const result = await fn(sdk);
+          assertActive();
           const elapsed = performance.now() - t0;
-          const data = response?.data;
           if (store.enabled) {
             store.record(storeKey, {
               queryKey: fullKey,
@@ -215,102 +217,77 @@ function useSdkQuery<TData>(
               timestamp: Date.now(),
               durationMs: Math.round(elapsed),
               status: 'success',
-              result: safeSerialize(data),
-              metadata: extractMetadata(response?.metadata),
-              proof: extractProof(response?.proof),
+              result: safeSerialize(result),
+              error: `Proof capture failed: ${proofError}`,
             });
           }
-          return (data ?? null) as TData;
-        } catch (err) {
-          const proofError = extractErrorMessage(err);
-          console.error(`[NPE] ${inspectorMethodName} failed:`, proofError, err);
-          // Fall back to the non-proof variant so the explorer still works.
-          // Record the entry as a success (data was retrieved) but include the
-          // proof-capture error so the inspector can show both: "data succeeded,
-          // but proof was not captured because ...".
-          try {
-            const result = await fn(sdkRef.current!);
+          return (result ?? null) as TData;
+        } catch (fallbackErr) {
+          assertActive();
+          const fallbackMsg = extractErrorMessage(fallbackErr);
+          console.error(
+            `[NPE] ${inspectorMethodName} fallback failed:`,
+            fallbackMsg,
+            fallbackErr,
+          );
+          if (store.enabled) {
             const elapsed = performance.now() - t0;
-            if (store.enabled) {
-              store.record(storeKey, {
-                queryKey: fullKey,
-                methodName: inspectorMethodName,
-                methodParams: methodParams ?? {},
-                hasProofVariant: true,
-                timestamp: Date.now(),
-                durationMs: Math.round(elapsed),
-                status: 'success',
-                result: safeSerialize(result),
-                error: `Proof capture failed: ${proofError}`,
-              });
-            }
-            return (result ?? null) as TData;
-          } catch (fallbackErr) {
-            const fallbackMsg = extractErrorMessage(fallbackErr);
-            console.error(
-              `[NPE] ${inspectorMethodName} fallback failed:`,
-              fallbackMsg,
-              fallbackErr,
-            );
-            if (store.enabled) {
-              const elapsed = performance.now() - t0;
-              store.record(storeKey, {
-                queryKey: fullKey,
-                methodName: inspectorMethodName,
-                methodParams: methodParams ?? {},
-                hasProofVariant: true,
-                timestamp: Date.now(),
-                durationMs: Math.round(elapsed),
-                status: 'error',
-                error: `Proof: ${proofError} | Fallback: ${fallbackMsg}`,
-              });
-            }
-            throw normalizeError(fallbackErr);
+            store.record(storeKey, {
+              queryKey: fullKey,
+              methodName: inspectorMethodName,
+              methodParams: methodParams ?? {},
+              hasProofVariant: true,
+              timestamp: Date.now(),
+              durationMs: Math.round(elapsed),
+              status: 'error',
+              error: `Proof: ${proofError} | Fallback: ${fallbackMsg}`,
+            });
           }
+          throw normalizeError(fallbackErr);
         }
       }
+    }
 
-      // Non-proof path (trusted off, inspector disabled, or no withProofFn)
-      try {
-        const result = await fn(sdkRef.current);
+    // Ordinary path (trusted off or no withProofFn)
+    try {
+      const result = await fn(sdk);
+      assertActive();
+      const elapsed = performance.now() - t0;
+
+      if (store.enabled && methodName) {
+        store.record(storeKey, {
+          queryKey: fullKey,
+          methodName: inspectorMethodName,
+          methodParams: methodParams ?? {},
+          hasProofVariant,
+          timestamp: Date.now(),
+          durationMs: Math.round(elapsed),
+          status: 'success',
+          result: safeSerialize(result),
+        });
+      }
+
+      return (result ?? null) as TData;
+    } catch (err) {
+      assertActive();
+      const errMsg = extractErrorMessage(err);
+      console.error(`[NPE] ${inspectorMethodName} failed:`, errMsg, err);
+      if (store.enabled && methodName) {
         const elapsed = performance.now() - t0;
-
-        if (store.enabled && methodName) {
-          store.record(storeKey, {
-            queryKey: fullKey,
-            methodName: inspectorMethodName,
-            methodParams: methodParams ?? {},
-            hasProofVariant,
-            timestamp: Date.now(),
-            durationMs: Math.round(elapsed),
-            status: 'success',
-            result: safeSerialize(result),
-          });
-        }
-
-        return (result ?? null) as TData;
-      } catch (err) {
-        const errMsg = extractErrorMessage(err);
-        console.error(`[NPE] ${inspectorMethodName} failed:`, errMsg, err);
-        if (store.enabled && methodName) {
-          const elapsed = performance.now() - t0;
-          store.record(storeKey, {
-            queryKey: fullKey,
-            methodName: inspectorMethodName,
-            methodParams: methodParams ?? {},
-            hasProofVariant,
-            timestamp: Date.now(),
-            durationMs: Math.round(elapsed),
-            status: 'error',
-            error: errMsg,
-          });
-        }
-        throw normalizeError(err);
+        store.record(storeKey, {
+          queryKey: fullKey,
+          methodName: inspectorMethodName,
+          methodParams: methodParams ?? {},
+          hasProofVariant,
+          timestamp: Date.now(),
+          durationMs: Math.round(elapsed),
+          status: 'error',
+          error: errMsg,
+        });
       }
-    },
-    enabled: status === 'ready' && !!sdk && (rest.enabled ?? true),
-    ...rest,
-  });
+      throw normalizeError(err);
+    }
+  }, rest);
   const proofState = classifyProof(q, { trusted, hasProofVariant });
   // RQ's stock `isLoading` is `isPending && isFetching`, so it goes false the
   // moment a query is gated off — including the SDK-boot window when the
@@ -380,7 +357,7 @@ function jsonFriendly(value: unknown): unknown {
 // ----- staleTime conventions from PRD §11.2 -----
 const STRUCTURAL = 5 * 60_000; // 5 min (contract schema, identity keys)
 const LIVE = 30_000; // 30 s (balances, status)
-const IMMUTABLE = Infinity; // document-at-revision, finalized epoch
+const IMMUTABLE = Infinity; // deterministic validation, finalized epoch
 
 // ----- identities -----
 export function useIdentity(id: string | undefined) {
@@ -469,7 +446,7 @@ export function useDocument(
   return useSdkQuery(
     ['documents', 'get', contractId, type, docId],
     (sdk) => sdk.documents.get(contractId!, type!, docId!) as Promise<unknown>,
-    { enabled: !!contractId && !!type && !!docId, staleTime: IMMUTABLE, withProofFn: (sdk) => sdk.documents.getWithProof(contractId!, type!, docId!), methodName: 'documents.get', methodParams: { contractId, documentType: type, documentId: docId } },
+    { enabled: !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.getWithProof(contractId!, type!, docId!), methodName: 'documents.get', methodParams: { contractId, documentType: type, documentId: docId } },
   );
 }
 
@@ -643,7 +620,10 @@ export interface DocumentsQueryParams {
   groupBy?: string[];
 }
 
-export function useDocumentsQuery(params: DocumentsQueryParams | undefined) {
+export function useDocumentsQuery(
+  params: DocumentsQueryParams | undefined,
+  executionId?: string | number,
+) {
   const key = params
     ? [
         params.dataContractId,
@@ -655,7 +635,7 @@ export function useDocumentsQuery(params: DocumentsQueryParams | undefined) {
       ]
     : [];
   return useSdkQuery(
-    ['documents', 'query', ...key],
+    ['documents', 'query', ...key, ...(executionId === undefined ? [] : ['execution', executionId])],
     (sdk) => sdk.documents.query(params as never) as Promise<unknown>,
     { enabled: !!params, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.queryWithProof(params as never), methodName: 'documents.query', methodParams: params ? { dataContractId: params.dataContractId, documentTypeName: params.documentTypeName, where: params.where, orderBy: params.orderBy, limit: params.limit, startAfter: params.startAfter } : {} },
   );
@@ -698,6 +678,7 @@ export function useDocumentsAggregate(
   params: DocumentsQueryParams | undefined,
   kind: AggregateKind | undefined,
   field: string | undefined,
+  executionId?: string | number,
 ) {
   const needsField = kind === 'sum' || kind === 'avg';
   const enabled = !!params && !!kind && (!needsField || !!field);
@@ -718,6 +699,7 @@ export function useDocumentsAggregate(
       JSON.stringify(params?.groupBy ?? []),
       params?.limit ?? '',
       field ?? '',
+      ...(executionId === undefined ? [] : ['execution', executionId]),
     ],
     async (sdk) => {
       const w = (await sdk.getWasmSdkConnected()) as unknown as WasmAggregateApi;
@@ -847,7 +829,7 @@ export function useSystemStatus() {
   return useSdkQuery(
     ['system', 'status'],
     (sdk) => sdk.system.status() as Promise<unknown>,
-    { staleTime: LIVE, hasProofVariant: false, methodName: 'system.status', methodParams: {} },
+    { staleTime: LIVE, refetchInterval: LIVE, hasProofVariant: false, methodName: 'system.status', methodParams: {} },
   );
 }
 

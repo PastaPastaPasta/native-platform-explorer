@@ -74,6 +74,8 @@ export function createSdkContextValue(
     status: 'ready',
     network: 'testnet' as Network,
     trusted: true,
+    sessionId: 1,
+    sessionSignal: null,
     error: null,
     setNetwork: vi.fn(),
     setTrusted: vi.fn(),

@@ -3,12 +3,16 @@
 import { useContext } from 'react';
 import {
   useQuery,
+  useQueryClient,
+  CancelledError,
+  type QueryClient,
   type QueryKey,
   type UseQueryOptions,
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { SdkContext, type SdkContextValue } from './SdkProvider';
+import type { Network } from './networks';
 
 export function useSdk(): SdkContextValue {
   const ctx = useContext(SdkContext);
@@ -31,23 +35,64 @@ export function useReadyEvoSdk(): EvoSDK {
   return sdk;
 }
 
-/** Stage-2-ready wrapper that ties React Query to the current SDK instance.
- *  The query key is prefixed with (network, trusted) so switching either of
- *  those will not surface stale cached responses from the other client. */
+export function getSdkQueryKey(
+  { network, trusted, sessionId }: Pick<SdkContextValue, 'network' | 'trusted' | 'sessionId'>,
+  key: QueryKey,
+): QueryKey {
+  return ['npe', network, trusted, sessionId, ...key];
+}
+
+/** Confirmed writes can affect balances, nonces, schemas, and list queries.
+ * Invalidate every SDK session/trust variant on the submitted network. */
+export function invalidateNetworkQueries(client: QueryClient, network: Network) {
+  return client.invalidateQueries({ queryKey: ['npe', network] });
+}
+
+export interface SdkQueryExecution {
+  signal: AbortSignal;
+  queryKey: QueryKey;
+  /** Guard side effects after an SDK await; the SDK does not accept a signal. */
+  assertActive: () => void;
+}
+
+/** One readiness/session boundary shared by ordinary and proof-aware queries.
+ * Caller options may restrict execution but cannot override SDK readiness. */
 export function useSdkQuery<TData>(
   key: QueryKey,
-  fn: (sdk: EvoSDK) => Promise<TData>,
+  fn: (sdk: EvoSDK, execution: SdkQueryExecution) => Promise<TData>,
   opts?: Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'>,
 ): UseQueryResult<TData, Error> {
-  const { sdk, status, network, trusted } = useSdk();
-  const fullKey = ['npe', network, trusted, ...key] as const;
+  const context = useSdk();
+  const { sdk, status, sessionSignal } = context;
+  const client = useQueryClient();
+  const fullKey = getSdkQueryKey(context, key);
+  const ready = status === 'ready' && !!sdk && !sessionSignal?.aborted;
   return useQuery<TData, Error>({
-    queryKey: fullKey,
-    queryFn: async () => {
-      if (!sdk) throw new Error('SDK is not ready yet.');
-      return fn(sdk);
-    },
-    enabled: status === 'ready' && !!sdk && (opts?.enabled ?? true),
     ...opts,
+    queryKey: fullKey,
+    queryFn: async ({ signal }) => {
+      const assertActive = () => {
+        if (!ready || !sdk) throw new Error('SDK is not ready yet.');
+        if (signal.aborted || sessionSignal?.aborted) {
+          throw new CancelledError({ revert: true });
+        }
+      };
+      assertActive();
+      // Reading React Query's signal also makes unobserved requests cancellable.
+      // Session cancellation stops React Query immediately; checks after await
+      // prevent SDK requests that cannot be aborted from publishing side effects.
+      const cancel = () => { void client.cancelQueries({ queryKey: fullKey, exact: true }); };
+      sessionSignal?.addEventListener('abort', cancel, { once: true });
+      try {
+        const result = await fn(sdk!, { signal, queryKey: fullKey, assertActive });
+        assertActive();
+        return result;
+      } finally {
+        sessionSignal?.removeEventListener('abort', cancel);
+      }
+    },
+    enabled: (query) => ready && (
+      typeof opts?.enabled === 'function' ? opts.enabled(query) : (opts?.enabled ?? true)
+    ),
   });
 }
