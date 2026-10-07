@@ -14,6 +14,7 @@ import {
   parseSavedQueries,
   savedQueriesKey,
   saveSavedQueries,
+  updateSavedQueries,
   serializeQueryCsv,
   serializeQueryJson,
 } from '../query-workspace';
@@ -336,6 +337,69 @@ describe('buildSdkExample', () => {
 });
 
 describe('saved queries', () => {
+  it('does not apply any mutation or write if reading fresh storage is denied', () => {
+    const storage = installStorageMock('localStorage');
+    const update = vi.fn(() => [{ name: 'Local', sql: 'SELECT * FROM type' }]);
+    const set = vi.spyOn(storage, 'setItem');
+    const remove = vi.spyOn(storage, 'removeItem');
+    vi.spyOn(storage, 'getItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    expect(updateSavedQueries('testnet', 'contract', update, storage)).toEqual({
+      status: 'unavailable',
+    });
+    expect(update).not.toHaveBeenCalled();
+    expect(set).not.toHaveBeenCalled();
+    expect(remove).not.toHaveBeenCalled();
+    expect(updateSavedQueries('testnet', 'contract', update, null)).toEqual({
+      status: 'unavailable',
+    });
+  });
+
+  it('validates malformed fresh storage without executing or retaining untrusted fields', () => {
+    const storage = installStorageMock('localStorage', {
+      [savedQueriesKey('testnet', 'contract')]: '{broken',
+    });
+    const added = { name: 'Local', sql: 'SELECT * FROM type' };
+    expect(
+      updateSavedQueries('testnet', 'contract', (queries) => [...queries, added], storage),
+    ).toEqual({ status: 'saved', queries: [added] });
+    expect(loadSavedQueries('testnet', 'contract', storage)).toEqual([added]);
+  });
+
+  it('does not truncate a twenty-first entry or change the persisted list', () => {
+    const storage = installStorageMock('localStorage');
+    const full = Array.from({ length: MAX_SAVED_QUERIES }, (_, i) => ({
+      name: `Saved ${i}`,
+      sql: 'SELECT * FROM type',
+    }));
+    saveSavedQueries('testnet', 'contract', full, storage);
+    const write = vi.spyOn(storage, 'setItem');
+    expect(
+      updateSavedQueries(
+        'testnet',
+        'contract',
+        (queries) => [...queries, { name: 'Extra', sql: 'SELECT * FROM type' }],
+        storage,
+      ),
+    ).toEqual({ status: 'limit', queries: full });
+    expect(write).not.toHaveBeenCalled();
+    expect(loadSavedQueries('testnet', 'contract', storage)).toEqual(full);
+  });
+
+  it('preserves current data when an explicit clear is denied', () => {
+    const storage = installStorageMock('localStorage');
+    const existing = [{ name: 'Keep', sql: 'SELECT * FROM type' }];
+    saveSavedQueries('testnet', 'contract', existing, storage);
+    vi.spyOn(storage, 'removeItem').mockImplementation(() => {
+      throw new Error('denied');
+    });
+    expect(updateSavedQueries('testnet', 'contract', () => [], storage)).toEqual({
+      status: 'unavailable',
+    });
+    expect(loadSavedQueries('testnet', 'contract', storage)).toEqual(existing);
+  });
+
   it('validates and bounds storage records instead of trusting parsed JSON', () => {
     const entries = [
       null,
