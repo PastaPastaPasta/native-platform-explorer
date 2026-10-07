@@ -1,7 +1,45 @@
 import { describe, expect, it } from 'vitest';
-import { aggregateProof, classifyProof, describeProofState, getQuorumKeySource, isProofVerificationError, type ProofState } from '../proofs';
+import { aggregateProof, classifyProof, describeProofState, getQuorumKeySource, isProofFallbackBlocked, isProofVerificationError, type ProofState } from '../proofs';
+import { normalizeError } from '../errors';
+import { nativeProofError, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
 
 describe('classifyProof', () => {
+  it.each(['raw', 'normalized', 'wrapped'])('classifies the live SDK decoder error as unavailable (%s)', (shape) => {
+    const native = nativeProofError();
+    const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Proof request failed', { cause: native });
+    expect(isProofVerificationError(error)).toBe(false);
+    expect(isProofFallbackBlocked(error)).toBe(true);
+    const state = classifyProof({ status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 }, { trusted: true, hasProofVariant: true });
+    expect(state.kind).toBe('unavailable');
+    expect(describeProofState(state)).toContain('proof verification was not completed');
+    expect(normalizeError(native).message).toBe(`Proof [-1]: ${SDK_PROOF_DECODE_MESSAGE}`);
+  });
+
+  it('does not describe unavailable proof context or unsupported versions as cryptographic failures', () => {
+    expect(isProofVerificationError(nativeProofError('unsupported proof version: 2'))).toBe(false);
+    expect(isProofVerificationError(nativeProofError('quorum public key unavailable'))).toBe(false);
+  });
+
+  it.each([
+    ['quorum signature mismatch', true],
+    ['state root differs', true],
+    ['unrecognized native proof failure', true],
+    ['proof verification failed: unable to decode proof', false],
+  ])('keeps fallback blocked for native errors: %s', (message, failed) => {
+    const error = new Error('Request failed', { cause: nativeProofError(message) });
+    expect(isProofVerificationError(error)).toBe(failed);
+    expect(isProofFallbackBlocked(error)).toBe(true);
+  });
+
+  it('retains explicit crypto mismatches through unavailable wrappers and string causes', () => {
+    expect(isProofVerificationError(new Error('quorum public key unavailable', { cause: nativeProofError('invalid quorum signature') }))).toBe(true);
+    const wrappedString = new Error('Request failed', { cause: 'invalid proof' });
+    expect(isProofVerificationError(wrappedString)).toBe(true);
+    expect(isProofFallbackBlocked(wrappedString)).toBe(true);
+    expect(isProofFallbackBlocked(new Error('network offline'))).toBe(false);
+    expect(isProofVerificationError(new Error('network offline'))).toBe(false);
+  });
+
   it('returns unverified-no-variant when the method has no proof sibling', () => {
     const r = classifyProof(
       { status: 'success', data: 1, error: null, fetchStatus: 'idle', dataUpdatedAt: 1234 },

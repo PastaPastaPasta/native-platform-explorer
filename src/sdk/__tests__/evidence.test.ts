@@ -30,6 +30,36 @@ describe('evidence bundle', () => {
     expect(bundle.queries[0]!.verification.proofAvailability).toBe('captured');
   });
 
+  it('preserves batch capture limits without inventing an aggregate proof or response height', () => {
+    const captureNote = 'Combined results from separate SDK-verified batches. No single proof payload or response height covers this range.';
+    const bundle = JSON.parse(serializeEvidenceBundle([{
+      ...entry,
+      methodName: 'epoch.epochsInfo',
+      methodParams: {
+        requestedRange: { from: 40, to: 59 },
+        plannedBatches: [
+          { startEpoch: 40, count: 10, ascending: true },
+          { startEpoch: 50, count: 10, ascending: true },
+        ],
+      },
+      result: { '40': { totalCredits: 9007199254740993n } },
+      captureNote,
+      metadata: undefined,
+      proof: undefined,
+    }], 5000));
+    const aggregate = bundle.queries[0];
+    expect(aggregate.verification).toEqual({
+      outcome: 'verified', proofAvailability: 'not-captured', captureNote,
+    });
+    expect(aggregate.query.params.requestedRange).toEqual({ from: 40, to: 59 });
+    expect(aggregate.query.params.plannedBatches).toHaveLength(2);
+    expect(aggregate.result['40'].totalCredits).toBe('9007199254740993');
+    expect(aggregate).not.toHaveProperty('metadata');
+    expect(aggregate).not.toHaveProperty('proof');
+    const ordinary = JSON.parse(serializeEvidenceBundle([entry], 5000)).queries[0];
+    expect(ordinary.verification).not.toHaveProperty('captureNote');
+  });
+
   it('distinguishes capture unavailable, query unavailable, and storage omissions', () => {
     const bundle = createEvidenceBundle([
       { ...entry, proofCaptureError: 'capture unavailable' },

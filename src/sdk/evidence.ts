@@ -38,6 +38,7 @@ export function createEvidenceBundle(entries: readonly QueryProofEntry[], export
         outcome: entry.verification ?? 'unknown',
         proofAvailability: entry.proof ? 'captured' : entry.omitted?.proof ? 'omitted-storage-limit' : 'not-captured',
         captureError: entry.proofCaptureError,
+        captureNote: entry.captureNote,
       },
       result: entry.result,
       resultCaptureError: entry.resultCaptureError,

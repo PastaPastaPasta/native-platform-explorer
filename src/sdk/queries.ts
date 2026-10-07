@@ -9,7 +9,7 @@ import {
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery } from './hooks';
 import { getConfig } from '@/config';
-import { classifyProof, getQuorumKeySource, isProofVerificationError, verificationForResponse, type ProofState } from './proofs';
+import { classifyProof, getQuorumKeySource, isProofFallbackBlocked, verificationForResponse, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
 import { extractErrorMessage, normalizeError } from './errors';
 import {
@@ -176,9 +176,9 @@ function useSdkQuery<TData>(
       } catch (error) {
         assertActive();
         const captureError = extractErrorMessage(error);
-        if (isProofVerificationError(error)) {
+        if (isProofFallbackBlocked(error)) {
           record('error', { error: captureError }, error);
-          // Never bypass an explicit proof failure with another request.
+          // Never retry native proof errors, including decoding/context errors.
           throw normalizeError(error);
         }
         // A capture/transport failure may retry through the same trusted SDK's

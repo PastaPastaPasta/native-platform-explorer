@@ -5,6 +5,9 @@ import { useQueryProofStore } from '@contexts/QueryProofStore';
 import { useTotalCreditsInPlatform } from '../queries';
 import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
+import { nativeProofError, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
+import { createEvidenceBundle } from '../evidence';
+import { describeProofState } from '../proofs';
 
 function TotalCreditsProbe() {
   const query = useTotalCreditsInPlatform();
@@ -15,6 +18,8 @@ function TotalCreditsProbe() {
       <div data-testid="query-state">
         {query.status}:{String(query.data ?? '')}:{query.proofState.kind}
       </div>
+      <div data-testid="proof-label">{describeProofState(query.proofState)}</div>
+      <div data-testid="evidence-outcome">{createEvidenceBundle(store.entries).queries[0]?.verification.outcome}</div>
       <div data-testid="proof-entry">
         {store.entries.length}:{firstEntry?.status ?? ''}:{firstEntry?.error ?? ''}:{firstEntry?.proofCaptureError ?? ''}:{firstEntry?.verification ?? ''}:{firstEntry?.network ?? ''}:{String(firstEntry?.trusted ?? '')}:{firstEntry?.resultCaptureError ?? ''}
       </div>
@@ -27,6 +32,20 @@ function TotalCreditsProbe() {
 }
 
 describe('SDK query proof flow', () => {
+  it.each(['raw', 'wrapped'])('never falls back on the live native decoder error and exports unavailable (%s)', async (shape) => {
+    const native = nativeProofError();
+    const error = shape === 'raw' ? native : new Error('Proof request failed', { cause: native });
+    const ordinary = vi.fn().mockResolvedValue(42);
+    const capture = vi.fn().mockRejectedValue(error);
+    const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: capture } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('error::unavailable'));
+    expect(ordinary).not.toHaveBeenCalled();
+    expect(screen.getByTestId('proof-label')).toHaveTextContent('proof verification was not completed');
+    expect(screen.getByTestId('evidence-outcome')).toHaveTextContent('unavailable');
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent(shape === 'raw' ? `Proof [-1]: ${SDK_PROOF_DECODE_MESSAGE}` : 'Proof request failed');
+  });
+
   it('records capture unavailability separately from successful internal SDK verification', async () => {
     const totalCreditsInPlatform = vi.fn().mockResolvedValue(42);
     const totalCreditsInPlatformWithProof = vi
@@ -87,14 +106,15 @@ describe('SDK query proof flow', () => {
     expect(screen.getByTestId('proof-entry')).toHaveTextContent('1:success:::verified:testnet:true');
   });
 
-  it('never retries a cryptographic proof failure through the ordinary method', async () => {
+  it.each(['state root differs', 'invalid quorum signature', 'unrecognized native proof failure'])('never retries a native proof failure through the ordinary method: %s', async (message) => {
     const ordinary = vi.fn().mockResolvedValue(42);
-    const capture = vi.fn().mockRejectedValue({ kind: 4, name: 'Proof', message: 'state root differs' });
+    const capture = vi.fn().mockRejectedValue(nativeProofError(message));
     const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: capture } });
     renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
     await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('error::failed'));
     expect(ordinary).not.toHaveBeenCalled();
-    expect(screen.getByTestId('proof-entry')).toHaveTextContent('1:error:Proof: state root differs::failed:testnet:true');
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent(`1:error:Proof [-1]: ${message}::failed:testnet:true`);
+    expect(screen.getByTestId('evidence-outcome')).toHaveTextContent('failed');
   });
 
   it('does not report a missing proof response as a verified absent value', async () => {

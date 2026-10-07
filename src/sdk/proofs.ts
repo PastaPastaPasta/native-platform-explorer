@@ -16,25 +16,58 @@ export interface ClassifyOptions {
   hasProofVariant: boolean;
 }
 
-/** Only explicit SDK verification failures warrant a cryptographic-failure label.
- * Transport, parsing, missing context, and unavailable quorum-key errors do not. */
-export function isProofVerificationError(error: unknown): boolean {
-  const explicitMessage = /\b(?:proof verification (?:failed|error)|invalid (?:grovedb |merkle )?proof|invalid quorum signature)\b/i;
-  if (typeof error === 'string') return explicitMessage.test(error);
+type ProofError = { code?: unknown; kind?: unknown; name?: unknown; message?: unknown; cause?: unknown };
+
+const PROOF_ERROR_TAG = /^(ProofVerificationFailed|InvalidProof|InvalidSignature|PROOF_VERIFICATION_FAILED|DriveProofError|Proof|InvalidProvedResponse)$/;
+const VERIFICATION_FAILURE = /\b(?:proof verification (?:failed|error)|invalid (?:grovedb |merkle )?proof|invalid quorum signature)\b/i;
+const CRYPTOGRAPHIC_MISMATCH = /\b(?:invalid (?:quorum )?signature|(?:quorum )?signature (?:verification )?(?:failed|mismatch)|(?:state |merkle )?root (?:hash )?(?:mismatch|differs))\b/i;
+const PROOF_UNAVAILABLE = /\b(?:(?:unable|failed|cannot) to (?:decode|parse) (?:the )?(?:grovedb )?proof|unsupported (?:proof|protocol) version|(?:missing|unavailable) (?:proof context|quorum (?:public )?key)|(?:proof context|quorum (?:public )?key) (?:is )?(?:missing|unavailable)|failed to (?:retrieve|fetch) quorum (?:public )?key)\b/i;
+
+/** SDK fields live on prototype getters; normalization preserves the raw error
+ * on cause. Traverse both without enumerating or importing the WASM runtime. */
+function* proofErrorChain(error: unknown): Generator<ProofError> {
   const seen = new Set<object>();
   let current = error;
-  while (current && typeof current === 'object' && !seen.has(current)) {
+  while (current) {
+    if (typeof current === 'string') { yield { message: current }; return; }
+    if (typeof current !== 'object' || seen.has(current)) return;
     seen.add(current);
-    const e = current as { code?: unknown; kind?: unknown; name?: unknown; message?: unknown; cause?: unknown };
-    const explicitFailure = /^(ProofVerificationFailed|InvalidProof|InvalidSignature|PROOF_VERIFICATION_FAILED|DriveProofError|Proof|InvalidProvedResponse)$/;
-    if ([e.code, e.kind, e.name].some((tag) => explicitFailure.test(String(tag ?? '')))) return true;
-    // WasmSdkErrorKind in the pinned 4.0.0-rc.2 SDK: DriveProofError=2,
-    // Proof=4, InvalidProvedResponse=5. Do not import its runtime/WASM bundle.
-    if (typeof e.kind === 'number' && [2, 4, 5].includes(e.kind)) return true;
-    if (typeof e.message === 'string' && explicitMessage.test(e.message)) return true;
+    const e = current as ProofError;
+    yield e;
     current = e.cause;
   }
+}
+
+function isNativeProofError(e: ProofError): boolean {
+  // Pinned rc.2 WasmSdkErrorKind: DriveProofError=2, Proof=4,
+  // InvalidProvedResponse=5. These categories include decoding failures.
+  return [e.code, e.kind, e.name].some((tag) => PROOF_ERROR_TAG.test(String(tag ?? '')))
+    || (typeof e.kind === 'number' && [2, 4, 5].includes(e.kind));
+}
+
+/** A native proof error must never trigger an ordinary-method retry, even when
+ * decoding/context limitations prevent a cryptographic-failure diagnosis. */
+export function isProofFallbackBlocked(error: unknown): boolean {
+  for (const e of proofErrorChain(error)) {
+    if (isNativeProofError(e)) return true;
+    if (typeof e.message === 'string' && (VERIFICATION_FAILURE.test(e.message) || CRYPTOGRAPHIC_MISMATCH.test(e.message) || PROOF_UNAVAILABLE.test(e.message))) return true;
+  }
   return false;
+}
+
+/** Recognized decoding/context limitations are unavailable. Explicit crypto
+ * mismatches and otherwise unknown native proof errors remain failures. */
+export function isProofVerificationError(error: unknown): boolean {
+  let proofFailure = false;
+  let unavailable = false;
+  for (const e of proofErrorChain(error)) {
+    proofFailure ||= isNativeProofError(e);
+    if (typeof e.message !== 'string') continue;
+    if (CRYPTOGRAPHIC_MISMATCH.test(e.message)) return true;
+    unavailable ||= PROOF_UNAVAILABLE.test(e.message);
+    proofFailure ||= VERIFICATION_FAILURE.test(e.message);
+  }
+  return proofFailure && !unavailable;
 }
 
 export type VerificationResult = 'verified' | 'not-verified' | 'failed' | 'unavailable';
