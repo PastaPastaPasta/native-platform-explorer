@@ -14,37 +14,41 @@ export function IdentityUpdateKeysForm({
 }: OperationFormProps<IdentityUpdateKeysOptions>) {
   const [addText, setAddText] = useState('[]');
   const [disableText, setDisableText] = useState('');
-  const [error, setError] = useState<string | null>(null);
 
-  const parsed = useMemo(() => {
+  const { parsed, error } = useMemo(() => {
     let addPublicKeysJson: Record<string, unknown>[] | undefined;
     let disableKeyIds: number[] | undefined;
     try {
       const addJson: unknown = JSON.parse(addText);
       if (!Array.isArray(addJson)) {
-        setError('Add-keys must be a JSON array.');
-        return null;
+        return { parsed: null, error: 'Add-keys must be a JSON array.' };
       }
       addPublicKeysJson = addJson as Record<string, unknown>[];
     } catch (e) {
-      setError(`Add-keys JSON: ${e instanceof Error ? e.message : String(e)}`);
-      return null;
+      return {
+        parsed: null,
+        error: `Add-keys JSON: ${e instanceof Error ? e.message : String(e)}`,
+      };
     }
 
     const trimmed = disableText.trim();
     if (trimmed) {
-      const ids = trimmed
-        .split(/[,\s]+/)
-        .map((s) => Number(s))
-        .filter((n) => Number.isInteger(n));
-      if (ids.length === 0) {
-        setError('Disable-key IDs must be comma/space-separated integers.');
-        return null;
+      const entries = trimmed.split(/[,\s]+/);
+      const ids = entries.map(Number);
+      if (
+        entries.some(
+          (entry, index) =>
+            !/^\d+$/.test(entry) || !Number.isSafeInteger(ids[index]) || ids[index]! > 0xffffffff,
+        )
+      ) {
+        return {
+          parsed: null,
+          error: 'Disable-key IDs must be comma/space-separated unsigned 32-bit integers.',
+        };
       }
       disableKeyIds = ids;
     }
-    setError(null);
-    return { addPublicKeysJson, disableKeyIds };
+    return { parsed: { addPublicKeysJson, disableKeyIds }, error: null };
   }, [addText, disableText]);
 
   useEffect(() => {
@@ -64,10 +68,18 @@ export function IdentityUpdateKeysForm({
   return (
     <VStack align="stretch" spacing={4}>
       <Box>
-        <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
+        <Text
+          as="label"
+          htmlFor="identity-keys-add"
+          fontSize="sm"
+          color="gray.100"
+          fontWeight={500}
+          mb={1}
+        >
           Keys to add (JSON array of IdentityPublicKeyInCreation objects)
         </Text>
         <Textarea
+          id="identity-keys-add"
           rows={10}
           fontFamily="mono"
           fontSize="xs"
@@ -79,10 +91,18 @@ export function IdentityUpdateKeysForm({
         />
       </Box>
       <Box>
-        <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
+        <Text
+          as="label"
+          htmlFor="identity-keys-disable"
+          fontSize="sm"
+          color="gray.100"
+          fontWeight={500}
+          mb={1}
+        >
           Key IDs to disable
         </Text>
         <Textarea
+          id="identity-keys-disable"
           rows={2}
           fontFamily="mono"
           fontSize="xs"

@@ -36,12 +36,15 @@ const STASH_KEY = 'npe:signer-kind';
 
 function readStash(): SignerStash | null {
   if (typeof window === 'undefined') return null;
-  const raw = window.sessionStorage.getItem(STASH_KEY);
-  if (!raw) return null;
   try {
+    const raw = window.sessionStorage.getItem(STASH_KEY);
+    if (!raw) return null;
     const parsed = JSON.parse(raw) as Partial<SignerStash>;
     if (
-      (parsed.kind === 'extension' || parsed.kind === 'mnemonic' || parsed.kind === 'wif') &&
+      (parsed.kind === 'extension' ||
+        parsed.kind === 'mnemonic' ||
+        parsed.kind === 'wif' ||
+        parsed.kind === 'backup') &&
       typeof parsed.identityId === 'string'
     ) {
       return { kind: parsed.kind, identityId: parsed.identityId };
@@ -54,19 +57,33 @@ function readStash(): SignerStash | null {
 
 function writeStash(kind: SignerKind, identityId: string) {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.setItem(STASH_KEY, JSON.stringify({ kind, identityId }));
+  try {
+    window.sessionStorage.setItem(STASH_KEY, JSON.stringify({ kind, identityId }));
+  } catch {
+    /* Storage may be blocked; the live signer still works. */
+  }
 }
 
 function removeStash() {
   if (typeof window === 'undefined') return;
-  window.sessionStorage.removeItem(STASH_KEY);
+  try {
+    window.sessionStorage.removeItem(STASH_KEY);
+  } catch {
+    /* Storage may be blocked. */
+  }
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60_000;
 
 export function SignerProvider({ children }: { children: ReactNode }) {
-  const { network, trusted, status } = useSdk();
+  const { sdk, network, trusted, status, sessionId, sessionSignal } = useSdk();
   const [signer, setSigner] = useState<ExplorerSigner | null>(null);
+  const signerRef = useRef<ExplorerSigner | null>(null);
+  const mountedRef = useRef(true);
+  const generationRef = useRef(0);
+  const [connectionGeneration, setConnectionGeneration] = useState(0);
+  const contextRef = useRef({ sdk, network, trusted, sessionId, sessionSignal });
+  contextRef.current = { sdk, network, trusted, sessionId, sessionSignal };
   // Surfaces the previous-session hint. Initial value must be null on both
   // server and client to avoid a hydration mismatch; the useEffect below pulls
   // the real stash from sessionStorage after mount.
@@ -79,10 +96,11 @@ export function SignerProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const disconnect = useCallback(() => {
-    setSigner((s) => {
-      if (s) s.destroy();
-      return null;
-    });
+    generationRef.current += 1;
+    setConnectionGeneration(generationRef.current);
+    signerRef.current?.destroy();
+    signerRef.current = null;
+    setSigner(null);
     removeStash();
     setStash(null);
     if (idleTimer.current !== null) {
@@ -96,15 +114,36 @@ export function SignerProvider({ children }: { children: ReactNode }) {
     setStash(null);
   }, []);
 
-  const connect = useCallback((next: ExplorerSigner) => {
-    // Replace any prior signer (destroys its secrets).
-    setSigner((s) => {
-      if (s) s.destroy();
-      return next;
-    });
-    writeStash(next.kind, next.identityId);
-    setStash({ kind: next.kind, identityId: next.identityId });
-  }, []);
+  const connect = useCallback(
+    (next: ExplorerSigner) => {
+      const current = contextRef.current;
+      if (
+        !mountedRef.current ||
+        generationRef.current !== connectionGeneration ||
+        current.sdk !== sdk ||
+        current.network !== network ||
+        current.trusted !== trusted ||
+        current.sessionId !== sessionId ||
+        current.sessionSignal !== sessionSignal ||
+        sessionSignal?.aborted ||
+        (next.sdk && next.sdk !== sdk)
+      ) {
+        next.destroy();
+        throw new Error(
+          'The SDK session changed while connecting. Reconnect on the current network.',
+        );
+      }
+      // Replace any prior signer (destroys its secrets).
+      if (signerRef.current !== next) signerRef.current?.destroy();
+      signerRef.current = next;
+      generationRef.current += 1;
+      setConnectionGeneration(generationRef.current);
+      setSigner(next);
+      writeStash(next.kind, next.identityId);
+      setStash({ kind: next.kind, identityId: next.identityId });
+    },
+    [sdk, network, trusted, sessionId, sessionSignal, connectionGeneration],
+  );
 
   // Idle-out: if the tab has been hidden for > IDLE_TIMEOUT_MS, disconnect.
   useEffect(() => {
@@ -120,8 +159,13 @@ export function SignerProvider({ children }: { children: ReactNode }) {
         }
       }
     };
+    onVisibilityChange();
     document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
+      idleTimer.current = null;
+    };
   }, [signer, disconnect]);
 
   // Wipe on unload.
@@ -132,25 +176,29 @@ export function SignerProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
   }, [signer, disconnect]);
 
-  // Identity bindings are network-scoped: an identity that exists on testnet
-  // generally does not exist on mainnet (and even if the ID happened to
-  // collide, the key material wouldn't match). Drop both the live signer and
-  // the previous-session hint whenever the user switches networks or toggles
-  // trusted mode, so /wallet doesn't keep claiming "connected as X" against a
-  // network where X is meaningless.
-  //
-  // Gate on `hasConnectedOnceRef` so the SdkProvider's mount-time hydration
-  // (default network → stored network) doesn't immediately wipe the stash the
-  // user just rehydrated from sessionStorage. We only act once the SDK has
-  // reached `ready` at least once — i.e., on a real user-initiated switch.
-  const hasConnectedOnceRef = useRef(false);
+  // Keys are bound to the exact SDK instance, including reconnects to the same network.
+  const sessionRef = useRef({ sdk, network, trusted });
+  const hasReadySessionRef = useRef(false);
   useEffect(() => {
-    if (status === 'ready') hasConnectedOnceRef.current = true;
-  }, [status]);
+    const previous = sessionRef.current;
+    sessionRef.current = { sdk, network, trusted };
+    if (
+      (signerRef.current || hasReadySessionRef.current) &&
+      (previous.sdk !== sdk || previous.network !== network || previous.trusted !== trusted)
+    )
+      disconnect();
+    if (status === 'ready') hasReadySessionRef.current = true;
+  }, [sdk, network, trusted, status, disconnect]);
+
   useEffect(() => {
-    if (!hasConnectedOnceRef.current) return;
-    disconnect();
-  }, [network, trusted, disconnect]);
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      signerRef.current?.destroy();
+      signerRef.current = null;
+      if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
+    };
+  }, []);
 
   const value = useMemo<SignerContextValue>(
     () => ({ signer, stash, connect, disconnect, clearStash: clearStashOnly }),
