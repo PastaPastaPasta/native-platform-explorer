@@ -35,10 +35,12 @@ describe('evidence bundle', () => {
       { ...entry, proofCaptureError: 'capture unavailable' },
       { ...entry, status: 'error', verification: 'unavailable', error: 'offline' },
       { ...entry, omitted: { result: true, proof: true, reason: 'storage-limit' } },
+      { ...entry, result: undefined, resultCaptureError: 'Circular result' },
     ], 5000);
     expect(bundle.queries[0]!.verification).toMatchObject({ outcome: 'verified', captureError: 'capture unavailable' });
     expect(bundle.queries[1]!.retrieval.error).toBe('offline');
     expect(bundle.queries[1]!.verification.outcome).toBe('unavailable');
     expect(bundle.queries[2]!.verification.proofAvailability).toBe('omitted-storage-limit');
+    expect(bundle.queries[3]).toMatchObject({ resultCaptureError: 'Circular result', verification: { outcome: 'verified' } });
   });
 });

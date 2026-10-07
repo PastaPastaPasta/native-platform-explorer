@@ -50,17 +50,11 @@ export function QueryInspectorDrawer() {
   const stats = useMemo(() => {
     let captured = 0;
     let verified = 0;
-    let maxHeight = 0;
-    let maxEpoch = 0;
     for (const e of entries) {
       if (e.proof) captured++;
       if (e.verification === 'verified') verified++;
-      if (e.metadata) {
-        if (e.metadata.height > maxHeight) maxHeight = e.metadata.height;
-        if (e.metadata.epoch > maxEpoch) maxEpoch = e.metadata.epoch;
-      }
     }
-    return { total: entries.length, captured, verified, maxHeight, maxEpoch };
+    return { total: entries.length, captured, verified };
   }, [entries]);
 
   return (
@@ -80,16 +74,6 @@ export function QueryInspectorDrawer() {
               <Text fontSize="xs" color={stats.verified > 0 ? 'success' : 'gray.400'}>
                 {stats.verified} SDK verified · {stats.captured} proofs captured
               </Text>
-              {stats.maxHeight > 0 ? (
-                <Text fontSize="xs" color="gray.400">
-                  height {stats.maxHeight}
-                </Text>
-              ) : null}
-              {stats.maxEpoch > 0 ? (
-                <Text fontSize="xs" color="gray.400">
-                  epoch {stats.maxEpoch}
-                </Text>
-              ) : null}
               <Text fontSize="xs" color="gray.500">
                 Current SDK: {network} · {trusted ? 'trusted' : 'untrusted'} · {status}
               </Text>

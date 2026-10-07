@@ -1,5 +1,5 @@
 import React from 'react';
-import { screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { useQueryProofStore } from '@contexts/QueryProofStore';
 import { useTotalCreditsInPlatform } from '../queries';
@@ -16,14 +16,18 @@ function TotalCreditsProbe() {
         {query.status}:{String(query.data ?? '')}:{query.proofState.kind}
       </div>
       <div data-testid="proof-entry">
-        {store.entries.length}:{firstEntry?.status ?? ''}:{firstEntry?.error ?? ''}
+        {store.entries.length}:{firstEntry?.status ?? ''}:{firstEntry?.error ?? ''}:{firstEntry?.proofCaptureError ?? ''}:{firstEntry?.verification ?? ''}:{firstEntry?.network ?? ''}:{String(firstEntry?.trusted ?? '')}:{firstEntry?.resultCaptureError ?? ''}
       </div>
+      <button onClick={() => store.setEnabled(false)}>Disable inspector</button>
+      <button onClick={() => store.setEnabled(true)}>Enable inspector</button>
+      <button onClick={store.clear}>Clear inspector</button>
+      <button onClick={() => query.refetch()}>Refresh query</button>
     </>
   );
 }
 
 describe('SDK query proof flow', () => {
-  it('records proof-capture errors while falling back to the non-proof SDK method', async () => {
+  it('records capture unavailability separately from successful internal SDK verification', async () => {
     const totalCreditsInPlatform = vi.fn().mockResolvedValue(42);
     const totalCreditsInPlatformWithProof = vi
       .fn()
@@ -47,7 +51,7 @@ describe('SDK query proof flow', () => {
     expect(totalCreditsInPlatform).toHaveBeenCalledOnce();
     await waitFor(() => {
       expect(screen.getByTestId('proof-entry')).toHaveTextContent(
-        '1:success:Proof capture failed: proof endpoint unavailable',
+        '1:success::proof endpoint unavailable:verified:testnet:true',
       );
     });
   });
@@ -74,5 +78,82 @@ describe('SDK query proof flow', () => {
 
     expect(totalCreditsInPlatformWithProof).not.toHaveBeenCalled();
     expect(totalCreditsInPlatform).toHaveBeenCalledOnce();
+  });
+
+  it('keeps missing captured bytes independent from successful verification', async () => {
+    const sdk = createMockSdk({ system: { totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue({ data: 42, metadata: { height: 123 } }) } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('success:42:verified'));
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('1:success:::verified:testnet:true');
+  });
+
+  it('never retries a cryptographic proof failure through the ordinary method', async () => {
+    const ordinary = vi.fn().mockResolvedValue(42);
+    const capture = vi.fn().mockRejectedValue({ kind: 4, name: 'Proof', message: 'state root differs' });
+    const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: capture } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('error::failed'));
+    expect(ordinary).not.toHaveBeenCalled();
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('1:error:Proof: state root differs::failed:testnet:true');
+  });
+
+  it('does not report a missing proof response as a verified absent value', async () => {
+    const ordinary = vi.fn().mockResolvedValue(42);
+    const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue(undefined) } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('success:42:verified'));
+    expect(ordinary).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('Proof capture returned no response.');
+  });
+
+  it('does not fail or retry a successful SDK query when the inspector cannot serialize its result', async () => {
+    const result: { self?: unknown } = {};
+    result.self = result;
+    const ordinary = vi.fn();
+    const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue({ data: result }) } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('success:[object Object]:verified'));
+    expect(ordinary).not.toHaveBeenCalled();
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('Maximum call stack size exceeded');
+  });
+
+  it('describes network outages as unavailable and preserves capture diagnostics separately', async () => {
+    const sdk = createMockSdk({ system: {
+      totalCreditsInPlatformWithProof: vi.fn().mockRejectedValue(new Error('capture endpoint unavailable')),
+      totalCreditsInPlatform: vi.fn().mockRejectedValue(new Error('network offline')),
+    } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('error::unavailable'));
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('1:error:network offline:capture endpoint unavailable:unavailable:testnet:true');
+  });
+
+  it.each(['disable', 'disable-enable', 'clear'])('does not repopulate the inspector after %s while a response is delayed', async (action) => {
+    let resolve!: (value: unknown) => void;
+    const capture = vi.fn(() => new Promise((r) => { resolve = r; }));
+    const sdk = createMockSdk({ system: { totalCreditsInPlatformWithProof: capture } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(capture).toHaveBeenCalledOnce());
+    if (action === 'clear') fireEvent.click(screen.getByRole('button', { name: 'Clear inspector' }));
+    else {
+      fireEvent.click(screen.getByRole('button', { name: 'Disable inspector' }));
+      if (action === 'disable-enable') fireEvent.click(screen.getByRole('button', { name: 'Enable inspector' }));
+    }
+    await act(async () => resolve({ data: 42 }));
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('success:42:verified'));
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('0:');
+  });
+
+  it('uses ordinary internal verification without retaining bytes when the inspector is disabled', async () => {
+    const ordinary = vi.fn().mockResolvedValue(42);
+    const capture = vi.fn().mockResolvedValue({ data: 99 });
+    const sdk = createMockSdk({ system: { totalCreditsInPlatform: ordinary, totalCreditsInPlatformWithProof: capture } });
+    renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('success:99:verified'));
+    fireEvent.click(screen.getByRole('button', { name: 'Disable inspector' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh query' }));
+    await waitFor(() => expect(screen.getByTestId('query-state')).toHaveTextContent('success:42:verified'));
+    expect(ordinary).toHaveBeenCalledOnce();
+    expect(capture).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('proof-entry')).toHaveTextContent('0:');
   });
 });

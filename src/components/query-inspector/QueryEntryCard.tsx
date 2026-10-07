@@ -328,6 +328,8 @@ export function QueryEntryDetail({
             <VStack align="stretch" spacing={3}>
               {entry.status === 'error' ? (
                 <Text fontSize="xs" color="red.300">{entry.error}</Text>
+              ) : entry.resultCaptureError ? (
+                <Text fontSize="xs" color="gray.400">The query succeeded, but its result could not be captured: {entry.resultCaptureError}</Text>
               ) : (
                 <MiniCodeBlock
                   value={entry.omitted?.result ? 'Result omitted by the inspector storage limit.' : safeStringify(entry.result)}

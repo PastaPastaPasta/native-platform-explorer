@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
 import {
   useQuery,
   useQueries,
@@ -10,10 +9,11 @@ import {
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery } from './hooks';
 import { getConfig } from '@/config';
-import { classifyProof, type ProofState } from './proofs';
+import { classifyProof, getQuorumKeySource, isProofVerificationError, verificationForResponse, type ProofState } from './proofs';
 import { walkInstance, safeStringify } from '@util/wasm-json';
 import {
-  useQueryProofStore,
+  useQueryProofRecorder,
+  useQueryProofEntry,
   type ProofData,
   type QueryProofEntry,
   type ResponseMeta,
@@ -129,7 +129,7 @@ function extractProof(proof: unknown): ProofData | undefined {
   if (!proof || typeof proof !== 'object') return undefined;
   const p = proof as Record<string, unknown>;
   const grovedbProof = p.grovedbProof;
-  if (!(grovedbProof instanceof Uint8Array)) return undefined;
+  if (!(grovedbProof instanceof Uint8Array) || !grovedbProof.length) return undefined;
   return {
     grovedbProof: new Uint8Array(grovedbProof),
     quorumHash: p.quorumHash instanceof Uint8Array ? new Uint8Array(p.quorumHash) : new Uint8Array(),
@@ -159,133 +159,99 @@ function useSdkQuery<TData>(
   const context = useSdk();
   const { network, trusted } = context;
   const { hasProofVariant = true, withProofFn, methodName, methodParams, ...rest } = opts ?? {};
-  const proofStore = useQueryProofStore();
-
-  const proofStoreRef = useRef(proofStore);
-  proofStoreRef.current = proofStore;
-
+  const proofStore = useQueryProofRecorder();
   const fullKey = getSdkQueryKey(context, key);
+  const proofEntry = useQueryProofEntry(JSON.stringify(fullKey));
 
   const q = useSessionQuery<TData>(key, async (sdk, { assertActive }) => {
-    const store = proofStoreRef.current;
+    const generation = proofStore.generation;
     const storeKey = JSON.stringify(fullKey);
-    const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
     const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
+    const quorumKeySource = getQuorumKeySource(network, trusted);
     const t0 = performance.now();
+    const record = (
+      status: 'success' | 'error',
+      outcome: Partial<Pick<QueryProofEntry, 'result' | 'metadata' | 'proof' | 'error' | 'proofCaptureError'>>,
+      error?: unknown,
+    ) => {
+      assertActive();
+      if (!proofStore.enabled || proofStore.generation !== generation) return;
+      const timestamp = Date.now();
+      const durationMs = Math.round(performance.now() - t0);
+      let result: unknown;
+      let resultCaptureError: string | undefined;
+      if (status === 'success') {
+        try { result = safeSerialize(outcome.result ?? null); }
+        catch (snapshotError) { resultCaptureError = extractErrorMessage(snapshotError); }
+      }
+      proofStore.record(storeKey, {
+        queryKey: fullKey,
+        methodName: inspectorMethodName,
+        methodParams: methodParams ?? {},
+        hasProofVariant,
+        network,
+        trusted,
+        quorumKeySource,
+        verification: verificationForResponse({ trusted, hasProofVariant, status, error }),
+        timestamp,
+        durationMs,
+        status,
+        ...outcome,
+        result,
+        resultCaptureError,
+      }, generation);
+    };
 
-    if (useProofTransport) {
+    // Ordinary trusted methods also verify internally. Capturing bytes is only
+    // useful when the inspector is enabled and does not change the trust policy.
+    if (proofStore.enabled && shouldUseProofTransport(network, trusted, !!withProofFn)) {
       try {
         const response = (await withProofFn!(sdk)) as
           | { data?: unknown; metadata?: unknown; proof?: unknown }
           | undefined;
         assertActive();
-        const elapsed = performance.now() - t0;
-        const data = response?.data;
-        if (store.enabled) {
-          store.record(storeKey, {
-            queryKey: fullKey,
-            methodName: inspectorMethodName,
-            methodParams: methodParams ?? {},
-            hasProofVariant: true,
-            timestamp: Date.now(),
-            durationMs: Math.round(elapsed),
-            status: 'success',
-            result: safeSerialize(data),
-            metadata: extractMetadata(response?.metadata),
-            proof: extractProof(response?.proof),
-          });
+        if (!response || typeof response !== 'object') {
+          throw new Error('Proof capture returned no response.');
         }
+        const data = response?.data;
+        record('success', {
+          result: data,
+          metadata: extractMetadata(response?.metadata),
+          proof: extractProof(response?.proof),
+        });
         return (data ?? null) as TData;
-      } catch (err) {
+      } catch (error) {
         assertActive();
-        const proofError = extractErrorMessage(err);
-        console.error(`[NPE] ${inspectorMethodName} failed:`, proofError, err);
-        // Fall back to the non-proof variant so the explorer still works.
-        // Record the entry as a success (data was retrieved) but include the
-        // proof-capture error so the inspector can show both: "data succeeded,
-        // but proof was not captured because ...".
+        const captureError = extractErrorMessage(error);
+        if (isProofVerificationError(error)) {
+          record('error', { error: captureError }, error);
+          // Never bypass an explicit proof failure with another request.
+          throw normalizeError(error);
+        }
+        // A capture/transport failure may retry through the same trusted SDK's
+        // ordinary method, which still verifies its response internally.
         try {
           const result = await fn(sdk);
           assertActive();
-          const elapsed = performance.now() - t0;
-          if (store.enabled) {
-            store.record(storeKey, {
-              queryKey: fullKey,
-              methodName: inspectorMethodName,
-              methodParams: methodParams ?? {},
-              hasProofVariant: true,
-              timestamp: Date.now(),
-              durationMs: Math.round(elapsed),
-              status: 'success',
-              result: safeSerialize(result),
-              error: `Proof capture failed: ${proofError}`,
-            });
-          }
+          record('success', { result, proofCaptureError: captureError });
           return (result ?? null) as TData;
-        } catch (fallbackErr) {
+        } catch (fallbackError) {
           assertActive();
-          const fallbackMsg = extractErrorMessage(fallbackErr);
-          console.error(
-            `[NPE] ${inspectorMethodName} fallback failed:`,
-            fallbackMsg,
-            fallbackErr,
-          );
-          if (store.enabled) {
-            const elapsed = performance.now() - t0;
-            store.record(storeKey, {
-              queryKey: fullKey,
-              methodName: inspectorMethodName,
-              methodParams: methodParams ?? {},
-              hasProofVariant: true,
-              timestamp: Date.now(),
-              durationMs: Math.round(elapsed),
-              status: 'error',
-              error: `Proof: ${proofError} | Fallback: ${fallbackMsg}`,
-            });
-          }
-          throw normalizeError(fallbackErr);
+          record('error', { error: extractErrorMessage(fallbackError), proofCaptureError: captureError }, fallbackError);
+          throw normalizeError(fallbackError);
         }
       }
     }
 
-    // Ordinary path (trusted off or no withProofFn)
     try {
       const result = await fn(sdk);
       assertActive();
-      const elapsed = performance.now() - t0;
-
-      if (store.enabled && methodName) {
-        store.record(storeKey, {
-          queryKey: fullKey,
-          methodName: inspectorMethodName,
-          methodParams: methodParams ?? {},
-          hasProofVariant,
-          timestamp: Date.now(),
-          durationMs: Math.round(elapsed),
-          status: 'success',
-          result: safeSerialize(result),
-        });
-      }
-
+      record('success', { result });
       return (result ?? null) as TData;
-    } catch (err) {
+    } catch (error) {
       assertActive();
-      const errMsg = extractErrorMessage(err);
-      console.error(`[NPE] ${inspectorMethodName} failed:`, errMsg, err);
-      if (store.enabled && methodName) {
-        const elapsed = performance.now() - t0;
-        store.record(storeKey, {
-          queryKey: fullKey,
-          methodName: inspectorMethodName,
-          methodParams: methodParams ?? {},
-          hasProofVariant,
-          timestamp: Date.now(),
-          durationMs: Math.round(elapsed),
-          status: 'error',
-          error: errMsg,
-        });
-      }
-      throw normalizeError(err);
+      record('error', { error: extractErrorMessage(error) }, error);
+      throw normalizeError(error);
     }
   }, rest);
   const proofState = classifyProof(q, { trusted, hasProofVariant });
@@ -299,19 +265,6 @@ function useSdkQuery<TData>(
   // forever waiting for a precondition the user hasn't met yet. (Mutating `q`
   // instead of spreading preserves RQ's discriminated-union narrowing.)
   const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
-
-  // Surface the recorded inspector entry for this exact query so a value's
-  // ProofGlyph can open the inspector with the real proof. Keyed on the
-  // stringified `fullKey` (matching how the store records it) and recomputed
-  // only when the store changes, not on every render.
-  const fullKeyStr = JSON.stringify(fullKey);
-  // O(1) Map lookup keyed on the same stringified key the store records under.
-  // `proofStore` gets a fresh identity on every version bump (see its value
-  // useMemo), so this stays reactive without scanning the entries array.
-  const proofEntry = useMemo(
-    () => proofStore.getEntry(fullKeyStr),
-    [proofStore, fullKeyStr],
-  );
 
   return Object.assign(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled });
 }

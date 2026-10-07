@@ -47,6 +47,7 @@ export interface QueryProofEntry {
   quorumKeySource?: string;
   verification?: VerificationResult;
   proofCaptureError?: string;
+  resultCaptureError?: string;
   omitted?: { result: boolean; proof: boolean; reason: 'storage-limit' };
 }
 

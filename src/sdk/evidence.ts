@@ -40,6 +40,7 @@ export function createEvidenceBundle(entries: readonly QueryProofEntry[], export
         captureError: entry.proofCaptureError,
       },
       result: entry.result,
+      resultCaptureError: entry.resultCaptureError,
       metadata: entry.metadata,
       omitted: entry.omitted,
       proof: entry.proof ? {
