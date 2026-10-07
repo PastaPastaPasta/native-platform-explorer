@@ -259,7 +259,7 @@ export default function Page() {
                 onChange={(e) => viewed.setConsent(e.target.checked)}
                 colorScheme="blue"
               />
-              <Text fontSize="sm" color="gray.250">{viewed.ids.length} remembered identities</Text>
+              <Text fontSize="sm" color="gray.250">{viewed.ids.length} remembered {viewed.ids.length === 1 ? 'identity' : 'identities'}</Text>
             </HStack>
             {viewed.error ? <Text role="alert" fontSize="sm" color="failed">{viewed.error.message}</Text> : null}
             <HStack flexWrap="wrap">

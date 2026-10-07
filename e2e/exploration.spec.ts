@@ -53,6 +53,41 @@ test('saved items filter, open their recorded network, remove and clear across r
   expect(await page.evaluate(() => localStorage.getItem('npe:savedEntities'))).toBeNull();
 });
 
+test('saved items retain a configured custom network name longer than 80 characters', async ({ page }) => {
+  const network = `devnet-${'a'.repeat(74)}`;
+  // A browser-local registry/bookmark fixture, not a live custom devnet or SDK
+  // result. Transport is deliberately unavailable; only context is asserted.
+  await page.route(/^https?:\/\/(?!127\.0\.0\.1|localhost)/, (route) => route.abort('failed'));
+  await page.addInitScript(({ network, contractId }) => {
+    if (sessionStorage.getItem('long-network-fixture')) return;
+    sessionStorage.setItem('long-network-fixture', '1');
+    localStorage.setItem('npe:customDevnets', JSON.stringify([
+      { type: 'devnet', name: network, label: network, quorumUrl: 'https://unavailable.example' },
+    ]));
+    localStorage.setItem('npe:savedEntities', JSON.stringify([
+      { kind: 'contract', id: contractId, network, savedAt: 1 },
+    ]));
+  }, { network, contractId });
+  await page.goto(`saved/?network=${network}`);
+  await expect(page.getByRole('status').filter({ hasText: '1 saved item' })).toBeVisible();
+  const link = page.getByRole('link', { name: `Open contract ${contractId} on ${network}` });
+  await expect(link).toBeVisible();
+  const href = new URL((await link.getAttribute('href'))!, page.url());
+  expect(href.pathname).toBe(new URL('contract/', page.url()).pathname);
+  expect(href.searchParams.get('id')).toBe(contractId);
+  expect(href.searchParams.get('network')).toBe(network);
+  await page.reload();
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(page).toHaveURL(new RegExp(`network=${network}$`));
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('npe:network'))).toBe(network);
+  await page.goto(`saved/?network=${network}`);
+  await page.getByRole('button', { name: `Remove contract ${contractId} on ${network}` }).click();
+  await page.reload();
+  await expect(page.getByRole('status').filter({ hasText: 'No saved items' })).toBeVisible();
+  expect(await page.evaluate(() => localStorage.getItem('npe:savedEntities'))).toBeNull();
+});
+
 test('page sharing preserves entity parameters, fragment, deployment prefix and selected network', async ({ page, context }) => {
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   await page.goto(`contract/document/?id=${contractId}&type=domain&docId=${identityId}&network=testnet#metadata`);
@@ -121,19 +156,19 @@ test('clearing and revoking viewed identity history persist and work with the ke
   await page.goto('settings/?network=testnet');
   const consent = page.getByRole('checkbox', { name: 'Remember viewed identities' });
   await expect(consent).toBeChecked();
-  await expect(page.getByText('2 remembered identities')).toBeVisible();
+  await expect(page.getByText('2 remembered identities', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Clear viewed identities' }).focus();
   await page.keyboard.press('Enter');
-  await expect(page.getByText('0 remembered identities')).toBeVisible();
+  await expect(page.getByText('0 remembered identities', { exact: true })).toBeVisible();
   await expect(consent).toBeChecked();
   await page.reload();
   await expect(consent).toBeChecked();
-  await expect(page.getByText('0 remembered identities')).toBeVisible();
+  await expect(page.getByText('0 remembered identities', { exact: true })).toBeVisible();
   // Restore an explicit nonempty history fixture to prove revocation removes
   // actual stored IDs as well as the preference, after testing Clear separately.
   await page.evaluate((identityId) => localStorage.setItem('npe:viewedIdentities', JSON.stringify([identityId])), identityId);
   await page.reload();
-  await expect(page.getByText('1 remembered identities')).toBeVisible();
+  await expect(page.getByText('1 remembered identity', { exact: true })).toBeVisible();
   await consent.focus();
   await page.keyboard.press('Space');
   await expect(consent).not.toBeChecked();
@@ -144,5 +179,5 @@ test('clearing and revoking viewed identity history persist and work with the ke
   await consent.focus();
   await page.keyboard.press('Space');
   await expect(consent).toBeChecked();
-  await expect(page.getByText('0 remembered identities')).toBeVisible();
+  await expect(page.getByText('0 remembered identities', { exact: true })).toBeVisible();
 });

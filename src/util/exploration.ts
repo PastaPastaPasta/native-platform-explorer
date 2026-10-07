@@ -41,7 +41,7 @@ function validEntity(value: unknown): value is SavedEntity {
   return (
     (item.kind === 'identity' || item.kind === 'contract' || item.kind === 'token') &&
     typeof item.id === 'string' && isBase58Identifier(item.id) &&
-    typeof item.network === 'string' && /^[a-z0-9-]{1,80}$/.test(item.network) &&
+    typeof item.network === 'string' && /^[a-z0-9-]+$/.test(item.network) &&
     typeof item.savedAt === 'number' && Number.isFinite(item.savedAt) && item.savedAt >= 0
   );
 }

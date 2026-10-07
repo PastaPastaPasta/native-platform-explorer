@@ -34,6 +34,26 @@ describe('network-aware exploration links', () => {
 });
 
 describe('saved entity collection', () => {
+  it.each([80, 81, 160])('round-trips an accepted custom network name of %i characters', (length) => {
+    const network = `devnet-${'a'.repeat(length - 7)}`;
+    const custom = { ...entity, network };
+    saveEntity(custom);
+    expect(getSavedEntities()).toMatchObject([custom]);
+    const link = new URL(savedEntityHref(custom), 'https://example.org');
+    expect(link.searchParams.get('network')).toBe(network);
+    expect(link.searchParams.get('id')).toBe(id);
+    removeSavedEntity(custom);
+    expect(getSavedEntities()).toEqual([]);
+    expect(localStorage.getItem('npe:savedEntities')).toBeNull();
+  });
+
+  it.each(['', 'Devnet', 'devnet name', '../devnet', 'devnet/name', 'devnet?name'])('rejects malformed network name %j', (network) => {
+    const custom = { ...entity, network };
+    expect(() => saveEntity(custom)).toThrow('This entity cannot be saved.');
+    localStorage.setItem('npe:savedEntities', JSON.stringify([{ ...custom, savedAt: 1 }]));
+    expect(getSavedEntities()).toEqual([]);
+  });
+
   it('deduplicates within a network and keeps other networks and entity kinds separate', () => {
     saveEntity(entity);
     saveEntity(entity);
