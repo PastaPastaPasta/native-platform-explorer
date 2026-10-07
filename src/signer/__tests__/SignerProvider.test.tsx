@@ -42,6 +42,7 @@ describe('SignerProvider', () => {
     secondDestroy = vi.fn();
     installStorageMock('sessionStorage');
     useSdkMock.mockReturnValue({
+      ...{ sessionId: 1, sessionSignal: null },
       sdk: null,
       status: 'connecting',
       network: 'testnet',

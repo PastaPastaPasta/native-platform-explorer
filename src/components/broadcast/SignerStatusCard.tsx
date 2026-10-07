@@ -9,7 +9,13 @@ import { useEffect, useState } from 'react';
 import type { SignerKeyDescriptor } from '@/signer/types';
 import { extractErrorMessage } from '@sdk/errors';
 
-export function SignerStatusCard() {
+export function SignerStatusCard({
+  refreshId = 0,
+  onRetry,
+}: {
+  refreshId?: number;
+  onRetry?: () => void;
+}) {
   const { signer, disconnect } = useSigner();
   const [keys, setKeys] = useState<SignerKeyDescriptor[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -33,7 +39,7 @@ export function SignerStatusCard() {
     return () => {
       cancelled = true;
     };
-  }, [signer, refresh]);
+  }, [signer, refresh, refreshId]);
 
   if (!signer) return null;
   return (
@@ -67,7 +73,7 @@ export function SignerStatusCard() {
             <Button
               size="sm"
               alignSelf="flex-start"
-              onClick={() => setRefresh((value) => value + 1)}
+              onClick={onRetry ?? (() => setRefresh((value) => value + 1))}
             >
               Retry key check
             </Button>
