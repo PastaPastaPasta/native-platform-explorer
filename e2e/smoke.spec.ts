@@ -34,6 +34,10 @@ test('search redirects single static epoch matches without live SDK data', async
 test('settings persist network preference in localStorage', async ({ page }) => {
   await page.goto('settings/');
 
+  // The server-rendered native select accepts input before React attaches its
+  // change handler. A non-idle provider state also confirms preference hydration
+  // completed; it does not require a successful live SDK connection.
+  await expect(page.getByText(/^SDK status: (connecting|ready|error)$/)).toBeVisible();
   const settingsNetworkSelect = page.locator('main select').first();
   const nextNetwork = (await settingsNetworkSelect.inputValue()) === 'mainnet' ? 'testnet' : 'mainnet';
   await settingsNetworkSelect.selectOption(nextNetwork);
