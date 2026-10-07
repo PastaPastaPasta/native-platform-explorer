@@ -56,6 +56,28 @@ afterEach(() => {
 });
 
 describe('SDK provider connection lifecycle', () => {
+  it('shows the message behind structured SDK error getters and retains the original cause', async () => {
+    // Matches the pinned SDK's real failed-quorum error: not an Error, only
+    // __wbg_ptr enumerable, and all meaningful fields on prototype getters.
+    class WasmSdkError {
+      __wbg_ptr = 1;
+      get message() { return 'Failed to prefetch quorums: HTTP request error: error sending request'; }
+      get name() { return 'Generic'; }
+      get kind() { return 17; }
+      get code() { return -1; }
+      get isRetriable() { return false; }
+    }
+    const failure = new WasmSdkError();
+    expect(String(failure)).toBe('[object Object]');
+    factory.mockReturnValueOnce(createMockSdk({ connect: vi.fn().mockRejectedValue(failure) }));
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('error'));
+    expect(screen.getByRole('alert')).toHaveTextContent(failure.message);
+    expect(screen.getByRole('alert')).not.toHaveTextContent('[object Object]');
+    expect(context.error).toBeInstanceOf(Error);
+    expect(context.error?.cause).toBe(failure);
+  });
+
   it('clears the ready SDK, aborts its session, and creates a new session on reconnect', async () => {
     const oldSdk = createMockSdk();
     const connection = deferred();

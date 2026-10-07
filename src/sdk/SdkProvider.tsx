@@ -22,6 +22,7 @@ import {
   type Network,
 } from './networks';
 import { getConfig } from '@/config';
+import { normalizeError } from './errors';
 
 /** Shape of the devnet args we hand to `EvoSDK.devnet` / `EvoSDK.devnetTrusted`.
  *  Exported only so the SdkProvider unit test can pin the resolution rules. */
@@ -233,7 +234,7 @@ export function SdkProvider({ children }: { children: ReactNode }) {
         setStatus('ready');
       } catch (err) {
         if (controller.signal.aborted) return;
-        setError(err instanceof Error ? err : new Error(String(err)));
+        setError(normalizeError(err));
         setStatus('error');
       }
     },
