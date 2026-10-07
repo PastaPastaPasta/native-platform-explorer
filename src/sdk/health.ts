@@ -209,12 +209,12 @@ function formatAge(ms: number): string {
 /** Layer-1 Core tip from the current network's Insight API. Disabled (and
  *  reported as unavailable) for networks with no `insightApiUrl`, e.g. devnets. */
 export function useCoreStatus() {
-  const { network } = useSdk();
+  const { network, status } = useSdk();
   const insightApiUrl = getNetwork(network).insightApiUrl;
   return useQuery<CoreStatus | null, Error>({
     queryKey: ['npe', network, 'core-status'],
     queryFn: ({ signal }) => fetchCoreStatus(insightApiUrl!, signal),
-    enabled: !!insightApiUrl,
+    enabled: status === 'ready' && !!insightApiUrl,
     staleTime: 30_000,
     refetchInterval: 30_000,
   });
@@ -222,11 +222,16 @@ export function useCoreStatus() {
 
 /** Combined Platform-vs-Core health verdict. */
 export function useNetworkHealth(): NetworkHealth {
+  const { status } = useSdk();
   const statusQ = useSystemStatus();
   const coreQ = useCoreStatus();
 
   return useMemo(() => {
-    const platform = extractPlatformStatus(statusQ.data);
-    return computeNetworkHealth(platform, coreQ.data ?? null);
-  }, [statusQ.data, coreQ.data]);
+    const platformAvailable = status === 'ready' && !statusQ.isError;
+    const platform = extractPlatformStatus(platformAvailable ? statusQ.data : undefined);
+    const core = platformAvailable && !coreQ.isError ? (coreQ.data ?? null) : null;
+    const health = computeNetworkHealth(platform, core);
+    if (statusQ.isError) health.reasons.push('Platform status is currently unavailable');
+    return health;
+  }, [status, statusQ.data, statusQ.isError, coreQ.data, coreQ.isError]);
 }
