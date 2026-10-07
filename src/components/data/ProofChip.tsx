@@ -22,6 +22,8 @@ function meta(proofState: ProofState): { color: string; label: string; icon: Rea
       return { color: 'warning', label: 'Unverified', icon: <InfoOutlineIcon /> };
     case 'failed':
       return { color: 'danger', label: 'Proof failed', icon: <WarningTwoIcon /> };
+    case 'unavailable':
+      return { color: 'gray.400', label: 'Unavailable', icon: <InfoOutlineIcon /> };
     case 'unknown':
     default:
       return { color: 'gray.400', label: '—', icon: <InfoOutlineIcon /> };

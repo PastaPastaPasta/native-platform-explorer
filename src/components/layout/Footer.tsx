@@ -25,6 +25,7 @@ export function Footer() {
   const { trusted, status } = useSdk();
   const { entries, enabled: inspectorEnabled, openDrawer } = useQueryProofStore();
   const proofsOn = trusted && status === 'ready';
+  const queryCountLabel = `${entries.length} ${entries.length === 1 ? 'query' : 'queries'}`;
 
   return (
     <Box
@@ -77,6 +78,9 @@ export function Footer() {
           </HStack>
           {inspectorEnabled ? (
             <Button
+              aria-label={`${queryCountLabel} — Open Query Inspector`}
+              minW="44px"
+              minH="44px"
               variant="link"
               fontFamily="mono"
               fontSize="xs"
@@ -86,7 +90,7 @@ export function Footer() {
               onClick={openDrawer}
               title="Open Query Inspector (Cmd+Shift+P)"
             >
-              {entries.length} {entries.length === 1 ? 'query' : 'queries'}
+              {queryCountLabel}
             </Button>
           ) : null}
           <Text fontFamily="mono" fontSize="xs" color="muted">

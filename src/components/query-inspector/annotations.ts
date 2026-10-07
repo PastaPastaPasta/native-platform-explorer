@@ -64,8 +64,7 @@ export const PROOF_FIELD_ANNOTATIONS: Record<string, string> = {
 };
 
 export const OVERVIEW_TEXT =
-  'Every query to Dash Platform can return a cryptographic proof. ' +
-  'The proof contains a GroveDB merkle path (proving the data exists in the state tree) ' +
-  'plus a BLS threshold signature from a quorum of masternodes (proving the state tree root is authentic). ' +
-  'Together they let your browser independently verify that the data it received is genuine — ' +
-  'no trust in any single server required.';
+  'Proof-capable queries are verified by the SDK in your browser when trusted mode is on. ' +
+  'Captured GroveDB proofs and quorum signatures can be inspected separately from that verification outcome. ' +
+  'Quorum public keys come from the configured trusted service; the browser does not independently validate Dash Core consensus. ' +
+  'Recorded responses describe state when retrieved and may be older than current network state.';

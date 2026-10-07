@@ -33,9 +33,9 @@ export default function Page() {
               v{EVO_SDK_VERSION}
             </Badge>
             . There is no API server, no database, and no indexer behind this site —
-            every value you see has been fetched from a masternode&apos;s DAPI endpoint
-            by the WASM SDK running in your browser, and (by default) verified
-            against a prefetched set of quorum public keys.
+            network data is fetched from a masternode&apos;s DAPI endpoint by the WASM
+            SDK running in your browser. With trusted mode on, proof-capable
+            responses are verified against prefetched quorum public keys.
           </Text>
           <Text color="gray.250" mb={3}>
             It is a deliberate, reduced-scope sibling of{' '}
@@ -44,9 +44,8 @@ export default function Page() {
             </Link>
             . Because it has no indexer it cannot browse every identity, contract,
             token, block, or transaction. In exchange, it can ship as a single
-            static bundle that anyone can host, every response carries a
-            cryptographic proof, and there is no middleman between you and the
-            network.
+            static bundle that anyone can host and verify proof-capable responses
+            locally. Quorum public keys are supplied by a trusted service.
           </Text>
 
           <Heading as="h2" size="md" color="gray.100" mt={6} mb={2} id="proofs">
@@ -56,13 +55,26 @@ export default function Page() {
             Your browser connects directly to DAPI and asks for data. In trusted
             mode the SDK also asks DAPI for a GroveDB Merkle proof; the WASM
             engine then verifies that proof locally against quorum public keys
-            fetched when the SDK connected. The UI surfaces the outcome via the{' '}
-            <strong>ProofChip</strong> next to each DigestCard.
+            fetched when the SDK connected. The browser trusts that service for
+            those keys and does not independently validate Dash Core consensus.
+            The proof controls show the SDK&apos;s verification outcome separately
+            from whether proof bytes were captured. Ordinary trusted SDK calls
+            can verify internally without returning those bytes.
           </Text>
           <Text color="gray.250" mb={3}>
             Some SDK methods (system status, quorum info, DASH/USD rate, a few
             boolean DPNS helpers) have no proof variant — we label those
-            honestly as &quot;No proof&quot;, rather than pretending otherwise.
+            honestly as &quot;No proof&quot;. Network and query errors are shown as
+            unavailable; only explicit proof verification errors are labeled as
+            failed verification.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            Open a proof control or the Query Inspector to see the query&apos;s
+            original retrieval time, network, response height when returned, and
+            quorum-key source. Export evidence JSON to save that response and any
+            captured proof bytes. The file records the observed SDK outcome; it is
+            unsigned, has not been independently verified, and does not establish
+            that the response is still current.
           </Text>
 
           <Heading as="h2" size="md" color="gray.100" mt={6} mb={2} id="enumeration">
