@@ -13,6 +13,7 @@ export interface EpochHeaderProps {
   progressPct?: number | null;
   firstBlockHeight?: number | bigint | null;
   feesCollected?: number | bigint | null;
+  showFeesCollected?: boolean;
 }
 
 export function EpochHeaderCard({
@@ -22,6 +23,7 @@ export function EpochHeaderCard({
   progressPct,
   firstBlockHeight,
   feesCollected,
+  showFeesCollected = true,
 }: EpochHeaderProps) {
   return (
     <InfoBlock emphasised>
@@ -66,7 +68,7 @@ export function EpochHeaderCard({
               }
             />
           </WrapItem>
-          <WrapItem>
+          {showFeesCollected ? <WrapItem>
             <InfoLine
               label="Fees collected"
               value={
@@ -79,7 +81,7 @@ export function EpochHeaderCard({
                 )
               }
             />
-          </WrapItem>
+          </WrapItem> : null}
         </Wrap>
       </VStack>
       <Box />
