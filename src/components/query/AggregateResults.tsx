@@ -17,7 +17,8 @@ import {
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import { Identifier } from '@dashevo/evo-sdk';
+import { idToString } from '@util/sdk-shape';
+import { formatAverage } from '@util/query-workspace';
 import type { AggregateKind } from '@util/sql-parser';
 import type { CountSumPair } from '@sdk/queries';
 
@@ -59,11 +60,16 @@ function decodeIndexedInt(bytes: Uint8Array): bigint | undefined {
   flipped[0] = flipped[0]! ^ 0x80;
   const view = new DataView(flipped.buffer, flipped.byteOffset, flipped.byteLength);
   switch (bytes.length) {
-    case 1: return BigInt(view.getInt8(0));
-    case 2: return BigInt(view.getInt16(0, false));
-    case 4: return BigInt(view.getInt32(0, false));
-    case 8: return view.getBigInt64(0, false);
-    default: return undefined;
+    case 1:
+      return BigInt(view.getInt8(0));
+    case 2:
+      return BigInt(view.getInt16(0, false));
+    case 4:
+      return BigInt(view.getInt32(0, false));
+    case 8:
+      return view.getBigInt64(0, false);
+    default:
+      return undefined;
   }
 }
 
@@ -98,9 +104,7 @@ function decodeGroupKey(
     }
     if (type === 'integer') {
       const n = decodeIndexedInt(bytes);
-      return n !== undefined
-        ? { display: n.toString(), raw: hex }
-        : { display: `0x${hex}` };
+      return n !== undefined ? { display: n.toString(), raw: hex } : { display: `0x${hex}` };
     }
     if (type === 'boolean') {
       if (bytes.length === 1) return { display: bytes[0] === 0 ? 'false' : 'true', raw: hex };
@@ -111,7 +115,7 @@ function decodeGroupKey(
       // stay as hex.
       if (mediaType === 'application/x.dash.dpp.identifier' && bytes.length === 32) {
         try {
-          return { display: new Identifier(bytes).toBase58(), raw: hex };
+          return { display: idToString(bytes)!, raw: hex };
         } catch {
           /* fall through to hex */
         }
@@ -136,21 +140,6 @@ function decodeGroupKey(
 
 function fmtBigInt(n: bigint): string {
   return n.toLocaleString();
-}
-
-function fmtAvg(p: CountSumPair): string {
-  if (p.count === 0n) return '—';
-  // BigInt arithmetic with a 4-place fractional component, then back to string.
-  // Avoids Number precision loss for large sums. BigInt `%` keeps the sign of
-  // the dividend, so for negative averages we strip the sign off `frac` and
-  // let the leading `-` on `whole` carry it.
-  const SCALE = 10_000n;
-  const scaled = (p.sum * SCALE) / p.count;
-  const whole = scaled / SCALE;
-  const frac = scaled % SCALE;
-  const absFrac = frac < 0n ? -frac : frac;
-  const fracStr = absFrac.toString().padStart(4, '0').replace(/0+$/, '');
-  return fracStr ? `${whole}.${fracStr}` : whole.toString();
 }
 
 function totalLabel(kind: AggregateKind, field?: string): string {
@@ -202,7 +191,9 @@ export function AggregateResults({
       ) : isError ? (
         <ErrorCard error={error} onRetry={refetch} />
       ) : !data ? (
-        <Text fontSize="sm" color="gray.400">No data.</Text>
+        <Text fontSize="sm" color="gray.400">
+          No data.
+        </Text>
       ) : grouped ? (
         <VStack align="stretch" spacing={3}>
           <HStack justify="space-between">
@@ -217,12 +208,20 @@ export function AggregateResults({
             <Table size="sm" variant="simple">
               <Thead>
                 <Tr>
-                  <Th color="gray.400" fontFamily="mono">{groupBy!.join(' / ')}</Th>
+                  <Th color="gray.400" fontFamily="mono">
+                    {groupBy!.join(' / ')}
+                  </Th>
                   {kind === 'avg' ? (
                     <>
-                      <Th color="gray.400" isNumeric>count</Th>
-                      <Th color="gray.400" isNumeric>sum</Th>
-                      <Th color="gray.400" isNumeric>avg</Th>
+                      <Th color="gray.400" isNumeric>
+                        count
+                      </Th>
+                      <Th color="gray.400" isNumeric>
+                        sum
+                      </Th>
+                      <Th color="gray.400" isNumeric>
+                        avg
+                      </Th>
                     </>
                   ) : (
                     <Th color="gray.400" isNumeric>
@@ -235,22 +234,33 @@ export function AggregateResults({
                 {rows.map(({ key, value }) => {
                   const decoded = decodeGroupKey(key, groupByPrimarySchema);
                   return (
-                  <Tr key={key || '(total)'}>
-                    <Td fontFamily="mono" fontSize="xs" color="gray.100" title={decoded.raw ? `0x${decoded.raw}` : undefined}>
-                      {decoded.display}
-                    </Td>
-                    {isCountSumPair(value) ? (
-                      <>
-                        <Td isNumeric fontFamily="mono" fontSize="xs">{fmtBigInt(value.count)}</Td>
-                        <Td isNumeric fontFamily="mono" fontSize="xs">{fmtBigInt(value.sum)}</Td>
-                        <Td isNumeric fontFamily="mono" fontSize="xs" color="brand.300">{fmtAvg(value)}</Td>
-                      </>
-                    ) : (
-                      <Td isNumeric fontFamily="mono" fontSize="xs" color="brand.300">
-                        {fmtBigInt(value)}
+                    <Tr key={key || '(total)'}>
+                      <Td
+                        fontFamily="mono"
+                        fontSize="xs"
+                        color="gray.100"
+                        title={decoded.raw ? `0x${decoded.raw}` : undefined}
+                      >
+                        {decoded.display}
                       </Td>
-                    )}
-                  </Tr>
+                      {isCountSumPair(value) ? (
+                        <>
+                          <Td isNumeric fontFamily="mono" fontSize="xs">
+                            {fmtBigInt(value.count)}
+                          </Td>
+                          <Td isNumeric fontFamily="mono" fontSize="xs">
+                            {fmtBigInt(value.sum)}
+                          </Td>
+                          <Td isNumeric fontFamily="mono" fontSize="xs" color="brand.300">
+                            {formatAverage(value.sum, value.count)}
+                          </Td>
+                        </>
+                      ) : (
+                        <Td isNumeric fontFamily="mono" fontSize="xs" color="brand.300">
+                          {fmtBigInt(value)}
+                        </Td>
+                      )}
+                    </Tr>
                   );
                 })}
               </Tbody>
@@ -264,12 +274,14 @@ export function AggregateResults({
             {totalLabel(kind, aggregateField)}
           </Text>
           {totalEntry === undefined ? (
-            <Text fontSize="sm" color="gray.400">No result returned.</Text>
+            <Text fontSize="sm" color="gray.400">
+              No result returned.
+            </Text>
           ) : isCountSumPair(totalEntry) ? (
             <HStack spacing={6} align="flex-end">
               <Box>
                 <Text fontSize="3xl" color="brand.300" fontFamily="mono" lineHeight={1}>
-                  {fmtAvg(totalEntry)}
+                  {formatAverage(totalEntry.sum, totalEntry.count)}
                 </Text>
                 <Text fontSize="2xs" color="gray.500" mt={1}>
                   avg
@@ -279,13 +291,17 @@ export function AggregateResults({
                 <Text fontSize="md" color="gray.200" fontFamily="mono">
                   {fmtBigInt(totalEntry.sum)}
                 </Text>
-                <Text fontSize="2xs" color="gray.500">sum</Text>
+                <Text fontSize="2xs" color="gray.500">
+                  sum
+                </Text>
               </Box>
               <Box>
                 <Text fontSize="md" color="gray.200" fontFamily="mono">
                   {fmtBigInt(totalEntry.count)}
                 </Text>
-                <Text fontSize="2xs" color="gray.500">count</Text>
+                <Text fontSize="2xs" color="gray.500">
+                  count
+                </Text>
               </Box>
             </HStack>
           ) : (
