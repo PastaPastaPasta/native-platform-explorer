@@ -4,6 +4,7 @@ import { createElement } from 'react';
 import NextLink from 'next/link';
 import { Box, Button, HStack, Text, VStack } from '@chakra-ui/react';
 import type { OperationDescriptor } from './OperationShell';
+import { operationRequirement } from './capabilities';
 import { ContractRegisterForm, type ContractRegisterOptions } from './forms/ContractRegister';
 import { ContractUpdateForm, type ContractUpdateOptions } from './forms/ContractUpdate';
 import { DocumentCreateForm, type DocumentCreateOptions } from './forms/DocumentCreate';
@@ -81,7 +82,11 @@ function makeEntry<O, R>(
     group,
     label,
     blurb,
-    descriptor: descriptor as OperationDescriptor<unknown, unknown>,
+    descriptor: {
+      ...descriptor,
+      operationId: id,
+      capability: operationRequirement(id),
+    } as OperationDescriptor<unknown, unknown>,
   };
 }
 
