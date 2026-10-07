@@ -61,19 +61,6 @@ export interface IdentityResult {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-async function prepareSigning(
-  signer: ExplorerSigner,
-  criteria?: KeySelectionCriteria,
-) {
-  if (!signer.prepareSdk) {
-    throw new Error(
-      `The "${signer.kind}" signer does not support SDK signing yet. ` +
-        'Connect via the Bridge backup tab on /wallet to enable writes.',
-    );
-  }
-  return signer.prepareSdk(criteria);
-}
-
 // wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
 // only release on explicit `free()`. Every executor now goes through this
 // helper so the IdentitySigner is freed after the broadcast resolves (or
@@ -85,7 +72,13 @@ async function withSigningMaterial<T>(
   criteria: KeySelectionCriteria | undefined,
   fn: (material: SdkSigningMaterial) => Promise<T>,
 ): Promise<T> {
-  const material = await prepareSigning(signer, criteria);
+  if (!signer.prepareSdk) {
+    throw new Error(
+      `The "${signer.kind}" signer does not support SDK signing yet. ` +
+        'Connect via the Bridge backup tab on /wallet to enable writes.',
+    );
+  }
+  const material = await signer.prepareSdk(criteria);
   try {
     return await fn(material);
   } finally {
