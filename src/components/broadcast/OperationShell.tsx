@@ -35,6 +35,7 @@ import {
 } from './outcomes';
 import { useSigner } from '@/signer/SignerProvider';
 import { invalidateNetworkQueries, useSdk } from '@sdk/hooks';
+import { normalizeError } from '@sdk/errors';
 import { getDerivationNetwork, type Network } from '@sdk/networks';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import type { ExplorerSigner, SignerKeyDescriptor } from '@/signer/types';
@@ -185,7 +186,7 @@ export function OperationShell<TOptions, TResult>({
           setKeyState({
             binding: contextBinding,
             keys: [],
-            error: error instanceof Error ? error.message : String(error),
+            error: normalizeError(error).message,
           });
       });
     return () => {
@@ -299,7 +300,7 @@ export function OperationShell<TOptions, TResult>({
       setResult(r);
       setActiveStep(3);
     } catch (e) {
-      if (mounted.current) setError(e instanceof Error ? e : new Error(String(e)));
+      if (mounted.current) setError(normalizeError(e));
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(false);

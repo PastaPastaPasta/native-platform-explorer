@@ -1,7 +1,9 @@
+import { extractErrorMessage } from '@sdk/errors';
+
 /** Only errors explicitly raised before a write call are safe to rebuild. */
 export class OperationNotSubmittedError extends Error {
   constructor(cause: unknown) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    super(extractErrorMessage(cause), { cause });
     this.name = 'OperationNotSubmittedError';
   }
 }
@@ -21,7 +23,7 @@ export class BroadcastOutcomeUnknownError extends Error {
     cause: unknown,
     readonly entities: ReceiptEntities = {},
   ) {
-    super(cause instanceof Error ? cause.message : String(cause), { cause });
+    super(extractErrorMessage(cause), { cause });
     this.name = 'BroadcastOutcomeUnknownError';
   }
 }
