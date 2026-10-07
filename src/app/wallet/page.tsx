@@ -74,7 +74,7 @@ function ExtensionPane() {
 
 function MnemonicPane() {
   const { connect } = useSigner();
-  const { sdk, network } = useSdk();
+  const { sdk, network, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [mnemonic, setMnemonic] = useState('');
   const [path, setPath] = useState('');
@@ -82,7 +82,8 @@ function MnemonicPane() {
   const [error, setError] = useState<Error | null>(null);
 
   const onConnect = async () => {
-    if (!sdk) {
+    if (!sdk || status !== 'ready') {
+      setMnemonic('');
       setError(new Error('SDK not ready.'));
       return;
     }
@@ -161,7 +162,10 @@ function MnemonicPane() {
           onClick={() => void onConnect()}
           isLoading={busy}
           isDisabled={
-            !isBase58Identifier(identityId.trim()) || mnemonic.trim().split(/\s+/).length < 12
+            !sdk ||
+            status !== 'ready' ||
+            !isBase58Identifier(identityId.trim()) ||
+            mnemonic.trim().split(/\s+/).length < 12
           }
         >
           Connect mnemonic
@@ -174,14 +178,15 @@ function MnemonicPane() {
 
 function WifPane() {
   const { connect } = useSigner();
-  const { sdk } = useSdk();
+  const { sdk, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [wif, setWif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const onConnect = async () => {
-    if (!sdk) {
+    if (!sdk || status !== 'ready') {
+      setWif('');
       setError(new Error('SDK not ready.'));
       return;
     }
@@ -241,7 +246,12 @@ function WifPane() {
           colorScheme="blue"
           onClick={() => void onConnect()}
           isLoading={busy}
-          isDisabled={!isBase58Identifier(identityId.trim()) || wif.trim().length === 0}
+          isDisabled={
+            !sdk ||
+            status !== 'ready' ||
+            !isBase58Identifier(identityId.trim()) ||
+            wif.trim().length === 0
+          }
         >
           Connect WIF
         </Button>
