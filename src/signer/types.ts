@@ -4,10 +4,10 @@
 //   - call `sign(preimage, keyId)` to get raw signature bytes (legacy adapters);
 //   - call `prepareSdk(keyId)` to obtain a wasm IdentitySigner + IdentityPublicKey
 //     to hand to a SDK facade method directly.
-// Adapters that integrate with the EvoSDK write API implement `prepareSdk`;
-// raw-preimage-only adapters (older WIF/mnemonic preview shims) may omit it.
+// Local adapters implement `prepareSdk`; raw-only extension adapters cannot
+// execute SDK operations and are reported as unsupported by the wallet UI.
 
-import type { IdentityPublicKey, IdentitySigner } from '@dashevo/evo-sdk';
+import type { EvoSDK, IdentityPublicKey, IdentitySigner } from '@dashevo/evo-sdk';
 
 export type SignerKind = 'extension' | 'mnemonic' | 'wif' | 'backup';
 
@@ -16,6 +16,7 @@ export interface SignerKeyDescriptor {
   purpose?: string | number;
   type?: string | number;
   securityLevel?: string | number;
+  disabledAt?: bigint;
 }
 
 export interface KeySelectionCriteria {
@@ -25,9 +26,13 @@ export interface KeySelectionCriteria {
    * Minimum security level the selected key must satisfy. MASTER is the
    * strongest, MEDIUM the weakest — a key at or stronger than the requested
    * level qualifies (so requiring HIGH also accepts CRITICAL and MASTER keys).
+   * Transitions may exclude MASTER or require an exact level; executors should
+   * use allowedSecurityLevels for those protocol requirements.
    */
   minSecurityLevel?: 'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM';
-  /** Explicit key id (skips selection logic). */
+  /** Exact levels accepted by the transition. MASTER is excluded from ordinary authentication writes. */
+  allowedSecurityLevels?: Array<'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM'>;
+  /** Explicit key id; purpose and security requirements still apply. */
   keyId?: number;
 }
 
@@ -40,11 +45,15 @@ export interface SdkSigningMaterial {
   identityId: string;
   /** Selected key id (matches identityKey.keyId). */
   keyId: number;
+  /** Release owned WASM allocations after execution, including failure paths. */
+  release?: () => void;
 }
 
 export interface ExplorerSigner {
   readonly kind: SignerKind;
   readonly identityId: string;
+  /** SDK session used to validate local key material. */
+  readonly sdk?: EvoSDK;
   availableKeys(): Promise<SignerKeyDescriptor[]>;
   /**
    * Sign a state-transition preimage with the identified key. Used by older
