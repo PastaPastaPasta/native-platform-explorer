@@ -11,20 +11,28 @@ import type { SignerKeyDescriptor } from '@/signer/types';
 export function SignerStatusCard() {
   const { signer, disconnect } = useSigner();
   const [keys, setKeys] = useState<SignerKeyDescriptor[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
+    setKeys(null);
+    setError(null);
     if (!signer) {
-      setKeys(null);
       return;
     }
     let cancelled = false;
-    void signer.availableKeys().then((k) => {
-      if (!cancelled) setKeys(k);
-    });
+    void signer.availableKeys().then(
+      (k) => {
+        if (!cancelled) setKeys(k);
+      },
+      (error: unknown) => {
+        if (!cancelled) setError(error instanceof Error ? error.message : String(error));
+      },
+    );
     return () => {
       cancelled = true;
     };
-  }, [signer]);
+  }, [signer, refresh]);
 
   if (!signer) return null;
   return (
@@ -50,7 +58,22 @@ export function SignerStatusCard() {
         <Text fontSize="xs" color="gray.400" textTransform="uppercase">
           Available keys
         </Text>
-        <CodeBlock value={keys ?? 'Loading…'} collapsedHeight={120} />
+        {error ? (
+          <VStack align="stretch" spacing={2}>
+            <Text role="alert" fontSize="sm">
+              Could not check current keys: {error}
+            </Text>
+            <Button
+              size="sm"
+              alignSelf="flex-start"
+              onClick={() => setRefresh((value) => value + 1)}
+            >
+              Retry key check
+            </Button>
+          </VStack>
+        ) : (
+          <CodeBlock value={keys ?? 'Loading…'} collapsedHeight={120} />
+        )}
       </VStack>
     </InfoBlock>
   );
