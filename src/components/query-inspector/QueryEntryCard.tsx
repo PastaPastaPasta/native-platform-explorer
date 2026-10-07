@@ -5,6 +5,7 @@ import {
   AccordionItem,
   AccordionPanel,
   Badge,
+  Button,
   Box,
   Code,
   HStack,
@@ -20,15 +21,13 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronUpIcon, CopyIcon } from '@chakra-ui/icons';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { bytesToHex, downloadEvidenceBundle, EVIDENCE_TRUST_NOTICE } from '@sdk/evidence';
+import { safeStringify } from '@util/wasm-json';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 import { METHOD_ANNOTATIONS, PROOF_FIELD_ANNOTATIONS } from './annotations';
 import { ProofExplainer } from './ProofExplainer';
 import { ProofTreeView } from './ProofTreeView';
-
-function toHex(bytes: Uint8Array): string {
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`;
@@ -62,12 +61,13 @@ function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collap
 
   return (
     <Box position="relative" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.750">
-      <HStack position="absolute" top={1} right={1} zIndex={2}>
+      <HStack justify="flex-end" p={1} bg="gray.800" borderBottom="1px solid" borderColor="gray.750">
         <Tooltip label="Copy" hasArrow>
           <IconButton
-            aria-label="Copy"
+            aria-label="Copy displayed data"
             icon={<CopyIcon />}
-            size="xs"
+            size="sm"
+            minW="44px" minH="44px"
             variant="ghost"
             onClick={() => { navigator.clipboard?.writeText(value); }}
           />
@@ -75,9 +75,10 @@ function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collap
         {long ? (
           <Tooltip label={expanded ? 'Collapse' : 'Expand'} hasArrow>
             <IconButton
-              aria-label="Toggle"
+              aria-label={expanded ? 'Collapse displayed data' : 'Expand displayed data'}
               icon={expanded ? <ChevronUpIcon /> : <ChevronDownIcon />}
-              size="xs"
+              size="sm"
+              minW="44px" minH="44px"
               variant="ghost"
               onClick={() => setExpanded((o) => !o)}
             />
@@ -104,13 +105,15 @@ function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collap
 function ProofTab({ entry }: { entry: QueryProofEntry }) {
   const [parsedTree, setParsedTree] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
+  const proofHex = useMemo(() => entry.proof ? bytesToHex(entry.proof.grovedbProof) : '', [entry.proof]);
 
   // Auto-parse on mount. The Proof tab itself only mounts when the user opens
   // it (Chakra TabPanel is lazy), so the ~146KB WASM module is still fetched
   // on demand — no upfront cost for query entries the user never expands.
   useEffect(() => {
     const proof = entry.proof?.grovedbProof;
-    if (!proof) return;
+    setParsedTree(null);
+    if (!proof) { setParsing(false); return; }
     let cancelled = false;
     setParsing(true);
     (async () => {
@@ -139,14 +142,12 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
     return (
       <VStack align="stretch" spacing={2}>
         <Text fontSize="xs" color="gray.400">
-          {entry.captureNote ?? <>No proof captured. {entry.status === 'error'
-            ? 'The query did not complete.'
-            : entry.error ? 'The proof variant errored — the data above came from the unproven fallback path.'
-              : 'Either trusted mode is off or the inspector was disabled when this query ran.'}</>}
+          {entry.omitted?.proof ? 'Proof bytes were omitted to keep the inspector within its storage limit.' : 'No proof bytes were captured.'}
+          {' '}A successful trusted SDK query can still verify internally without exposing bytes.
         </Text>
-        {entry.error ? (
+        {entry.proofCaptureError ? (
           <Text fontSize="2xs" color="red.300" fontFamily="mono">
-            {entry.error}
+            Capture unavailable: {entry.proofCaptureError}
           </Text>
         ) : null}
       </VStack>
@@ -154,7 +155,6 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
   }
 
   const { proof, metadata } = entry;
-  const proofHex = toHex(proof.grovedbProof);
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -175,11 +175,11 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
       <Box>
         <Text fontSize="xs" fontWeight="600" color="gray.200" mb={2}>Quorum Signature</Text>
         <VStack align="stretch" spacing={1.5} pl={2} borderLeft="2px solid" borderColor="gray.750">
-          <FieldRow label="Quorum Hash" value={toHex(proof.quorumHash)} annotation={PROOF_FIELD_ANNOTATIONS.quorumHash} />
+          <FieldRow label="Quorum Hash" value={bytesToHex(proof.quorumHash)} annotation={PROOF_FIELD_ANNOTATIONS.quorumHash} />
           <FieldRow label="Quorum Type" value={String(proof.quorumType)} annotation={PROOF_FIELD_ANNOTATIONS.quorumType} />
           <FieldRow label="Round" value={String(proof.round)} annotation={PROOF_FIELD_ANNOTATIONS.round} />
-          <FieldRow label="Block ID" value={toHex(proof.blockIdHash)} annotation={PROOF_FIELD_ANNOTATIONS.blockIdHash} />
-          <FieldRow label="Signature" value={toHex(proof.signature)} annotation={PROOF_FIELD_ANNOTATIONS.signature} />
+          <FieldRow label="Block ID" value={bytesToHex(proof.blockIdHash)} annotation={PROOF_FIELD_ANNOTATIONS.blockIdHash} />
+          <FieldRow label="Signature" value={bytesToHex(proof.signature)} annotation={PROOF_FIELD_ANNOTATIONS.signature} />
         </VStack>
       </Box>
 
@@ -229,17 +229,18 @@ export function QueryEntryCard({ entry }: { entry: QueryProofEntry }) {
       <AccordionButton
         px={3}
         py={2}
+        minH="44px"
         borderRadius="md"
         _hover={{ bg: 'raised' }}
         _expanded={{ bg: 'raised' }}
       >
         <HStack flex="1" spacing={2} align="center">
           <Badge
-            colorScheme={entry.proof ? 'green' : entry.hasProofVariant ? 'yellow' : 'gray'}
+            colorScheme={entry.verification === 'verified' ? 'green' : entry.verification === 'failed' ? 'red' : 'gray'}
             fontSize="2xs"
             variant="subtle"
           >
-            {entry.proof ? 'proven' : entry.hasProofVariant ? 'unproven' : 'no proof'}
+            {entry.verification === 'verified' ? 'SDK verified' : entry.verification === 'failed' ? 'proof failed' : entry.status === 'error' ? 'unavailable' : 'not verified'}
           </Badge>
           <Text fontSize="xs" fontFamily="mono" color="gray.100" fontWeight="500">
             {entry.methodName}
@@ -277,57 +278,76 @@ export function QueryEntryDetail({
     // Keyed on the entry + default tab so the uncontrolled Tabs reset to the
     // intended tab whenever a different entry is inspected (e.g. reusing the
     // Proof Inspector drawer for another value).
-    <Tabs
-      key={`${entry.timestamp}:${defaultTabIndex}`}
-      size="sm"
-      variant="soft-rounded"
-      colorScheme="gray"
-      defaultIndex={defaultTabIndex}
-    >
-      <TabList mb={3}>
-        <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Query</Tab>
-        <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Result</Tab>
-        {entry.hasProofVariant ? (
-          <Tab fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Proof</Tab>
-        ) : null}
-      </TabList>
-      <TabPanels>
-        <TabPanel px={0}>
-          <VStack align="stretch" spacing={3}>
-            <Box>
-              <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Method</Text>
-              <Text fontSize="xs" fontFamily="mono" color="gray.100">{entry.methodName}</Text>
-            </Box>
-            {annotation ? (
-              <Text fontSize="xs" color="gray.400" lineHeight="1.5">{annotation}</Text>
-            ) : null}
-            {entry.captureNote ? (
-              <Text fontSize="xs" color="gray.400" lineHeight="1.5">{entry.captureNote}</Text>
-            ) : null}
-            <Box>
-              <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Parameters</Text>
-              <MiniCodeBlock value={JSON.stringify(entry.methodParams, null, 2)} collapsedHeight={200} />
-            </Box>
-          </VStack>
-        </TabPanel>
-        <TabPanel px={0}>
-          <VStack align="stretch" spacing={3}>
-            {entry.status === 'error' ? (
-              <Text fontSize="xs" color="red.300">{entry.error}</Text>
-            ) : (
-              <MiniCodeBlock
-                value={typeof entry.result === 'string' ? entry.result : JSON.stringify(entry.result, null, 2)}
-                collapsedHeight={400}
-              />
-            )}
-          </VStack>
-        </TabPanel>
-        {entry.hasProofVariant ? (
+    <VStack align="stretch" spacing={4}>
+      <VStack align="stretch" spacing={1.5} borderLeft="2px solid" borderColor="gray.750" pl={3}>
+        <FieldRow label="Verification" value={entry.verification ?? 'Not recorded'} />
+        <FieldRow label="Proof bytes" value={entry.proof ? `${formatBytes(entry.proof.grovedbProof.byteLength)} captured` : entry.omitted?.proof ? 'Omitted by storage limit' : 'Not captured'} />
+        <FieldRow label="Network" value={entry.network ?? 'Not recorded'} />
+        <FieldRow label="Trusted mode" value={entry.trusted === undefined ? 'Not recorded' : entry.trusted ? 'On' : 'Off'} />
+        <FieldRow label="Quorum keys" value={entry.quorumKeySource ?? 'Not recorded'} />
+        <FieldRow label="Retrieved" value={new Date(entry.timestamp).toISOString()} />
+        <FieldRow label="Freshness" value="Snapshot at retrieval; current network state may differ" />
+        <FieldRow label="Response height" value={entry.metadata ? String(entry.metadata.height) : 'Not returned'} />
+      </VStack>
+      {entry.captureNote ? (
+        <Text fontSize="xs" color="gray.400" lineHeight="1.5">{entry.captureNote}</Text>
+      ) : null}
+      <Text fontSize="xs" color="gray.400">{EVIDENCE_TRUST_NOTICE}</Text>
+      <Button size="sm" minH="44px" alignSelf="flex-start" variant="outline" onClick={() => downloadEvidenceBundle([entry])}>
+        Export evidence JSON
+      </Button>
+      <Tabs
+        isLazy
+        key={`${entry.timestamp}:${defaultTabIndex}`}
+        size="sm"
+        variant="soft-rounded"
+        colorScheme="gray"
+        defaultIndex={defaultTabIndex}
+      >
+        <TabList mb={3}>
+          <Tab minH="44px" fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Query</Tab>
+          <Tab minH="44px" fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Result</Tab>
+          {entry.hasProofVariant ? (
+            <Tab minH="44px" fontSize="xs" _selected={{ bg: 'sunken', color: 'ink' }}>Proof</Tab>
+          ) : null}
+        </TabList>
+        <TabPanels>
           <TabPanel px={0}>
-            <ProofTab entry={entry} />
+            <VStack align="stretch" spacing={3}>
+              <Box>
+                <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Method</Text>
+                <Text fontSize="xs" fontFamily="mono" color="gray.100">{entry.methodName}</Text>
+              </Box>
+              {annotation ? (
+                <Text fontSize="xs" color="gray.400" lineHeight="1.5">{annotation}</Text>
+              ) : null}
+              <Box>
+                <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mb={1}>Parameters</Text>
+                <MiniCodeBlock value={safeStringify(entry.methodParams)} collapsedHeight={200} />
+              </Box>
+            </VStack>
           </TabPanel>
-        ) : null}
-      </TabPanels>
-    </Tabs>
+          <TabPanel px={0}>
+            <VStack align="stretch" spacing={3}>
+              {entry.status === 'error' ? (
+                <Text fontSize="xs" color="red.300">{entry.error}</Text>
+              ) : entry.resultCaptureError ? (
+                <Text fontSize="xs" color="gray.400">The query succeeded, but its result could not be captured: {entry.resultCaptureError}</Text>
+              ) : (
+                <MiniCodeBlock
+                  value={entry.omitted?.result ? 'Result omitted by the inspector storage limit.' : safeStringify(entry.result)}
+                  collapsedHeight={400}
+                />
+              )}
+            </VStack>
+          </TabPanel>
+          {entry.hasProofVariant ? (
+            <TabPanel px={0}>
+              <ProofTab entry={entry} />
+            </TabPanel>
+          ) : null}
+        </TabPanels>
+      </Tabs>
+    </VStack>
   );
 }

@@ -10,7 +10,7 @@ import {
 } from 'react';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 
-export type ProofStatus = 'verified' | 'trusted' | 'failed';
+export type ProofStatus = 'verified' | 'trusted' | 'failed' | 'unavailable';
 
 export interface ProofPayload {
   title: string;
