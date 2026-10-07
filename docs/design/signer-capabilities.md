@@ -40,8 +40,10 @@ edited draft cannot return later. Importing disables draft edits, and all import
 attempts clear credential fields and backup previews when they finish.
 
 Pending connections are rejected and destroyed after disconnect, provider
-unmount, or a changed SDK/network/trust context. Replacing a signer destroys the
-previous one. Live material is released on disconnect, reload/unload, or ten
+unmount, or a changed SDK/network/trust context. A completed import must also
+match its captured session ID and still-active abort signal before it can become
+the signer, including before React commits a network change. Replacing a signer
+destroys the previous one. Live material is released on disconnect, reload/unload, or ten
 minutes continuously hidden. JavaScript cannot guarantee erasure of every secret
 copy. Session storage contains only the signer kind and public identity ID for a
 reconnect hint; blocked storage does not disable in-memory signing.

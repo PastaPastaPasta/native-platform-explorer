@@ -42,7 +42,6 @@ describe('SignerProvider', () => {
     secondDestroy = vi.fn();
     installStorageMock('sessionStorage');
     useSdkMock.mockReturnValue({
-      ...{ sessionId: 1, sessionSignal: null },
       sdk: null,
       status: 'connecting',
       network: 'testnet',
@@ -244,6 +243,35 @@ describe('SignerProvider', () => {
       /session changed/,
     );
     expect(destroyed).toHaveBeenCalledOnce();
+  });
+
+  it('rejects a completed key import immediately when its SDK session aborts', () => {
+    const controller = new AbortController();
+    const context = {
+      ...useSdkMock(),
+      sdk: {} as EvoSDK,
+      status: 'ready' as const,
+      sessionSignal: controller.signal,
+    };
+    useSdkMock.mockReturnValue(context);
+    let completeImport!: ReturnType<typeof useSigner>['connect'];
+    function Capture() {
+      completeImport = useSigner().connect;
+      return null;
+    }
+    render(
+      <SignerProvider>
+        <Capture />
+      </SignerProvider>,
+    );
+
+    // SDK retirement aborts synchronously, before its new React state commits.
+    controller.abort();
+    expect(() =>
+      completeImport(createMockSigner({ sdk: context.sdk, destroy: firstDestroy })),
+    ).toThrow(/session changed/);
+    expect(firstDestroy).toHaveBeenCalledOnce();
+    expect(window.sessionStorage.getItem('npe:signer-kind')).toBeNull();
   });
 
   it('keeps live signing usable when browser storage is blocked', () => {
