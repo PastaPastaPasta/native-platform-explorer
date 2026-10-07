@@ -265,6 +265,13 @@ describe('SDK-compatible signers', () => {
       })),
     });
     const version = PlatformVersion.latest();
+    const master = new IdentityPublicKey({
+      keyId: 0,
+      purpose: 0,
+      securityLevel: 0,
+      keyType: 0,
+      data,
+    });
     const contract = new DataContract({
       ownerId: ID,
       identityNonce: 1n,
@@ -289,6 +296,7 @@ describe('SDK-compatible signers', () => {
         const material = await signer.prepareSdk!(operationRequirement(id).criteria);
         try {
           expect(transition.getKeyLevelRequirement(0)).toEqual(levels);
+          expect(() => transition.verifyPublicKey(master)).toThrow();
           expect(material.identityKey.securityLevel).toBe('CRITICAL');
           expect(() => transition.verifyPublicKey(material.identityKey)).not.toThrow();
         } finally {
@@ -298,6 +306,7 @@ describe('SDK-compatible signers', () => {
         }
       }
     } finally {
+      master.free();
       contract.free();
       version.free();
       signer.destroy();

@@ -11,7 +11,11 @@ The explorer supports local bridge backups, one mnemonic derivation path, and
 single WIF imports. Extension signing and raw-preimage signing are unavailable.
 Top-ups require the external bridge; raw-transition and masternode-vote
 broadcasting require their originating tools. Operation requirements are declared
-centrally in `capabilities.ts`; the transaction flow consumes those requirements.
+centrally in `capabilities.ts` and enforced when implemented executors prepare
+signing material. Entries also carry that metadata for the next transaction PR.
+The current `OperationShell` does not consume capability metadata; UI capability
+gates and binding transaction approval to inputs, signer, identity and SDK session
+belong to that next PR. Existing contract and document result links are preserved.
 
 ## Key validation and selection
 
