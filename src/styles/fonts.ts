@@ -1,11 +1,11 @@
-import { Fraunces, JetBrains_Mono } from 'next/font/google';
+import localFont from 'next/font/local';
 import { GeistSans } from 'geist/font/sans';
 
 // Fraunces — variable serif with optical sizing. Used for display headings and key
 // metric readouts. Distinctive characterful face, not a generic AI default.
-export const fraunces = Fraunces({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
+export const fraunces = localFont({
+  src: './fonts/Fraunces.ttf',
+  weight: '100 900',
   variable: '--font-display',
   display: 'swap',
 });
@@ -15,9 +15,9 @@ export const fraunces = Fraunces({
 export const geist = GeistSans;
 
 // JetBrains Mono — IDs, hashes, numbers, code.
-export const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
+export const jetbrainsMono = localFont({
+  src: './fonts/JetBrainsMono.ttf',
+  weight: '100 800',
   variable: '--font-mono',
   display: 'swap',
 });
