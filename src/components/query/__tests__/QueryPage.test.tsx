@@ -44,6 +44,18 @@ beforeEach(() => {
 });
 
 describe('Query workspace execution', () => {
+  it('shows a structured SDK query failure and fetches current results after Retry', async () => {
+    const query = vi.fn().mockRejectedValue({ message: 'Document endpoint unavailable', kind: 17 });
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain LIMIT 1');
+    await screen.findByText('Document endpoint unavailable');
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument();
+    query.mockResolvedValue({ data: [{ $id: 'current', label: 'Recovered response' }] });
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await screen.findByText('Recovered response');
+    expect(screen.queryByText('Document endpoint unavailable')).not.toBeInTheDocument();
+  });
+
   it('refetches unchanged SQL and puts the network in the query link', async () => {
     const query = vi.fn().mockResolvedValue({ data: [{ $id: 'one', label: 'first' }] });
     renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });

@@ -97,32 +97,28 @@ export function StatementResult({
 
   const startAfter = cursorStack[cursorStack.length - 1];
 
-  const queryParams = useMemo(() => {
+  const params = useMemo(() => {
     if (!effectiveContractId || aliasError) return undefined;
-    if (parsed.select !== 'documents') return undefined;
-    return toDocumentsQuery(parsed, effectiveContractId, { startAfter });
+    return toDocumentsQuery(
+      parsed,
+      effectiveContractId,
+      parsed.select === 'documents' ? { startAfter } : undefined,
+    );
   }, [parsed, effectiveContractId, aliasError, startAfter]);
-
-  const aggregateParams = useMemo(() => {
-    if (!effectiveContractId || aliasError) return undefined;
-    if (parsed.select === 'documents') return undefined;
-    return toDocumentsQuery(parsed, effectiveContractId);
-  }, [parsed, effectiveContractId, aliasError]);
 
   const aggregateKind: AggregateKind | undefined =
     parsed.select === 'documents' ? undefined : parsed.select;
   const isAggregate = aggregateKind !== undefined;
 
-  const docsQ = useDocumentsQuery(active ? queryParams : undefined, executionId);
+  const docsQ = useDocumentsQuery(active && !isAggregate ? params : undefined, executionId);
   const aggQ = useDocumentsAggregate(
-    active && isAggregate ? aggregateParams : undefined,
+    active && isAggregate ? params : undefined,
     aggregateKind,
     parsed.aggregateField,
     executionId,
   );
 
   const refetch = isAggregate ? aggQ.refetch : docsQ.refetch;
-  const params = isAggregate ? aggregateParams : queryParams;
   useEffect(() => {
     if (!active) return;
     if (!params || aliasError) {
@@ -304,7 +300,7 @@ export function StatementResult({
         />
       )}
 
-      {!isAggregate && queryParams && (
+      {!isAggregate && params && (
         <QueryResults
           data={result?.data}
           isLoading={active || executionState === 'queued'}
