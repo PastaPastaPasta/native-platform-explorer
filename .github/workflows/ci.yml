@@ -27,6 +27,7 @@ jobs:
       - run: pnpm lint
       - run: pnpm typecheck
       - run: pnpm test:coverage
+      - run: pnpm test:bundles
       - name: Resolve deployment prefix
         id: pages
         uses: actions/configure-pages@v5
@@ -34,6 +35,8 @@ jobs:
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: pnpm build
+      - name: Check initial route JavaScript budgets
+        run: pnpm check:bundles
       - name: Prepare Pages files and font licenses
         run: |
           touch out/.nojekyll

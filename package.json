@@ -12,6 +12,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
+    "test:bundles": "node --test scripts/__tests__/check-bundle-budget.test.mjs",
+    "check:bundles": "node scripts/check-bundle-budget.mjs",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "serve": "serve out"
