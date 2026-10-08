@@ -36,8 +36,8 @@ interface TestOptions {
 let changeOptions: OperationFormProps<TestOptions>['onOptionsChange'];
 let initialOptions: TestOptions;
 function TestForm({ onOptionsChange }: OperationFormProps<TestOptions>) {
-  changeOptions = onOptionsChange;
   useEffect(() => {
+    changeOptions = onOptionsChange;
     onOptionsChange(initialOptions);
   }, [onOptionsChange]);
   return <div>form ready</div>;

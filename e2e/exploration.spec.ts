@@ -1,10 +1,10 @@
 import { test as base, expect } from '@playwright/test';
 
 const test = base.extend({
-  page: async ({ page }, use) => {
+  page: async ({ page }, providePage) => {
     const pageErrors: string[] = [];
     page.on('pageerror', (error) => pageErrors.push(error.message));
-    await use(page);
+    await providePage(page);
     expect(pageErrors).toEqual([]);
   },
 });
