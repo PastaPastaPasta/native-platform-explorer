@@ -73,3 +73,15 @@ deployment path against the packaged export, including local fonts and licenses.
 Actual SDK initialization and invalid-credential handling passed without browser
 SDK-success fixtures or transaction broadcasts. Later product integrations must
 repeat these checks against their combined source.
+
+The final integration includes the query workspace, exploration tools, epoch
+evidence, transaction handling, proof storage, and deferred SDK startup changes
+from main `99b35a369474537604418295478a5e5bb8b0fe7e`. Their runtime source remains
+unchanged by this framework migration. Additional test probes publish captured
+hook values after React commits, and the query URL compatibility check starts
+valid SQL with real offline SDK initialization before asserting URL persistence.
+The Playwright fixture callback is named `providePage` to avoid confusing React
+19's `use` hook check. Initial bundle budgets remain 512 KiB gzip and 2 MiB raw
+per route: `.next` directory checks use the shipped HTML fallback on Next.js 16,
+and direct exported-HTML checks apply the same limits. The 13 Node regressions
+continue to cover both the older manifest and exported-HTML parser paths.
