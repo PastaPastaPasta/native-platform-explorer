@@ -34,6 +34,11 @@ and edit. The most important one is `NEXT_PUBLIC_DISABLE_WRITE_MODE=true`
 for kiosk / read-only deployments: it hides `/wallet` and `/broadcast`
 while keeping the rest of the explorer identical.
 
+The bridge browser tests use the shipped URL as a fixed fixture. Before running
+`pnpm e2e`, build with `NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build`,
+as CI does. This overrides custom or empty values in `.env.local` for that build.
+Custom and disabled bridge URLs are covered by the utility unit tests.
+
 ## Write mode
 
 Opt-in. The explorer does not persist mnemonic, WIF, or backup secrets.
@@ -81,7 +86,7 @@ The current custom domain uses the root prefix. To reproduce it locally, omit
 `NEXT_PUBLIC_BASE_PATH` from the commands below. Project-prefix hosting is also covered:
 
 ```sh
-NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm build
+NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm build
 cp src/styles/fonts/Fraunces-OFL.txt src/styles/fonts/JetBrainsMono-OFL.txt out/
 NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
 ```

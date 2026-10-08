@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+// CI and the documented local E2E build pin the shipped bridge URL.
+// Custom and disabled URL policies are covered by the bridge utility unit tests.
 test('wallet bridge uses the selected network without sending keys or an unsupported action', async ({
   page,
 }) => {

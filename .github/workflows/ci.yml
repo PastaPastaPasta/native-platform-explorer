@@ -35,6 +35,7 @@ jobs:
       - name: Build the deployment artifact
         env:
           NEXT_PUBLIC_BASE_PATH: ${{ steps.pages.outputs.base_path }}
+          NEXT_PUBLIC_BRIDGE_URL: https://bridge.dashhq.org
         run: pnpm build
       - name: Check initial route JavaScript budgets
         run: pnpm check:bundles
