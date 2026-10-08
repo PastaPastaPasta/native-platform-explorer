@@ -7,16 +7,12 @@ import { useSdk } from '@sdk/hooks';
 import type { OperationFormProps } from '../OperationShell';
 import type { ExplorerSigner } from '@/signer/types';
 import { isBase58Identifier } from '@util/identifier';
+import { getBridgeUrl } from '@util/bridge';
 
 export interface IdentityTopUpOptions {
   identityId: string;
   amountDash: string;
 }
-
-// Mirrors BridgeLaunchCard: no fallback URL. Operators must set
-// NEXT_PUBLIC_BRIDGE_URL — we don't want to send users to an arbitrary domain
-// to type a seed phrase.
-const BRIDGE_BASE_URL = (process.env.NEXT_PUBLIC_BRIDGE_URL ?? '').replace(/\/+$/, '');
 
 export function IdentityTopUpForm({
   signer,
@@ -38,13 +34,7 @@ export function IdentityTopUpForm({
     onOptionsChange({ identityId: identityId.trim(), amountDash: amount });
   }, [identityId, amount, onOptionsChange]);
 
-  const bridgeUrl = BRIDGE_BASE_URL
-    ? `${BRIDGE_BASE_URL}/?${new URLSearchParams({
-        network,
-        mode: 'topup',
-        identityId: identityId.trim(),
-      }).toString()}`
-    : null;
+  const bridgeUrl = getBridgeUrl(network);
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -86,8 +76,9 @@ export function IdentityTopUpForm({
           </Text>
           <Text fontSize="xs" color="gray.250">
             Top-up requires an asset-lock proof built from a Dash Core transaction — the bridge does
-            that for you. Open it below; when the bridge says &ldquo;complete&rdquo;, return here
-            and the identity balance will refresh automatically.
+            that for you. Open it below, choose Manage Identity, then Top Up Identity, and enter
+            this identity and amount there. After it completes, return to the identity page and
+            refresh to check the balance.
           </Text>
           {bridgeUrl ? (
             <HStack>
@@ -105,8 +96,8 @@ export function IdentityTopUpForm({
             </HStack>
           ) : (
             <Text fontSize="xs" color="warning">
-              Bridge URL not configured. Set NEXT_PUBLIC_BRIDGE_URL to enable this shortcut, or run
-              the bridge separately.
+              The bridge shortcut is unavailable. It requires an enabled Mainnet or Testnet bridge;
+              other networks need their own setup.
             </Text>
           )}
         </VStack>

@@ -227,7 +227,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Top-up requires an asset-lock proof built from a Dash Core transaction. ' +
         'For now we hand off to the bridge — return to the explorer when the ' +
-        'top-up completes; the balance will refresh automatically.',
+        'top-up completes, then refresh the identity page to check the balance.',
       FormComponent: IdentityTopUpForm,
       summarise: (o) => `Top up ${o.identityId} by ${o.amountDash} DASH (via bridge).`,
       execute: executeIdentityTopUp,

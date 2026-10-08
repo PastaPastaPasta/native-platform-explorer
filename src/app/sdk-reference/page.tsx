@@ -1,14 +1,7 @@
 'use client';
 
-import { Placeholder } from '@ui/Placeholder';
+import { SdkReference } from '@components/sdk-reference/SdkReference';
 
 export default function Page() {
-  return (
-    <Placeholder
-      title="SDK reference"
-      description="Which SDK call powers each page. Stage 5/6 populates this from a generated mapping."
-      stage={5}
-      breadcrumbs={[{ label: 'Home', href: '/' }, { label: 'SDK reference' }]}
-    />
-  );
+  return <SdkReference />;
 }

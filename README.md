@@ -26,6 +26,7 @@ pnpm lint
 pnpm typecheck
 pnpm test      # vitest
 pnpm e2e       # playwright
+pnpm generate:sdk-reference  # update the page-to-SDK-call mapping after source changes
 ```
 
 Environment variables live in `.env.local.example` — copy to `.env.local`
@@ -43,6 +44,25 @@ JavaScript strings and SDK internal copies cannot be reliably zeroed.
 Extension support is detection-only until the
 `dash-platform-extension` public API stabilises. See [`/about`](src/app/about/page.tsx)
 for the full proof + privacy explainer.
+
+Identity creation and funding open `https://bridge.dashhq.org` for Mainnet and
+Testnet. Choose Create New Identity, or Manage Identity → Top Up Identity and
+enter the identity/amount in the bridge; the
+shortcut passes the selected network only. Import the bridge's backup JSON
+to connect an identity here. Other networks require a separate bridge setup.
+Operators can override the HTTPS base URL with `NEXT_PUBLIC_BRIDGE_URL` at
+build time, or set it empty to disable the shortcuts. After an external top-up,
+refresh the identity page to check the balance.
+
+## SDK reference
+
+`/sdk-reference` lists the page-specific SDK calls reachable through each
+route's components, hooks, and actions. Filter by page, method, or source hook.
+The checked-in mapping is generated from TypeScript symbols and the pinned SDK;
+conditional calls are included, while shared connection setup and methods on
+returned SDK objects are outside its scope. The reference does not execute SDK
+queries. `pnpm build` rejects a stale mapping; update it with
+`pnpm generate:sdk-reference`. Generator regression tests run in CI.
 
 ## Deploy
 

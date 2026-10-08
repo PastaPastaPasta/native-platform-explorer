@@ -117,6 +117,8 @@ function sameExcept(before, after, excluded) {
     .filter(([number]) => !excluded.includes(number)).map(([number, item]) => [number, item.raw]);
   assert.deepEqual(select(before), select(after), 'Unexpected changes outside the target fields.');
 }
+/** @param {Buffer} bytes
+ * @param {{ epoch?: number, timeMs?: bigint, corruptSignature?: boolean }} options */
 function rewrite(bytes, { epoch, timeMs, corruptSignature = false } = {}) {
   const before = response(bytes);
   let metadata = before.metadata;

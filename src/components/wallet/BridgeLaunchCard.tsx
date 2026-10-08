@@ -1,45 +1,26 @@
 'use client';
 
-import { Button, Code, HStack, Heading, Text, VStack } from '@chakra-ui/react';
+import { Button, HStack, Heading, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useSdk } from '@sdk/hooks';
 import { useSigner } from '@/signer/SignerProvider';
-
-// We deliberately do not ship a default Bridge URL. Pointing identity creation
-// at an arbitrary fallback domain is a security-sensitive footgun — if the
-// domain changes hands or DNS lapses, every user clicking "Create new identity"
-// would be sent somewhere untrusted to type a seed phrase. Operators must opt
-// in by setting NEXT_PUBLIC_BRIDGE_URL.
-const BRIDGE_BASE_URL = (process.env.NEXT_PUBLIC_BRIDGE_URL ?? '').replace(
-  /\/+$/,
-  '',
-);
-
-function buildBridgeUrl(params: Record<string, string | undefined>): string {
-  const qp = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v) qp.set(k, v);
-  }
-  const q = qp.toString();
-  return q ? `${BRIDGE_BASE_URL}/?${q}` : `${BRIDGE_BASE_URL}/`;
-}
+import { getBridgeUrl } from '@util/bridge';
 
 export function BridgeLaunchCard() {
   const { network } = useSdk();
   const { signer } = useSigner();
+  const bridgeUrl = getBridgeUrl(network);
 
-  if (!BRIDGE_BASE_URL) {
+  if (!bridgeUrl) {
     return (
       <InfoBlock>
         <VStack align="flex-start" spacing={2}>
           <Heading size="sm" color="gray.100">
-            Bridge link not configured
+            Bridge shortcut unavailable
           </Heading>
           <Text fontSize="sm" color="gray.250">
-            Set <Code fontSize="xs">NEXT_PUBLIC_BRIDGE_URL</Code> to the
-            deployed Dash Platform bridge to enable one-click identity
-            creation and top-up. Until then, run the bridge separately and
-            paste the backup JSON above.
+            Import your bridge backup JSON above. Bridge shortcuts require an enabled Mainnet or
+            Testnet bridge; other networks need their own setup.
           </Text>
         </VStack>
       </InfoBlock>
@@ -53,17 +34,16 @@ export function BridgeLaunchCard() {
           Need an identity?
         </Heading>
         <Text fontSize="sm" color="gray.250">
-          Identities are created in the Dash Platform bridge — it converts
-          L1 DASH into Platform credits and registers the identity. Come back
-          here when you have the backup JSON and drop it in the import box
-          above.
+          Identities are created in the Dash Platform bridge — it converts L1 DASH into Platform
+          credits and registers the identity. Open the bridge and choose Create New Identity. Come
+          back with the backup JSON and drop it in the import box above.
         </Text>
         <HStack spacing={2} flexWrap="wrap">
           <Button
             as="a"
             size="sm"
             colorScheme="blue"
-            href={buildBridgeUrl({ network })}
+            href={bridgeUrl}
             target="_blank"
             rel="noopener noreferrer"
           >
@@ -74,11 +54,7 @@ export function BridgeLaunchCard() {
               as="a"
               size="sm"
               variant="outline"
-              href={buildBridgeUrl({
-                network,
-                mode: 'topup',
-                identityId: signer.identityId,
-              })}
+              href={bridgeUrl}
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -87,7 +63,8 @@ export function BridgeLaunchCard() {
           ) : null}
         </HStack>
         <Text fontSize="xs" color="gray.400">
-          Bridge URL: {BRIDGE_BASE_URL}
+          Bridge: {new URL(bridgeUrl).host}. For a top-up, choose Manage Identity, then Top Up
+          Identity, and enter your identity there.
         </Text>
       </VStack>
     </InfoBlock>

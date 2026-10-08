@@ -28,6 +28,7 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm test:coverage
       - run: pnpm test:bundles
+      - run: pnpm test:sdk-reference
       - name: Resolve deployment prefix
         id: pages
         uses: actions/configure-pages@v5

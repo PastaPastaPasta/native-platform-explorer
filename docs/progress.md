@@ -18,6 +18,13 @@ The original stage-6 preview-only limitation no longer describes the whole
 write surface. Each operation must advertise its current signer and SDK
 requirements; an interface or build passing does not prove a live broadcast.
 
+The SDK reference now lists the source-derived page-to-call mapping, with
+search, route filters, and explicit conditional/proof-path limits. Builds reject
+stale mapping data. Mainnet/Testnet identity creation and top-up link to the
+configured bridge at `bridge.dashhq.org`; users choose the action and enter
+their identity there. Bridge handoff passes the network only, and external
+completion requires refreshing identity details in the explorer.
+
 The CI workflow validates the same static export that Pages deploys, including
 its configured deployment prefix. Live SDK integration checks remain separate from deterministic
 browser and unit checks; they do not broadcast transactions.
