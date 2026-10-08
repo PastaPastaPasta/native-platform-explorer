@@ -9,6 +9,7 @@ import {
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery, type SdkQueryExecution } from './hooks';
 import { epochInfoQuery, epochRangeError, epochRangeQueries, fetchEpochRange, isEpochIndex } from './epoch-queries';
+import { fetchCurrentEpoch } from './current-epoch';
 import { getConfig } from '@/config';
 import { classifyProof, getQuorumKeySource, isProofFallbackBlocked, verificationForResponse, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
@@ -685,10 +686,16 @@ export function useDpnsPrefixSearch(
 
 // ----- epoch -----
 export function useCurrentEpoch() {
+  const { network, trusted } = useSdk();
   return useSdkQuery(
     ['epoch', 'current'],
-    (sdk) => sdk.epoch.current() as Promise<unknown>,
-    { staleTime: LIVE, withProofFn: (sdk) => sdk.epoch.currentWithProof(), methodName: 'epoch.current', methodParams: {} },
+    (sdk, execution) => fetchCurrentEpoch(sdk, network, trusted, execution),
+    {
+      staleTime: LIVE,
+      methodName: 'epoch.epochsInfo',
+      methodParams: { selection: 'genesis-and-time', network, ascending: true, count: 1 },
+      captureNote: `Current epoch selected from separate ${trusted ? 'SDK-verified explicit queries and signed block time' : 'SDK calls and the local clock'}. No single proof payload or response height covers this selection.`,
+    },
   );
 }
 
@@ -725,7 +732,15 @@ export function useFinalizedEpochInfo(index: number | undefined) {
   return useSdkQuery(
     ['epoch', 'finalizedInfos', index],
     (sdk) => sdk.epoch.finalizedInfos(epochInfoQuery(index!)) as Promise<unknown>,
-    { enabled: valid, staleTime: IMMUTABLE, withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(epochInfoQuery(index!)), methodName: 'epoch.finalizedInfos', methodParams: query ? { ...query } : {} },
+    {
+      enabled: valid,
+      // A finalized record is immutable; its absence is not. A mounted detail
+      // page must notice when an unfinalized epoch acquires a finalized record.
+      staleTime: (q) => q.state.data instanceof Map && q.state.data.get(index) != null ? IMMUTABLE : LIVE,
+      refetchInterval: (q) => q.state.data instanceof Map && q.state.data.get(index) == null ? LIVE : false,
+      withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(epochInfoQuery(index!)),
+      methodName: 'epoch.finalizedInfos', methodParams: query ? { ...query } : {},
+    },
   );
 }
 

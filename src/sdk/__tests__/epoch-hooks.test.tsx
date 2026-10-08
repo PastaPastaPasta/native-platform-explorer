@@ -7,7 +7,7 @@ import { QueryProofStoreProvider, useQueryProofStore } from '@/contexts/QueryPro
 import { createTestQueryClient } from '@/test/render';
 import { createMockSdk, createSdkContextValue } from '@/test/sdk';
 import { SdkContext, type SdkContextValue } from '../SdkProvider';
-import { useEpochInfo, useEpochRange, useFinalizedEpochInfo } from '../queries';
+import { useCurrentEpoch, useEpochInfo, useEpochRange, useFinalizedEpochInfo } from '../queries';
 import { createEvidenceBundle } from '../evidence';
 import { nativeProofError, SDK_PROOF_CONTEXT_MESSAGE, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
 import { normalizeError } from '../errors';
@@ -194,5 +194,115 @@ describe('epoch hook SDK arguments and capture', () => {
     expect(screen.getByTestId('capture-note')).toBeEmptyDOMElement();
     expect(screen.getByTestId('error')).toHaveTextContent('Proof verification failed');
     expect(screen.getByTestId('evidence')).toHaveTextContent('1:false:false');
+  });
+});
+
+function CurrentProbe() {
+  const q = useCurrentEpoch();
+  const store = useQueryProofStore();
+  return <>
+    <div data-testid="current-state">{q.status}</div>
+    <div data-testid="current-result">{JSON.stringify(q.data)}</div>
+    <div data-testid="current-proof">{String(!!store.entries[0]?.proof)}:{String(!!store.entries[0]?.metadata)}</div>
+    <div data-testid="current-note">{store.entries[0]?.captureNote}</div>
+    <div data-testid="current-count">{store.entries.length}</div>
+    <div data-testid="current-network">{store.entries[0]?.queryKey[1] as string}</div>
+    <div data-testid="current-proof-state">{q.proofState.kind}</div>
+    <div data-testid="current-export">{JSON.stringify(createEvidenceBundle(store.entries).queries)}</div>
+  </>;
+}
+
+describe('current epoch selection integrity', () => {
+  it('never uses implicit current or its unsigned metadata epoch to select the latest result', async () => {
+    const genesisTime = 1;
+    const timeMs = genesisTime + 84 * 788_400_000 + 1;
+    const epochsInfoWithProof = vi.fn((query: EpochQuery) => Promise.resolve({ proof: {}, metadata: { timeMs, epoch: 42 }, data: new Map(
+      [0, 42, 84].filter((index) => index >= query.startEpoch!)
+        .slice(0, query.count).map((index) => [index, {
+          index, firstBlockTime: genesisTime + index * 788_400_000, firstBlockHeight: 1, firstCoreBlockHeight: 1,
+          feeMultiplierPermille: 1000, protocolVersion: 13,
+        }]),
+    ) }));
+    const current = vi.fn().mockResolvedValue({ index: 42 });
+    const currentWithProof = vi.fn().mockResolvedValue({ data: { index: 42 }, metadata: { epoch: 42 } });
+    const client = createTestQueryClient();
+    clients.push(client);
+    render(<Boundary client={client} context={createSdkContextValue({
+      network: 'mainnet', sdk: createMockSdk({ epoch: { epochsInfoWithProof, current, currentWithProof } }),
+    })}><CurrentProbe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('current-state')).toHaveTextContent('success'));
+    expect(screen.getByTestId('current-result')).toHaveTextContent('"index":84');
+    expect(current).not.toHaveBeenCalled();
+    expect(currentWithProof).not.toHaveBeenCalled();
+    expect(epochsInfoWithProof.mock.calls.every(([query]) => Number.isInteger(query.startEpoch) && query.ascending === true)).toBe(true);
+    expect(screen.getByTestId('current-proof')).toHaveTextContent('false:false');
+    expect(screen.getByTestId('current-note')).toHaveTextContent('No single proof payload or response height');
+  });
+
+  it('does not publish the previous network after retirement during the selected epoch request', async () => {
+    const data = (index: number, firstBlockTime: number) => ({
+      index, firstBlockTime, firstBlockHeight: 1, firstCoreBlockHeight: 1,
+      feeMultiplierPermille: 1000, protocolVersion: 13,
+    });
+    const oldTime = 84 * 788_400_000 + 1;
+    let resolveOld!: (value: unknown) => void;
+    const oldResponse = new Promise((done) => { resolveOld = done; });
+    const mainnetFetch = vi.fn().mockResolvedValueOnce({
+      data: new Map([[0, data(0, 0)]]), metadata: { timeMs: oldTime }, proof: {},
+    }).mockReturnValueOnce(oldResponse);
+    const testnetFetch = vi.fn((query: EpochQuery) => Promise.resolve({
+      data: new Map([[query.startEpoch!, data(query.startEpoch!, query.startEpoch! * 3_600_000)]]),
+      metadata: { timeMs: 2 * 3_600_000 + 1 }, proof: {},
+    }));
+    const controller = new AbortController();
+    const client = createTestQueryClient();
+    clients.push(client);
+    const view = render(<Boundary client={client} context={createSdkContextValue({
+      network: 'mainnet', sessionSignal: controller.signal,
+      sdk: createMockSdk({ epoch: { epochsInfoWithProof: mainnetFetch } }),
+    })}><CurrentProbe /></Boundary>);
+    await waitFor(() => expect(mainnetFetch).toHaveBeenCalledTimes(2));
+    act(() => controller.abort());
+    view.rerender(<Boundary client={client} context={createSdkContextValue({
+      network: 'testnet', sessionId: 2,
+      sdk: createMockSdk({ epoch: { epochsInfoWithProof: testnetFetch } }),
+    })}><CurrentProbe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('current-result')).toHaveTextContent('"index":2'));
+    await act(async () => {
+      resolveOld({ data: new Map([[84, data(84, oldTime - 1)]]), metadata: { timeMs: oldTime }, proof: {} });
+      await oldResponse;
+    });
+    expect(screen.getByTestId('current-result')).toHaveTextContent('"index":2');
+    expect(screen.getByTestId('current-count')).toHaveTextContent('1');
+    expect(screen.getByTestId('current-network')).toHaveTextContent('testnet');
+    expect(screen.getByTestId('current-proof-state')).toHaveTextContent('verified');
+    const exported = JSON.parse(screen.getByTestId('current-export').textContent!);
+    expect(exported).toHaveLength(1);
+    expect(exported[0].context).toMatchObject({ network: 'testnet', trustedMode: true });
+    expect(exported[0].result.index).toBe(2);
+    expect(exported[0].verification).toMatchObject({ outcome: 'verified', captureNote: expect.stringContaining('No single proof payload or response height') });
+    expect(exported[0]).not.toHaveProperty('proof');
+    expect(exported[0]).not.toHaveProperty('metadata');
+    expect(testnetFetch.mock.calls.map(([query]) => query.startEpoch)).toEqual([0, 2]);
+  });
+});
+
+describe('finalized record freshness', () => {
+  it.each(['empty', 'undefined', 'record'] as const)('refreshes absence after remount but retains finalized records (%s)', async (kind) => {
+    const exists = kind === 'record';
+    let now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetch = vi.fn().mockResolvedValueOnce({ data: exists ? new Map([[42, {}]]) : kind === 'undefined' ? new Map([[42, undefined]]) : new Map() })
+      .mockResolvedValue({ data: new Map([[42, {}]]) });
+    const context = createSdkContextValue({ sdk: createMockSdk({ epoch: { finalizedInfosWithProof: fetch } }) });
+    try {
+      const { client, unmount } = mountProbe(context, 'finalized');
+      await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle'));
+      unmount();
+      now += 31_000;
+      render(<Boundary client={client} context={context}><Probe kind="finalized" /></Boundary>);
+      await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle:42'));
+      expect(fetch).toHaveBeenCalledTimes(exists ? 1 : 2);
+    } finally { clock.mockRestore(); }
   });
 });
