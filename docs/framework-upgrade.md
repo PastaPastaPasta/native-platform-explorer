@@ -85,3 +85,8 @@ The Playwright fixture callback is named `providePage` to avoid confusing React
 per route: `.next` directory checks use the shipped HTML fallback on Next.js 16,
 and direct exported-HTML checks apply the same limits. The 13 Node regressions
 continue to cover both the older manifest and exported-HTML parser paths.
+Browser fixtures also wait for the real SDK session before editing a top-up
+draft, and hold subsequent real retry failures while checking an enabled
+inspector's Clear action. These event barriers preserve the original draft reset,
+capture counts, accessible names, and focus assertions without changing product
+session or proof behavior.
