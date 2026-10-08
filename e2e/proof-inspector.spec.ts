@@ -164,12 +164,16 @@ test('inspector name includes its visible zero, singular, and plural query count
   let firstPath: string | undefined;
   let releaseOthers!: () => void;
   const othersReleased = new Promise<void>((resolve) => { releaseOthers = resolve; });
+  let holdDapiCompletions = false;
+  let releaseCompletions!: () => void;
+  const completionsReleased = new Promise<void>((resolve) => { releaseCompletions = resolve; });
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.origin === localOrigin) return route.continue();
     if (!url.pathname.includes('/org.dash.platform.dapi.v0.Platform/')) return route.abort('failed');
     firstPath ??= url.pathname;
     if (url.pathname !== firstPath) await othersReleased;
+    if (holdDapiCompletions) await completionsReleased;
     await route.abort('failed');
   });
   try {
@@ -184,6 +188,11 @@ test('inspector name includes its visible zero, singular, and plural query count
     releaseOthers();
     await expect(open).toHaveText('3 queries', { timeout: 15_000 });
     await expect(open).toHaveAccessibleName('3 queries — Open Query Inspector');
+    // Capture remains on. Hold subsequent real retry failures while checking
+    // Clear: completed new queries would correctly repopulate the inspector.
+    holdDapiCompletions = true;
+    await expect(page.getByRole('heading', { name: 'Query Inspector', exact: true })
+      .locator('..').getByRole('checkbox')).toBeChecked();
     await open.click();
     const drawer = page.getByRole('dialog', { name: 'Query Inspector', exact: true });
     await expect(drawer).toBeVisible();
@@ -195,5 +204,6 @@ test('inspector name includes its visible zero, singular, and plural query count
     await expect(open).toBeFocused();
   } finally {
     releaseOthers();
+    releaseCompletions();
   }
 });

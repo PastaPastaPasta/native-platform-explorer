@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SdkProvider, type SdkContextValue } from '../SdkProvider';
@@ -22,8 +22,9 @@ vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(w
 
 let context: SdkContextValue;
 function Probe() {
-  context = useSdk();
-  return <div data-testid="sdk-state">{context.network}:{context.status}:{String(context.trusted)}</div>;
+  const value = useSdk();
+  useEffect(() => { context = value; }, [value]);
+  return <div data-testid="sdk-state">{value.network}:{value.status}:{String(value.trusted)}</div>;
 }
 function App() { return <SdkProvider><Probe /></SdkProvider>; }
 function deferred() {

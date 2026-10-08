@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen } from '@testing-library/react';
+import { useEffect } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import {
   createQueryProofStore, estimateProofEntryBytes, QueryProofStoreProvider,
@@ -77,7 +78,12 @@ it('keeps recorder consumers stable and only updates the matching entry subscrib
   const recorderRender = vi.fn();
   const entryRender = vi.fn();
   let recorder!: QueryProofRecorder;
-  function Recorder() { recorderRender(); recorder = useQueryProofRecorder(); return null; }
+  function Recorder() {
+    recorderRender();
+    const value = useQueryProofRecorder();
+    useEffect(() => { recorder = value; }, [value]);
+    return null;
+  }
   function Entry() { entryRender(); const e = useQueryProofEntry('a'); return <div>{e?.result as string ?? 'no entry'}</div>; }
   function Inspector() { const store = useQueryProofStore(); return <div data-testid="count">{store.entries.length}</div>; }
   render(<QueryProofStoreProvider><Recorder /><Entry /><Inspector /></QueryProofStoreProvider>);

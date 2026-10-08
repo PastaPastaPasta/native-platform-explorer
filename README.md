@@ -2,7 +2,7 @@
 
 A client-only Dash Platform block explorer, powered exclusively by `@dashevo/evo-sdk`. No backend, no indexer, no database — the browser speaks directly to DAPI, verifies proofs locally, and renders live Platform state.
 
-Designed as a sibling of [`pshenmic/platform-explorer`](https://github.com/pshenmic/platform-explorer): same dark mode, `#008DE4` brand, Montserrat/Open Sans/Roboto Mono typography, glassmorphic card vocabulary — but running entirely in the user's browser.
+Designed as a sibling of [`pshenmic/platform-explorer`](https://github.com/pshenmic/platform-explorer), with a dark theme, the `#008DE4` brand, and glassmorphic cards. Its shipped typography uses Fraunces, Geist, and JetBrains Mono.
 
 ## Status
 
@@ -35,9 +35,12 @@ while keeping the rest of the explorer identical.
 
 ## Write mode
 
-Opt-in. The explorer never stores keys: the mnemonic and WIF adapters keep
-secrets only in tab memory and zero them on disconnect, idle-timeout, or
-reload. Extension support is detection-only until the
+Opt-in. The explorer does not persist mnemonic, WIF, or backup secrets.
+Local adapters keep secrets in tab memory and wipe owned byte arrays on
+disconnect, after ten continuous minutes with the tab hidden, or on unload.
+An in-flight operation retains its SDK signing objects until it settles.
+JavaScript strings and SDK internal copies cannot be reliably zeroed.
+Extension support is detection-only until the
 `dash-platform-extension` public API stabilises. See [`/about`](src/app/about/page.tsx)
 for the full proof + privacy explainer.
 

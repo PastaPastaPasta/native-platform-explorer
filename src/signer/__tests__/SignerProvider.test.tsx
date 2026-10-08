@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { EvoSDK } from '@dashevo/evo-sdk';
@@ -212,7 +212,8 @@ describe('SignerProvider', () => {
   it('rejects pending connections after disconnect, unmount, or a changed network', () => {
     let current!: ReturnType<typeof useSigner>;
     function Capture() {
-      current = useSigner();
+      const value = useSigner();
+      useEffect(() => { current = value; }, [value]);
       return null;
     }
     const context = useSdkMock();
@@ -257,7 +258,8 @@ describe('SignerProvider', () => {
     useSdkMock.mockReturnValue(context);
     let completeImport!: ReturnType<typeof useSigner>['connect'];
     function Capture() {
-      completeImport = useSigner().connect;
+      const { connect } = useSigner();
+      useEffect(() => { completeImport = connect; }, [connect]);
       return null;
     }
     render(

@@ -2,7 +2,8 @@ import { test, expect } from '@playwright/test';
 
 test('static export navigation retains the current document and header control', async ({ page }) => {
   const payload = page.waitForResponse((response) =>
-    new URL(response.url()).pathname.endsWith('/search/index.txt'),
+    // Next.js 16 exports a page segment payload for client navigation.
+    new URL(response.url()).pathname.endsWith('/search/__next.search.__PAGE__.txt'),
   );
   // Block SDK construction through an unknown selection, so this check depends
   // only on the real production Next router and its exported navigation payload.

@@ -19,7 +19,20 @@ test('unsupported writes are identified before signer connection or review', asy
 test('top-up accepts an identity without a signer and resets it after a network switch', async ({
   page,
 }) => {
+  // Settle the real SDK session before editing. A later SDK/session change
+  // correctly resets the draft, independently of the network-switch check.
+  await page.addInitScript(() => localStorage.setItem('npe:trusted', 'false'));
+  await page.route(/^https?:\/\//, (route) => {
+    const { hostname } = new URL(route.request().url());
+    return hostname === '127.0.0.1' || hostname === 'localhost'
+      ? route.continue()
+      : route.abort('failed');
+  });
   await page.goto('broadcast/?network=testnet&op=identity.topUp');
+  await page.locator('footer').getByRole('button').click();
+  const inspector = page.getByRole('dialog', { name: 'Query Inspector', exact: true });
+  await expect(inspector.getByText('Current SDK: testnet · untrusted · ready', { exact: true })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Close query inspector' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('npe:network'))).toBe('testnet');
   await expect(page.getByText('External bridge', { exact: true })).toBeVisible();
   const identity = page.getByRole('textbox', { name: 'Identity', exact: true });

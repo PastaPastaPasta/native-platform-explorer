@@ -42,9 +42,6 @@ const nextConfig = {
   sassOptions: {
     includePaths: [path.join(__dirname, 'src/styles')],
   },
-  experimental: {
-    esmExternals: true,
-  },
   webpack: (config) => {
     // Markdown raw imports (used in /about, /sdk-reference pages later).
     config.module.rules.push({
