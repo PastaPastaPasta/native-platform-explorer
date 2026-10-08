@@ -1,8 +1,8 @@
 'use client';
 
-import { useSearchParams, useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import NextLink from 'next/link';
-import { Suspense, useEffect, useMemo } from 'react';
+import { Suspense, useMemo } from 'react';
 import {
   Button,
   Heading,
@@ -17,6 +17,9 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { NotFoundCard } from '@ui/NotFoundCard';
+import { ErrorCard } from '@ui/ErrorCard';
+import { useSdk } from '@sdk/hooks';
+import { withNetwork } from '@util/exploration';
 import { Identifier } from '@components/data/Identifier';
 import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
@@ -28,13 +31,14 @@ import {
   useTokenTotalSupply,
   useAddressInfo,
   useIdentityByPublicKeyHash,
+  useIdentitiesByNonUniquePkh,
 } from '@sdk/queries';
 
 interface ResolvedMatch {
   kind: string;
   href: string;
   primary: string;
-  secondary?: string;
+  confirmed?: boolean;
 }
 
 function findByKind<K extends SearchCandidate['kind']>(
@@ -47,6 +51,10 @@ function findByKind<K extends SearchCandidate['kind']>(
 function useResolveCandidates(candidates: SearchCandidate[]): {
   matches: ResolvedMatch[];
   loading: boolean;
+  complete: boolean;
+  requiresLookup: boolean;
+  failures: Array<{ kind: string; error: Error }>;
+  retry: () => void;
 } {
   // Collapse duplicate candidate IDs to stable hook inputs. React hooks must be
   // called unconditionally, so we always call the full hook set and just disable
@@ -63,52 +71,27 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   const tokenQ = useTokenTotalSupply(token?.id);
   const addressQ = useAddressInfo(address?.addr);
   const pkhQ = useIdentityByPublicKeyHash(pkh?.pkh);
+  const nonUniquePkh = pkhQ.isSuccess && !hasResult(pkhQ.data) ? pkh?.pkh : undefined;
+  const nonUniqueQ = useIdentitiesByNonUniquePkh(nonUniquePkh);
   const dpnsQ = useDpnsGetByName(dpns?.name);
 
-  const matches: ResolvedMatch[] = [];
-
-  if (identity && identityQ.data) {
-    matches.push({
-      kind: 'Identity',
-      href: `/identity/?id=${encodeURIComponent(identity.id)}`,
-      primary: identity.id,
-    });
-  }
-  if (contract && contractQ.data) {
-    matches.push({
-      kind: 'Contract',
-      href: `/contract/?id=${encodeURIComponent(contract.id)}`,
-      primary: contract.id,
-    });
-  }
-  if (token && tokenQ.data) {
-    matches.push({
-      kind: 'Token',
-      href: `/token/?id=${encodeURIComponent(token.id)}`,
-      primary: token.id,
-    });
-  }
-  if (address && addressQ.data) {
-    matches.push({
-      kind: 'Address',
-      href: `/address/?addr=${encodeURIComponent(address.addr)}`,
-      primary: address.addr,
-    });
-  }
-  if (pkh && pkhQ.data) {
-    matches.push({
-      kind: 'Identity (pkh)',
-      href: `/identity/lookup/?pkh=${encodeURIComponent(pkh.pkh)}`,
-      primary: pkh.pkh,
-    });
-  }
-  if (dpns && dpnsQ.data) {
-    matches.push({
-      kind: 'DPNS',
-      href: `/dpns/?name=${encodeURIComponent(dpns.name)}`,
-      primary: dpns.name,
-    });
-  }
+  const lookups = [
+    { value: identity?.id, query: identityQ, kind: 'Identity', path: '/identity/', param: 'id' },
+    { value: contract?.id, query: contractQ, kind: 'Contract', path: '/contract/', param: 'id' },
+    { value: token?.id, query: tokenQ, kind: 'Token', path: '/token/', param: 'id' },
+    { value: address?.addr, query: addressQ, kind: 'Address', path: '/address/', param: 'addr' },
+    { value: pkh?.pkh, query: pkhQ, kind: 'Identity by public-key hash', path: '/identity/lookup/', param: 'pkh' },
+    { value: nonUniquePkh, query: nonUniqueQ, kind: 'Identities by non-unique public-key hash', path: '/identity/lookup/', param: 'pkh' },
+    { value: dpns?.name, query: dpnsQ, kind: 'DPNS', path: '/dpns/', param: 'name' },
+  ].filter((lookup) => lookup.value !== undefined);
+  const matches: ResolvedMatch[] = lookups
+    .filter(({ query }) => hasResult(query.data))
+    .map(({ value, kind, path, param }) => ({
+      kind,
+      confirmed: true,
+      href: `${path}?${param}=${encodeURIComponent(value!)}`,
+      primary: value!,
+    }));
 
   // Always-present static links that the user might want regardless of resolution:
   const stHash = findByKind(candidates, 'stateTransition');
@@ -136,36 +119,39 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
     });
   }
 
-  const loading =
-    identityQ.isLoading ||
-    contractQ.isLoading ||
-    tokenQ.isLoading ||
-    addressQ.isLoading ||
-    pkhQ.isLoading ||
-    dpnsQ.isLoading;
+  const failures = lookups.filter(({ query }) => query.isError).map(({ query, kind }) => ({
+    kind,
+    error: query.error ?? new Error('The lookup could not be completed.'),
+  }));
+  const loading = lookups.some(({ query }) => query.isLoading);
+  const complete = lookups.every(({ query }) => query.isSuccess);
+  const retry = () => {
+    for (const { query } of lookups) {
+      if (query.isError) void query.refetch();
+    }
+  };
 
-  return { matches, loading };
+  return { matches, loading, complete, failures, retry, requiresLookup: lookups.length > 0 };
+}
+
+function hasResult(data: unknown): boolean {
+  if (data === null || data === undefined) return false;
+  if (Array.isArray(data)) return data.length > 0;
+  if (data instanceof Map) return data.size > 0;
+  return true;
 }
 
 function SearchContent() {
   const params = useSearchParams();
-  const router = useRouter();
+  const { network, status, error, reconnect } = useSdk();
   const q = params.get('q') ?? '';
 
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Search' }]);
 
   const classification = useMemo(() => classifyQuery(q), [q]);
-  const { matches, loading } = useResolveCandidates(classification.candidates);
-
-  // Auto-redirect if there is exactly one resolved match.
-  useEffect(() => {
-    if (!loading && matches.length === 1) {
-      const target = matches[0]!;
-      const tid = window.setTimeout(() => router.replace(target.href), 250);
-      return () => window.clearTimeout(tid);
-    }
-    return;
-  }, [loading, matches, router]);
+  const { matches, loading, complete, failures, retry, requiresLookup } = useResolveCandidates(classification.candidates);
+  const unavailable = requiresLookup && status === 'error';
+  const prefix = findByKind(classification.candidates, 'dpnsPrefix');
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -179,7 +165,7 @@ function SearchContent() {
               Paste an identity ID, contract ID, token ID, address, DPNS name, tx hash,
               public-key hash, or epoch index.
             </Text>
-            <GlobalSearchInput width="100%" autoFocus />
+            <GlobalSearchInput width="100%" autoFocus initialValue={q} />
           </VStack>
         </InfoBlock>
 
@@ -202,29 +188,52 @@ function SearchContent() {
           </VStack>
         </InfoBlock>
 
-        {loading ? (
-          <LoadingCard lines={3} />
-        ) : matches.length === 0 ? (
+        {!classification.raw ? (
+          <InfoBlock>
+            <Text color="muted">Enter a query to start exploring.</Text>
+          </InfoBlock>
+        ) : classification.candidates.length === 0 ? (
           <NotFoundCard
-            title="No matches"
-            description="We couldn't classify your query as any known Platform entity. Try a different string."
-            actions={[
-              { label: 'Return home', href: '/' },
-              { label: 'Search rules', href: '/about/' },
-            ]}
+            title="Invalid search input"
+            description="This input does not match a supported identifier, name, address, hash, or epoch index. Check the format and try again."
+            actions={[{ label: 'Search rules', href: '/about/' }]}
           />
-        ) : (
+        ) : null}
+
+        {unavailable ? (
+          <ErrorCard title="Search unavailable" error={error ?? new Error('The SDK could not connect to the selected network.')} onRetry={reconnect} />
+        ) : failures.length > 0 ? (
+          <VStack align="stretch" spacing={2}>
+            <ErrorCard
+              title="Some lookups could not be completed"
+              error={new Error(failures.map((failure) => `${failure.kind}: ${failure.error.message}`).join(' · '))}
+              onRetry={retry}
+            />
+            <Text fontSize="sm" color="muted">A failed lookup does not establish that the entity is missing.</Text>
+          </VStack>
+        ) : null}
+
+        {loading && !unavailable ? <LoadingCard lines={3} /> : null}
+        {complete && !loading && !unavailable && failures.length === 0 && classification.candidates.length > 0 && matches.length === 0 ? (
+          <NotFoundCard
+            title="No matching entity found"
+            description={`The lookups completed successfully but returned no entity on ${network}. Check the identifier or select another network.`}
+            actions={[{ label: 'Change network', href: '/settings/' }]}
+          />
+        ) : null}
+        {matches.length > 0 && !unavailable ? (
           <InfoBlock>
             <VStack align="stretch" spacing={3}>
               <Heading size="sm" color="gray.100">
-                Possible matches
+                Matches and possible destinations
               </Heading>
               <Wrap spacing={3}>
                 {matches.map((m) => (
                   <WrapItem key={`${m.kind}-${m.primary}`}>
                     <Button
                       as={NextLink}
-                      href={m.href}
+                      href={withNetwork(m.href, network)}
+                      aria-label={`Open ${m.kind} ${m.primary} on ${network}`}
                       variant="outline"
                       colorScheme="blue"
                       size="md"
@@ -233,7 +242,7 @@ function SearchContent() {
                     >
                       <VStack align="flex-start" spacing={1}>
                         <Text fontSize="2xs" color="gray.400" textTransform="uppercase">
-                          {m.kind}
+                          {m.kind}{m.confirmed ? '' : ' · open lookup'}
                         </Text>
                         <Identifier value={m.primary} avatar={false} copy={false} dense />
                       </VStack>
@@ -243,7 +252,12 @@ function SearchContent() {
               </Wrap>
             </VStack>
           </InfoBlock>
-        )}
+        ) : null}
+        {prefix ? (
+          <Button as={NextLink} href={withNetwork(`/dpns/search/?q=${encodeURIComponent(prefix.prefix)}`, network)} alignSelf="start" variant="outline">
+            Find DPNS names with this prefix
+          </Button>
+        ) : null}
       </VStack>
     </Container>
   );
