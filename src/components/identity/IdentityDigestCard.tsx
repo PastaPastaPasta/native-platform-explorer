@@ -12,6 +12,7 @@ import { ProofChip } from '@components/data/ProofChip';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useDpnsAlias } from '@sdk/useDpnsAlias';
 import type { ProofState } from '@sdk/proofs';
+import { EntityActions } from '@components/exploration/EntityActions';
 
 export interface IdentityDigestCardProps {
   id: string;
@@ -79,6 +80,8 @@ export function IdentityDigestCard({
             ) : null}
             {proofState ? <ProofChip proofState={proofState} /> : null}
           </HStack>
+
+          <EntityActions kind="identity" id={id} />
 
           <VStack align="stretch" spacing={0}>
             <DigestRow

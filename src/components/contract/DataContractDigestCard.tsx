@@ -7,6 +7,7 @@ import { IdentityLink } from '@components/data/IdentityLink';
 import { NotActive } from '@components/data/NotActive';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useWellKnownName } from '@hooks/useWellKnownName';
+import { EntityActions } from '@components/exploration/EntityActions';
 
 export interface DataContractDigestCardProps {
   id: string;
@@ -38,6 +39,8 @@ export function DataContractDigestCard({
             <Identifier value={id} avatar copy highlight="both" />
           </VStack>
         </HStack>
+
+        <EntityActions kind="contract" id={id} />
 
         <Wrap spacing={8}>
           <WrapItem>

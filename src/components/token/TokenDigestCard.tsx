@@ -8,6 +8,9 @@ import { BigNumberDisplay } from '@components/data/BigNumber';
 import { NotActive } from '@components/data/NotActive';
 import { InfoBlock } from '@ui/InfoBlock';
 import { TokenFlagsPills, type TokenFlags } from './TokenFlagsPills';
+import { EntityActions } from '@components/exploration/EntityActions';
+import { useSdk } from '@sdk/hooks';
+import { withNetwork } from '@util/exploration';
 
 export interface TokenDigestCardProps {
   id: string;
@@ -37,6 +40,7 @@ export function TokenDigestCard({
   ownerContractId,
   tokenContractPosition,
 }: TokenDigestCardProps) {
+  const { network } = useSdk();
   const title = name ?? symbol ?? 'Token';
   const subtitle = symbol && name && symbol !== name ? symbol : undefined;
   return (
@@ -57,6 +61,8 @@ export function TokenDigestCard({
           </VStack>
           <TokenFlagsPills flags={flags} />
         </HStack>
+
+        <EntityActions kind="token" id={id} />
 
         <Wrap spacing={8}>
           <WrapItem>
@@ -94,7 +100,7 @@ export function TokenDigestCard({
                 value={
                   <Link
                     as={NextLink}
-                    href={`/contract/?id=${encodeURIComponent(ownerContractId)}`}
+                    href={withNetwork(`/contract/?id=${encodeURIComponent(ownerContractId)}`, network)}
                     color="brand.light"
                   >
                     <Identifier value={ownerContractId} dense />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useReducer, useState } from 'react';
+import NextLink from 'next/link';
 import {
   Button,
   Heading,
@@ -24,6 +25,7 @@ import {
   removeCustomDevnet,
 } from '@sdk/networks';
 import { CustomDevnetModal } from '@components/layout/CustomDevnetModal';
+import { useViewedIdentities } from '@hooks/useViewedIdentities';
 
 const DIAG_KEY = 'npe:diagnosticsEnabled';
 
@@ -52,6 +54,7 @@ export default function Page() {
   const { network, trusted, setNetwork, setTrusted, reconnect, status } = useSdk();
   const { enabled: inspectorEnabled, setEnabled: setInspectorEnabled } = useQueryProofStore();
   const [diagEnabled, setDiagEnabled] = useLocalStorageBool(DIAG_KEY, false);
+  const viewed = useViewedIdentities();
   const modal = useDisclosure();
   // Force re-read of the registry after add/remove (mutations are out-of-state).
   const [, bump] = useReducer((n: number) => n + 1, 0);
@@ -80,6 +83,7 @@ export default function Page() {
               Network
             </Heading>
             <Select
+              aria-label="Active network"
               size="sm"
               value={network}
               onChange={(e) => setNetwork(e.target.value)}
@@ -170,6 +174,7 @@ export default function Page() {
             </Text>
             <HStack>
               <Switch
+                aria-label="Trusted mode"
                 isChecked={trusted}
                 onChange={(e) => {
                   const next = e.target.checked;
@@ -205,6 +210,7 @@ export default function Page() {
             </Text>
             <HStack>
               <Switch
+                aria-label="Query Inspector"
                 isChecked={inspectorEnabled}
                 onChange={(e) => setInspectorEnabled(e.target.checked)}
                 colorScheme="blue"
@@ -227,6 +233,7 @@ export default function Page() {
             </Text>
             <HStack>
               <Switch
+                aria-label="Diagnostics log"
                 isChecked={diagEnabled}
                 onChange={(e) => setDiagEnabled(e.target.checked)}
                 colorScheme="blue"
@@ -234,6 +241,32 @@ export default function Page() {
               <Text fontSize="sm" color="gray.250">
                 {diagEnabled ? 'Enabled' : 'Disabled'}
               </Text>
+            </HStack>
+          </VStack>
+        </InfoBlock>
+
+        <InfoBlock>
+          <VStack align="stretch" spacing={3}>
+            <Heading size="sm" color="gray.100">Local exploration history</Heading>
+            <Text fontSize="sm" color="gray.250">
+              Remember viewed identities in this browser to seed identity lookups.
+              Turning this off erases that history. Explicitly saved items are managed separately.
+            </Text>
+            <HStack>
+              <Switch
+                aria-label="Remember viewed identities"
+                isChecked={viewed.consent}
+                onChange={(e) => viewed.setConsent(e.target.checked)}
+                colorScheme="blue"
+              />
+              <Text fontSize="sm" color="gray.250">{viewed.ids.length} remembered {viewed.ids.length === 1 ? 'identity' : 'identities'}</Text>
+            </HStack>
+            {viewed.error ? <Text role="alert" fontSize="sm" color="failed">{viewed.error.message}</Text> : null}
+            <HStack flexWrap="wrap">
+              <Button size="sm" variant="outline" onClick={viewed.clear} isDisabled={viewed.ids.length === 0}>
+                Clear viewed identities
+              </Button>
+              <Button as={NextLink} href="/saved/" size="sm" variant="ghost">Manage saved items</Button>
             </HStack>
           </VStack>
         </InfoBlock>
