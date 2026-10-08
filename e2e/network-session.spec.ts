@@ -14,7 +14,10 @@ test('a network switch with an existing link parameter survives search and reloa
   const search = page.getByRole('searchbox', { name: 'Search', exact: true });
   await search.fill('42');
   await search.press('Enter');
-  await expect(page).toHaveURL(/epoch\/detail\/?\?index=42/);
+  await expect(page).toHaveURL(/search\/?\?q=42&network=mainnet/);
+  await expect(page.getByRole('link', { name: 'Open Epoch 42 on mainnet' })).toBeVisible();
+  await page.getByRole('link', { name: 'Open Epoch 42 on mainnet' }).click();
+  await expect(page).toHaveURL(/epoch\/detail\/?\?index=42&network=mainnet/);
   await expect(page.getByRole('button', { name: 'Mainnet', exact: true })).toBeVisible();
   await page.reload();
   await expect(page.getByRole('button', { name: 'Mainnet', exact: true })).toBeVisible();

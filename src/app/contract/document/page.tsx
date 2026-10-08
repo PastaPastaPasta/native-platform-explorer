@@ -29,22 +29,26 @@ import { useDocument } from '@sdk/queries';
 import { WriteActions } from '@components/broadcast/WriteActions';
 import { shortId } from '@util/identifier';
 import { idToString, readProp } from '@util/sdk-shape';
+import { ShareLinkButton } from '@components/exploration/EntityActions';
+import { useSdk } from '@sdk/hooks';
+import { withNetwork } from '@util/exploration';
 
 function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
   const type = params.get('type') ?? '';
   const docId = params.get('docId') ?? '';
+  const { network } = useSdk();
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
     { label: 'Contract' },
-    { label: id ? shortId(id) : '—', href: id ? `/contract/?id=${encodeURIComponent(id)}` : undefined },
+    { label: id ? shortId(id) : '—', href: id ? withNetwork(`/contract/?id=${encodeURIComponent(id)}`, network) : undefined },
     {
       label: type || '—',
       href:
         id && type
-          ? `/contract/documents/?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}`
+          ? withNetwork(`/contract/documents/?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}`, network)
           : undefined,
     },
     { label: docId ? shortId(docId) : '—' },
@@ -83,7 +87,7 @@ function Content() {
           <NotFoundCard
             title="Document not found"
             description={`No document ${shortId(docId)} of type ${type} in contract ${shortId(id)}.`}
-            actions={[{ label: 'Back to contract', href: `/contract/?id=${encodeURIComponent(id)}` }]}
+            actions={[{ label: 'Back to contract', href: withNetwork(`/contract/?id=${encodeURIComponent(id)}`, network) }]}
           />
         ) : (
           <>
@@ -106,13 +110,14 @@ function Content() {
                     value={
                       <Identifier
                         value={id}
-                        href={`/contract/?id=${encodeURIComponent(id)}`}
+                        href={withNetwork(`/contract/?id=${encodeURIComponent(id)}`, network)}
                         avatar={false}
                         dense
                       />
                     }
                   />
                 </HStack>
+                <ShareLinkButton />
                 <WriteActions
                   size="xs"
                   links={[

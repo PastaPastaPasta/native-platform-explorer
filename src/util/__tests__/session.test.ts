@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+import { installStorageMock } from '@/test/storage';
 import {
   clearViewedIdentities,
   getViewedIdentities,
@@ -7,36 +8,7 @@ import {
   setConsent,
 } from '../session';
 
-// happy-dom's localStorage shim in this project is incomplete (missing
-// clear/removeItem in the running version), so replace it with a plain
-// Map-backed mock for deterministic tests.
-function installLocalStorageMock() {
-  const store = new Map<string, string>();
-  const mock = {
-    getItem: (k: string) => (store.has(k) ? store.get(k)! : null),
-    setItem: (k: string, v: string) => {
-      store.set(k, String(v));
-    },
-    removeItem: (k: string) => {
-      store.delete(k);
-    },
-    clear: () => store.clear(),
-    key: (i: number) => Array.from(store.keys())[i] ?? null,
-    get length() {
-      return store.size;
-    },
-  } as unknown as Storage;
-  Object.defineProperty(window, 'localStorage', {
-    configurable: true,
-    value: mock,
-  });
-}
-
 describe('viewed identities log', () => {
-  beforeEach(() => {
-    installLocalStorageMock();
-  });
-
   it('starts empty', () => {
     expect(getViewedIdentities()).toEqual([]);
   });
@@ -77,5 +49,138 @@ describe('viewed identities log', () => {
     recordViewedIdentity('foo');
     clearViewedIdentities();
     expect(getViewedIdentities()).toEqual([]);
+    expect(hasConsent()).toBe(true);
+  });
+
+  it('revocation deletes persisted history and a later opt-in starts empty', () => {
+    setConsent(true);
+    recordViewedIdentity('private-identity');
+
+    setConsent(false);
+
+    expect(hasConsent()).toBe(false);
+    expect(window.localStorage.getItem('npe:viewedIdentities')).toBeNull();
+    expect(window.localStorage.getItem('npe:viewedIdentitiesConsent')).toBeNull();
+    setConsent(true);
+    expect(getViewedIdentities()).toEqual([]);
+  });
+
+  it('does not opt in if stale history cannot be erased first', () => {
+    window.localStorage.setItem('npe:viewedIdentities', JSON.stringify(['stale']));
+    vi.spyOn(window.localStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    expect(setConsent(true)).toBe(false);
+    expect(hasConsent()).toBe(false);
+    expect(getViewedIdentities()).toEqual([]);
+    expect(window.localStorage.getItem('npe:viewedIdentitiesConsent')).toBeNull();
+  });
+
+  it('never exposes stale history without consent, including on a fresh opt-in', () => {
+    window.localStorage.setItem('npe:viewedIdentities', JSON.stringify(['stale']));
+
+    expect(getViewedIdentities()).toEqual([]);
+    expect(recordViewedIdentity('unconsented')).toEqual([]);
+    setConsent(true);
+    expect(getViewedIdentities()).toEqual([]);
+  });
+
+  it('handles malformed persisted history', () => {
+    setConsent(true);
+    window.localStorage.setItem('npe:viewedIdentities', '{broken');
+    expect(getViewedIdentities()).toEqual([]);
+    recordViewedIdentity('new');
+    expect(getViewedIdentities()).toEqual(['new']);
+    window.localStorage.setItem('npe:viewedIdentities', JSON.stringify([12, null, 'a']));
+    expect(getViewedIdentities()).toEqual(['a']);
+  });
+
+  it('keeps revocation private when storage refuses removals', () => {
+    setConsent(true);
+    recordViewedIdentity('private-identity');
+    const remove = vi.spyOn(window.localStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    expect(setConsent(false)).toBe(false);
+    expect(hasConsent()).toBe(false);
+    expect(getViewedIdentities()).toEqual([]);
+    expect(recordViewedIdentity('another')).toEqual([]);
+    remove.mockRestore();
+    setConsent(true);
+    expect(getViewedIdentities()).toEqual([]);
+  });
+
+  it('keeps cleared history hidden when storage refuses removals', () => {
+    setConsent(true);
+    recordViewedIdentity('private-identity');
+    const remove = vi.spyOn(window.localStorage, 'removeItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+
+    expect(clearViewedIdentities()).toBe(false);
+    expect(getViewedIdentities()).toEqual([]);
+    expect(hasConsent()).toBe(true);
+    recordViewedIdentity('new-identity');
+    expect(getViewedIdentities()).toEqual(['new-identity']);
+    remove.mockRestore();
+  });
+
+  it('does not enable recording if an opt-in cannot be saved', () => {
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded');
+    });
+
+    expect(setConsent(true)).toBe(false);
+    expect(hasConsent()).toBe(false);
+    expect(recordViewedIdentity('private-identity')).toEqual([]);
+  });
+
+  it('keeps existing history if a new record cannot be saved', () => {
+    setConsent(true);
+    recordViewedIdentity('saved');
+    vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('quota exceeded');
+    });
+
+    expect(recordViewedIdentity('unsaved')).toEqual(['saved']);
+    expect(getViewedIdentities()).toEqual(['saved']);
+  });
+
+  it('does not overwrite existing history when its storage read fails', () => {
+    setConsent(true);
+    recordViewedIdentity('saved');
+    const get = localStorage.getItem.bind(localStorage);
+    const write = vi.spyOn(localStorage, 'setItem');
+    const read = vi.spyOn(localStorage, 'getItem').mockImplementation((key) => {
+      if (key === 'npe:viewedIdentities') throw new Error('Read blocked');
+      return get(key);
+    });
+    expect(recordViewedIdentity('new')).toEqual([]);
+    expect(write).not.toHaveBeenCalled();
+    read.mockRestore();
+    expect(getViewedIdentities()).toEqual(['saved']);
+  });
+
+  it('handles storage reads and storage access being blocked', () => {
+    const ls = installStorageMock('localStorage');
+    vi.spyOn(ls, 'getItem').mockImplementation(() => {
+      throw new Error('storage blocked');
+    });
+    expect(hasConsent()).toBe(false);
+    expect(getViewedIdentities()).toEqual([]);
+
+    Object.defineProperty(window, 'localStorage', {
+      configurable: true,
+      get: () => {
+        throw new Error('storage blocked');
+      },
+    });
+    expect(() => setConsent(true)).not.toThrow();
+    expect(() => setConsent(false)).not.toThrow();
+    expect(() => clearViewedIdentities()).not.toThrow();
+    expect(hasConsent()).toBe(false);
+    expect(recordViewedIdentity('private-identity')).toEqual([]);
   });
 });
