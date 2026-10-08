@@ -18,6 +18,7 @@ import { ThemeToggle } from './ThemeToggle';
 import { NetworkSelect } from './NetworkSelect';
 import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { SidebarNavBody } from './SidebarRail';
+import { ShareLinkButton } from '@components/exploration/EntityActions';
 
 export function BrandRow() {
   const drawer = useDisclosure();
@@ -52,6 +53,7 @@ export function BrandRow() {
         </Box>
 
         <HStack spacing={3}>
+          <ShareLinkButton compact />
           <Box display={{ base: 'none', sm: 'block' }}>
             <NetworkSelect />
           </Box>
