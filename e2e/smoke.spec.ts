@@ -18,17 +18,23 @@ test('desktop sidebar exposes core deterministic routes', async ({ page }) => {
   await expect(page.getByRole('heading', { name: 'Search' })).toBeVisible();
 });
 
-test('search shows an empty deterministic result for unclassified input', async ({ page }) => {
+test('search distinguishes unclassified input from a missing entity', async ({ page }) => {
   await page.goto('search/?q=%3F%3F%3F');
 
   await expect(page.getByText('Classified as: nothing recognisable')).toBeVisible();
-  await expect(page.getByText('No matches')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Invalid search input' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'No matching entity found' })).toHaveCount(0);
 });
 
-test('search redirects single static epoch matches without live SDK data', async ({ page }) => {
+test('search labels static epoch destinations without claiming a resolved entity', async ({ page }) => {
   await page.goto('search/?q=42');
 
-  await expect(page).toHaveURL(/\/epoch\/detail\/?\?index=42$/);
+  await expect(page).toHaveURL(/\/search\/?\?q=42$/);
+  await expect(page.getByText('Epoch · open lookup')).toBeVisible();
+  const destination = page.getByRole('link', { name: 'Open Epoch 42 on testnet' });
+  await expect(destination).toBeVisible();
+  await destination.click();
+  await expect(page).toHaveURL(/\/epoch\/detail\/?\?index=42&network=testnet$/);
 });
 
 test('settings persist network preference in localStorage', async ({ page }) => {

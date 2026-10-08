@@ -9,21 +9,26 @@ const DISMISSED_KEY = 'npe:viewedIdentitiesBannerDismissed';
 /** Small, low-contrast hint that appears beneath the identity digest. Does
  *  not compete with the hero card for visual weight. */
 export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
-  const { consent, setConsent, record } = useViewedIdentities();
+  const { consent, setConsent, record, error } = useViewedIdentities();
   const [dismissed, setDismissed] = useState(true);
 
   useEffect(() => {
-    setDismissed(typeof window !== 'undefined' && window.localStorage.getItem(DISMISSED_KEY) === '1');
+    try {
+      setDismissed(window.localStorage.getItem(DISMISSED_KEY) === '1');
+    } catch {
+      setDismissed(false);
+    }
   }, []);
 
   useEffect(() => {
     if (consent && identityId) record(identityId);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [consent, identityId]);
+  }, [consent, identityId, record]);
 
   const dismiss = () => {
-    if (typeof window !== 'undefined') {
+    try {
       window.localStorage.setItem(DISMISSED_KEY, '1');
+    } catch {
+      // Dismissal still applies for this page when browser storage is blocked.
     }
     setDismissed(true);
   };
@@ -50,7 +55,6 @@ export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
             colorScheme="blue"
             onClick={() => {
               setConsent(true);
-              record(identityId);
             }}
           >
             Remember
@@ -60,6 +64,7 @@ export function ViewedIdentitiesBanner({ identityId }: { identityId: string }) {
           </Button>
         </HStack>
       </HStack>
+      {error ? <Text role="alert" fontSize="xs" color="failed">{error.message}</Text> : null}
     </Box>
   );
 }

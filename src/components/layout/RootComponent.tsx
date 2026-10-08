@@ -1,7 +1,7 @@
 'use client';
 
 import { Box, Grid, GridItem } from '@chakra-ui/react';
-import type { ReactNode } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { BrandRow } from './BrandRow';
 import { MeterBar } from './MeterBar';
 import { SidebarRail } from './SidebarRail';
@@ -11,9 +11,12 @@ import { DiagnosticsDrawer } from '@components/diagnostics/DiagnosticsDrawer';
 import { QueryInspectorDrawer } from '@components/query-inspector/QueryInspectorDrawer';
 import { ProofInspector } from '@components/proof/ProofInspector';
 import { useSdk } from '@sdk/hooks';
+import { recordShellReady } from '@sdk/timing';
 
 export function RootComponent({ children }: { children: ReactNode }) {
   const { trusted } = useSdk();
+
+  useEffect(recordShellReady, []);
 
   return (
     <Box

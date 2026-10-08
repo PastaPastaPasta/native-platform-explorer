@@ -1,6 +1,5 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
 import {
   useQuery,
   useQueries,
@@ -8,13 +7,16 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery } from './hooks';
+import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery, type SdkQueryExecution } from './hooks';
+import { epochInfoQuery, epochRangeError, epochRangeQueries, fetchEpochRange, isEpochIndex } from './epoch-queries';
+import { fetchCurrentEpoch } from './current-epoch';
 import { getConfig } from '@/config';
-import { classifyProof, type ProofState } from './proofs';
+import { classifyProof, getQuorumKeySource, isProofFallbackBlocked, verificationForResponse, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
 import { extractErrorMessage, normalizeError } from './errors';
 import {
-  useQueryProofStore,
+  useQueryProofRecorder,
+  useQueryProofEntry,
   type ProofData,
   type QueryProofEntry,
   type ResponseMeta,
@@ -54,6 +56,8 @@ interface SdkQueryOpts<TData>
   methodName?: string;
   /** Parameters passed to the SDK method, shown in the inspector. */
   methodParams?: Record<string, unknown>;
+  /** Limits of captured evidence for queries that combine multiple responses. */
+  captureNote?: string;
 }
 
 function decodeChainId(raw: unknown): string {
@@ -82,7 +86,7 @@ function extractProof(proof: unknown): ProofData | undefined {
   if (!proof || typeof proof !== 'object') return undefined;
   const p = proof as Record<string, unknown>;
   const grovedbProof = p.grovedbProof;
-  if (!(grovedbProof instanceof Uint8Array)) return undefined;
+  if (!(grovedbProof instanceof Uint8Array) || !grovedbProof.length) return undefined;
   return {
     grovedbProof: new Uint8Array(grovedbProof),
     quorumHash: p.quorumHash instanceof Uint8Array ? new Uint8Array(p.quorumHash) : new Uint8Array(),
@@ -106,139 +110,107 @@ function extractProof(proof: unknown): ProofData | undefined {
  */
 function useSdkQuery<TData>(
   key: readonly unknown[],
-  fn: (sdk: EvoSDK) => Promise<TData>,
+  fn: (sdk: EvoSDK, execution: SdkQueryExecution) => Promise<TData>,
   opts?: SdkQueryOpts<TData>,
 ): SdkQueryResult<TData> {
   const context = useSdk();
   const { network, trusted } = context;
-  const { hasProofVariant = true, withProofFn, methodName, methodParams, ...rest } = opts ?? {};
-  const proofStore = useQueryProofStore();
-
-  const proofStoreRef = useRef(proofStore);
-  proofStoreRef.current = proofStore;
-
+  const { hasProofVariant = true, withProofFn, methodName, methodParams, captureNote, ...rest } = opts ?? {};
+  const proofStore = useQueryProofRecorder();
   const fullKey = getSdkQueryKey(context, key);
   const storeKey = JSON.stringify(fullKey);
+  const proofEntry = useQueryProofEntry(storeKey);
 
-  const q = useSessionQuery<TData>(key, async (sdk, { assertActive }) => {
-    const store = proofStoreRef.current;
-    const useProofTransport = shouldUseProofTransport(network, trusted, !!withProofFn);
+  const q = useSessionQuery<TData>(key, async (sdk, execution) => {
+    const { assertActive } = execution;
+    const generation = proofStore.generation;
     const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
+    const quorumKeySource = getQuorumKeySource(network, trusted);
     const t0 = performance.now();
+    const record = (
+      status: 'success' | 'error',
+      outcome: Partial<Pick<QueryProofEntry, 'result' | 'metadata' | 'proof' | 'error' | 'proofCaptureError'>>,
+      error?: unknown,
+    ) => {
+      assertActive();
+      if (!proofStore.enabled || proofStore.generation !== generation) return;
+      const timestamp = Date.now();
+      const durationMs = Math.round(performance.now() - t0);
+      let result: unknown;
+      let resultCaptureError: string | undefined;
+      if (status === 'success') {
+        try { result = safeSerialize(outcome.result ?? null); }
+        catch (snapshotError) { resultCaptureError = extractErrorMessage(snapshotError); }
+      }
+      proofStore.record(storeKey, {
+        queryKey: fullKey,
+        methodName: inspectorMethodName,
+        methodParams: methodParams ?? {},
+        hasProofVariant,
+        network,
+        trusted,
+        quorumKeySource,
+        verification: verificationForResponse({ trusted, hasProofVariant, status, error }),
+        timestamp,
+        durationMs,
+        status,
+        captureNote: status === 'success' ? captureNote : undefined,
+        ...outcome,
+        result,
+        resultCaptureError,
+      }, generation);
+    };
 
-    if (useProofTransport) {
+    // Ordinary trusted methods also verify internally. Capturing bytes is only
+    // useful when the inspector is enabled and does not change the trust policy.
+    if (proofStore.enabled && shouldUseProofTransport(network, trusted, !!withProofFn)) {
       try {
         const response = (await withProofFn!(sdk)) as
           | { data?: unknown; metadata?: unknown; proof?: unknown }
           | undefined;
         assertActive();
-        const elapsed = performance.now() - t0;
-        const data = response?.data;
-        if (store.enabled) {
-          store.record(storeKey, {
-            queryKey: fullKey,
-            methodName: inspectorMethodName,
-            methodParams: methodParams ?? {},
-            hasProofVariant: true,
-            timestamp: Date.now(),
-            durationMs: Math.round(elapsed),
-            status: 'success',
-            result: safeSerialize(data),
-            metadata: extractMetadata(response?.metadata),
-            proof: extractProof(response?.proof),
-          });
+        if (!response || typeof response !== 'object') {
+          throw new Error('Proof capture returned no response.');
         }
+        const data = response?.data;
+        record('success', {
+          result: data,
+          metadata: extractMetadata(response?.metadata),
+          proof: extractProof(response?.proof),
+        });
         return (data ?? null) as TData;
-      } catch (err) {
+      } catch (error) {
         assertActive();
-        const proofError = extractErrorMessage(err);
-        console.error(`[NPE] ${inspectorMethodName} failed:`, proofError, err);
-        // Fall back to the non-proof variant so the explorer still works.
-        // Record the entry as a success (data was retrieved) but include the
-        // proof-capture error so the inspector can show both: "data succeeded,
-        // but proof was not captured because ...".
+        const captureError = extractErrorMessage(error);
+        if (isProofFallbackBlocked(error)) {
+          record('error', { error: captureError }, error);
+          // Never retry native proof errors, including decoding/context errors.
+          throw normalizeError(error);
+        }
+        // A capture/transport failure may retry through the same trusted SDK's
+        // ordinary method, which still verifies its response internally.
         try {
-          const result = await fn(sdk);
+          const result = await fn(sdk, execution);
           assertActive();
-          const elapsed = performance.now() - t0;
-          if (store.enabled) {
-            store.record(storeKey, {
-              queryKey: fullKey,
-              methodName: inspectorMethodName,
-              methodParams: methodParams ?? {},
-              hasProofVariant: true,
-              timestamp: Date.now(),
-              durationMs: Math.round(elapsed),
-              status: 'success',
-              result: safeSerialize(result),
-              error: `Proof capture failed: ${proofError}`,
-            });
-          }
+          record('success', { result, proofCaptureError: captureError });
           return (result ?? null) as TData;
-        } catch (fallbackErr) {
+        } catch (fallbackError) {
           assertActive();
-          const fallbackMsg = extractErrorMessage(fallbackErr);
-          console.error(
-            `[NPE] ${inspectorMethodName} fallback failed:`,
-            fallbackMsg,
-            fallbackErr,
-          );
-          if (store.enabled) {
-            const elapsed = performance.now() - t0;
-            store.record(storeKey, {
-              queryKey: fullKey,
-              methodName: inspectorMethodName,
-              methodParams: methodParams ?? {},
-              hasProofVariant: true,
-              timestamp: Date.now(),
-              durationMs: Math.round(elapsed),
-              status: 'error',
-              error: `Proof: ${proofError} | Fallback: ${fallbackMsg}`,
-            });
-          }
-          throw normalizeError(fallbackErr);
+          record('error', { error: extractErrorMessage(fallbackError), proofCaptureError: captureError }, fallbackError);
+          throw normalizeError(fallbackError);
         }
       }
     }
 
-    // Ordinary path (trusted off or no withProofFn)
     try {
-      const result = await fn(sdk);
+      const result = await fn(sdk, execution);
       assertActive();
-      const elapsed = performance.now() - t0;
-
-      if (store.enabled && methodName) {
-        store.record(storeKey, {
-          queryKey: fullKey,
-          methodName: inspectorMethodName,
-          methodParams: methodParams ?? {},
-          hasProofVariant,
-          timestamp: Date.now(),
-          durationMs: Math.round(elapsed),
-          status: 'success',
-          result: safeSerialize(result),
-        });
-      }
-
+      record('success', { result });
       return (result ?? null) as TData;
-    } catch (err) {
+    } catch (error) {
       assertActive();
-      const errMsg = extractErrorMessage(err);
-      console.error(`[NPE] ${inspectorMethodName} failed:`, errMsg, err);
-      if (store.enabled && methodName) {
-        const elapsed = performance.now() - t0;
-        store.record(storeKey, {
-          queryKey: fullKey,
-          methodName: inspectorMethodName,
-          methodParams: methodParams ?? {},
-          hasProofVariant,
-          timestamp: Date.now(),
-          durationMs: Math.round(elapsed),
-          status: 'error',
-          error: errMsg,
-        });
-      }
-      throw normalizeError(err);
+      record('error', { error: extractErrorMessage(error) }, error);
+      throw normalizeError(error);
     }
   }, rest);
   const proofState = classifyProof(q, { trusted, hasProofVariant });
@@ -253,30 +225,30 @@ function useSdkQuery<TData>(
   // instead of spreading preserves RQ's discriminated-union narrowing.)
   const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
 
-  // Surface the recorded inspector entry for this exact query so a value's
-  // ProofGlyph can open the inspector with the real proof. Keyed on the
-  // stringified `fullKey` (matching how the store records it) and recomputed
-  // only when the store changes, not on every render.
-  // O(1) Map lookup keyed on the same stringified key the store records under.
-  // `proofStore` gets a fresh identity on every version bump (see its value
-  // useMemo), so this stays reactive without scanning the entries array.
-  const proofEntry = useMemo(
-    () => proofStore.getEntry(storeKey),
-    [proofStore, storeKey],
-  );
-
   return Object.assign(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled });
 }
 
+function identifierLeaf(value: object): unknown {
+  const candidate = value as { __type?: unknown; toJSON?: () => unknown };
+  let type: unknown;
+  try { type = candidate.__type; }
+  catch { return undefined; } // The walker skips unreadable prototype getters.
+  if (type !== 'Identifier') return undefined;
+  const serialized = candidate.toJSON?.();
+  // rc.2 Identifier.toJSON() is canonical Base58, including 32 ones for zero.
+  if (typeof serialized !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(serialized)) {
+    throw new Error('SDK Identifier did not return a canonical JSON string.');
+  }
+  return serialized;
+}
+
 /**
- * Snapshot a query result for the inspector. WASM class instances expose state
- * via prototype getters (not enumerable own properties), so plain spread/walk
- * yields `{ __wbg_ptr: N }`. `walkInstance` reads getters + `getFoo()` methods
- * recursively, surfacing the real data. Maps/Uint8Arrays/BigInts are then
- * converted to JSON-friendly forms.
+ * Snapshot a query result for the inspector. Preserve native Identifier leaves
+ * before surfacing other WASM state through getters and `getFoo()` methods.
+ * Maps/Uint8Arrays/BigInts are then converted to JSON-friendly forms.
  */
 function safeSerialize(value: unknown): unknown {
-  const walked = walkInstance(value);
+  const walked = walkInstance(value, 0, identifierLeaf);
   return jsonFriendly(walked);
 }
 
@@ -714,37 +686,61 @@ export function useDpnsPrefixSearch(
 
 // ----- epoch -----
 export function useCurrentEpoch() {
+  const { network, trusted } = useSdk();
   return useSdkQuery(
     ['epoch', 'current'],
-    (sdk) => sdk.epoch.current() as Promise<unknown>,
-    { staleTime: LIVE, withProofFn: (sdk) => sdk.epoch.currentWithProof(), methodName: 'epoch.current', methodParams: {} },
+    (sdk, execution) => fetchCurrentEpoch(sdk, network, trusted, execution),
+    {
+      staleTime: LIVE,
+      methodName: 'epoch.epochsInfo',
+      methodParams: { selection: 'genesis-and-time', network, ascending: true, count: 1 },
+      captureNote: `Current epoch selected from separate ${trusted ? 'SDK-verified explicit queries and signed block time' : 'SDK calls and the local clock'}. No single proof payload or response height covers this selection.`,
+    },
   );
 }
 
 export function useEpochInfo(index: number | undefined) {
-  const query = { startIndex: index!, endIndex: index! } as never;
+  const valid = isEpochIndex(index);
+  const query = valid ? epochInfoQuery(index) : undefined;
   return useSdkQuery(
     ['epoch', 'epochsInfo', index],
-    (sdk) => sdk.epoch.epochsInfo(query) as Promise<unknown>,
-    { enabled: index !== undefined, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.epoch.epochsInfoWithProof(query), methodName: 'epoch.epochsInfo', methodParams: { startIndex: index, endIndex: index } },
+    (sdk) => sdk.epoch.epochsInfo(epochInfoQuery(index!)) as Promise<unknown>,
+    { enabled: valid, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.epoch.epochsInfoWithProof(epochInfoQuery(index!)), methodName: 'epoch.epochsInfo', methodParams: query ? { ...query } : {} },
   );
 }
 
 export function useEpochRange(from: number | undefined, to: number | undefined) {
-  const query = { startIndex: from!, endIndex: to! } as never;
+  const { trusted } = useSdk();
+  const valid = epochRangeError(from, to) === null;
+  const batches = valid ? epochRangeQueries(from!, to!) : [];
   return useSdkQuery(
     ['epoch', 'epochsInfo', from, to],
-    (sdk) => sdk.epoch.epochsInfo(query) as Promise<unknown>,
-    { enabled: from !== undefined && to !== undefined && from <= to, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.epoch.epochsInfoWithProof(query), methodName: 'epoch.epochsInfo', methodParams: { startIndex: from, endIndex: to } },
+    (sdk, execution) => fetchEpochRange(sdk, from!, to!, execution),
+    {
+      enabled: valid,
+      staleTime: STRUCTURAL,
+      methodName: 'epoch.epochsInfo',
+      methodParams: { requestedRange: { from, to }, plannedBatches: batches },
+      captureNote: `Combined results from separate ${trusted ? 'SDK-verified batches' : 'SDK calls'}. No single proof payload or response height covers this range.`,
+    },
   );
 }
 
 export function useFinalizedEpochInfo(index: number | undefined) {
-  const query = { startIndex: index!, endIndex: index! } as never;
+  const valid = isEpochIndex(index);
+  const query = valid ? epochInfoQuery(index) : undefined;
   return useSdkQuery(
     ['epoch', 'finalizedInfos', index],
-    (sdk) => sdk.epoch.finalizedInfos(query) as Promise<unknown>,
-    { enabled: index !== undefined, staleTime: IMMUTABLE, withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(query), methodName: 'epoch.finalizedInfos', methodParams: { startIndex: index, endIndex: index } },
+    (sdk) => sdk.epoch.finalizedInfos(epochInfoQuery(index!)) as Promise<unknown>,
+    {
+      enabled: valid,
+      // A finalized record is immutable; its absence is not. A mounted detail
+      // page must notice when an unfinalized epoch acquires a finalized record.
+      staleTime: (q) => q.state.data instanceof Map && q.state.data.get(index) != null ? IMMUTABLE : LIVE,
+      refetchInterval: (q) => q.state.data instanceof Map && q.state.data.get(index) == null ? LIVE : false,
+      withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(epochInfoQuery(index!)),
+      methodName: 'epoch.finalizedInfos', methodParams: query ? { ...query } : {},
+    },
   );
 }
 

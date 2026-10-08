@@ -1,25 +1,30 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Input, InputGroup, InputLeftElement } from '@chakra-ui/react';
 import { SearchIcon } from '@chakra-ui/icons';
 import { useRouter } from 'next/navigation';
+import { useSdk } from '@sdk/hooks';
+import { withNetwork } from '@util/exploration';
 
 export interface GlobalSearchInputProps {
   width?: string;
   autoFocus?: boolean;
+  initialValue?: string;
 }
 
-export function GlobalSearchInput({ width = '100%', autoFocus }: GlobalSearchInputProps) {
+export function GlobalSearchInput({ width = '100%', autoFocus, initialValue = '' }: GlobalSearchInputProps) {
   const router = useRouter();
-  const [value, setValue] = useState('');
+  const { network } = useSdk();
+  const [value, setValue] = useState(initialValue);
+  useEffect(() => setValue(initialValue), [initialValue]);
 
   const onSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     e.stopPropagation();
     const q = value.trim();
     if (q.length === 0) return;
-    router.push(`/search/?q=${encodeURIComponent(q)}`);
+    router.push(withNetwork(`/search/?q=${encodeURIComponent(q)}`, network));
   };
 
   return (

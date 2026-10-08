@@ -34,6 +34,8 @@ import {
 import { shortId } from '@util/identifier';
 import { idToString, readProp } from '@util/sdk-shape';
 import { normaliseContract, tokenConfigAt, type TokenConfigShape } from '@util/contract';
+import { useSdk } from '@sdk/hooks';
+import { withNetwork } from '@util/exploration';
 
 function flagsFromStatus(status: unknown): TokenFlags {
   const s = status as Record<string, unknown> | undefined;
@@ -67,6 +69,7 @@ function localizationsBlock(config: TokenConfigShape | null): React.ReactNode {
 }
 
 export function TokenView({ tokenId }: { tokenId: string }) {
+  const { network } = useSdk();
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
     { label: 'Token' },
@@ -176,7 +179,7 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                             <Text>
                               Contract{' '}
                               <NextLink
-                                href={`/contract/?id=${encodeURIComponent(ownerContractId)}`}
+                                href={withNetwork(`/contract/?id=${encodeURIComponent(ownerContractId)}`, network)}
                                 style={{ color: 'var(--chakra-colors-brand-light)' }}
                               >
                                 {shortId(ownerContractId)}
@@ -272,7 +275,7 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                     <Text fontSize="sm" color="gray.400">
                       Dash Platform does not publish a global holders index. Use the{' '}
                       <NextLink
-                        href={`/token/holders/?id=${encodeURIComponent(tokenId)}`}
+                        href={withNetwork(`/token/holders/?id=${encodeURIComponent(tokenId)}`, network)}
                         style={{ color: 'var(--chakra-colors-brand-light)' }}
                       >
                         seeded holders

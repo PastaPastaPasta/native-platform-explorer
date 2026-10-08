@@ -33,12 +33,12 @@ function toMs(x: unknown): number | null {
   return n < 1e11 ? n * 1000 : n;
 }
 
-export function normaliseEpoch(input: unknown): NormalisedEpoch {
+export function normaliseEpoch(input: unknown, fallbackIndex = 0): NormalisedEpoch {
   const idx =
     toNumber(readProp(input, 'index')) ??
     toNumber(readProp(input, 'number')) ??
     toNumber(readProp(input, 'epochIndex')) ??
-    0;
+    fallbackIndex;
   const startMs =
     toMs(readProp(input, 'startTime')) ??
     toMs(readProp(input, 'firstBlockTime')) ??
@@ -70,6 +70,31 @@ export function normaliseEpoch(input: unknown): NormalisedEpoch {
     feesCollected: fees,
     progressPct: progress,
     raw: input,
+  };
+}
+
+/** Finalized fields are kept separate from ordinary epoch metadata. Native
+ * SDK getters and bigint credit amounts must survive normalization unchanged. */
+export interface NormalisedFinalizedEpoch {
+  totalBlocks: bigint | null;
+  processingFees: bigint | null;
+  distributedStorageFees: bigint | null;
+  createdStorageFees: bigint | null;
+  coreBlockRewards: bigint | null;
+  protocolVersion: number | null;
+  blockProposers: Map<unknown, unknown> | null;
+}
+
+export function normaliseFinalizedEpoch(input: unknown): NormalisedFinalizedEpoch {
+  const proposers = readProp(input, 'blockProposers');
+  return {
+    totalBlocks: toBigInt(readProp(input, 'totalBlocksInEpoch')),
+    processingFees: toBigInt(readProp(input, 'totalProcessingFees')),
+    distributedStorageFees: toBigInt(readProp(input, 'totalDistributedStorageFees')),
+    createdStorageFees: toBigInt(readProp(input, 'totalCreatedStorageFees')),
+    coreBlockRewards: toBigInt(readProp(input, 'coreBlockRewards')),
+    protocolVersion: toNumber(readProp(input, 'protocolVersion')),
+    blockProposers: proposers instanceof Map ? proposers : null,
   };
 }
 

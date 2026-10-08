@@ -20,6 +20,7 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
     items: [
       { href: '/', label: 'Dashboard' },
       { href: '/search/', label: 'Search' },
+      { href: '/saved/', label: 'Saved items' },
     ],
   },
   {
@@ -89,10 +90,12 @@ export function SidebarNavBody({ onNavigate }: { onNavigate?: () => void }) {
                   key={item.href}
                   as={NextLink}
                   href={item.href}
+                  aria-current={active ? 'page' : undefined}
                   onClick={onNavigate}
                   display="block"
                   pl={3}
-                  py={1.5}
+                  py={2}
+                  minH="36px"
                   borderLeft="2px solid"
                   borderColor={active ? 'accent' : 'transparent'}
                   color={active ? 'ink' : 'muted'}
@@ -116,6 +119,7 @@ export function SidebarRail() {
   return (
     <Box
       as="aside"
+      aria-label="Main navigation"
       display={{ base: 'none', md: 'block' }}
       borderRight="1px solid"
       borderColor="hairline"

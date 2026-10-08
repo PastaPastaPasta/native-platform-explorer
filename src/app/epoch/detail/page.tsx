@@ -6,16 +6,16 @@ import { Text } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
-import { EpochView } from '@components/epoch/EpochView';
+import { HistoricalEpochView } from '@components/epoch/HistoricalEpochView';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useEpochInfo, useEvonodesBlocksByRange, useFinalizedEpochInfo } from '@sdk/queries';
-import { normaliseEpoch } from '@util/epoch';
+import { isEpochIndex, MAX_EPOCH_INDEX } from '@sdk/epoch-queries';
 
 function Content() {
   const params = useSearchParams();
   const raw = params.get('index') ?? '';
   const idx = Number(raw);
-  const valid = Number.isFinite(idx) && idx >= 0;
+  const valid = raw.trim() !== '' && isEpochIndex(idx);
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -25,20 +25,18 @@ function Content() {
 
   const epochQ = useEpochInfo(valid ? idx : undefined);
   const finalizedQ = useFinalizedEpochInfo(valid ? idx : undefined);
-  const evonodesQ = useEvonodesBlocksByRange(valid ? idx : undefined, 100);
-
-  const mapData = epochQ.data as Map<unknown, unknown> | null | undefined;
-  const fallback = finalizedQ.data as Map<unknown, unknown> | null | undefined;
-  const raws = [...(mapData?.values() ?? []), ...(fallback?.values() ?? [])].filter(Boolean);
-  const epochEntry = raws[0];
-  const epoch = epochEntry ? normaliseEpoch(epochEntry) : null;
+  const finalizedEntry = finalizedQ.data instanceof Map ? finalizedQ.data.get(idx) : undefined;
+  // Finalized proposers are authoritative. Only query the live source once a
+  // successful finalized lookup confirms that there is no finalized record.
+  const liveIndex = valid && finalizedQ.status === 'success' && !finalizedEntry ? idx : undefined;
+  const evonodesQ = useEvonodesBlocksByRange(liveIndex, 100);
 
   if (!valid) {
     return (
       <Container py={8}>
         <InfoBlock>
           <Text color="gray.250">
-            Provide an epoch index as <code>?index=…</code>.
+            Provide a whole epoch index from 0 to {MAX_EPOCH_INDEX} as <code>?index=…</code>.
           </Text>
         </InfoBlock>
       </Container>
@@ -47,18 +45,11 @@ function Content() {
 
   return (
     <Container py={{ base: 4, md: 6 }}>
-      <EpochView
-        epoch={epoch}
+      <HistoricalEpochView
+        index={idx}
         epochQ={epochQ}
+        finalizedQ={finalizedQ}
         evonodesQ={evonodesQ}
-        leaderboardTitle="Proposers in this epoch"
-        leaderboardLimit={50}
-        fallbackIndex={idx}
-        notFound={{
-          title: 'Epoch not found',
-          description: `No epoch #${idx} on this network.`,
-          actions: [{ label: 'Return to epochs', href: '/epoch/history/' }],
-        }}
       />
     </Container>
   );
