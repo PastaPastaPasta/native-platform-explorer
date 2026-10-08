@@ -286,3 +286,23 @@ describe('current epoch selection integrity', () => {
     expect(testnetFetch.mock.calls.map(([query]) => query.startEpoch)).toEqual([0, 2]);
   });
 });
+
+describe('finalized record freshness', () => {
+  it.each(['empty', 'undefined', 'record'] as const)('refreshes absence after remount but retains finalized records (%s)', async (kind) => {
+    const exists = kind === 'record';
+    let now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const fetch = vi.fn().mockResolvedValueOnce({ data: exists ? new Map([[42, {}]]) : kind === 'undefined' ? new Map([[42, undefined]]) : new Map() })
+      .mockResolvedValue({ data: new Map([[42, {}]]) });
+    const context = createSdkContextValue({ sdk: createMockSdk({ epoch: { finalizedInfosWithProof: fetch } }) });
+    try {
+      const { client, unmount } = mountProbe(context, 'finalized');
+      await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle'));
+      unmount();
+      now += 31_000;
+      render(<Boundary client={client} context={context}><Probe kind="finalized" /></Boundary>);
+      await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle:42'));
+      expect(fetch).toHaveBeenCalledTimes(exists ? 1 : 2);
+    } finally { clock.mockRestore(); }
+  });
+});

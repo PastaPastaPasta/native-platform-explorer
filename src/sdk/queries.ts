@@ -732,7 +732,15 @@ export function useFinalizedEpochInfo(index: number | undefined) {
   return useSdkQuery(
     ['epoch', 'finalizedInfos', index],
     (sdk) => sdk.epoch.finalizedInfos(epochInfoQuery(index!)) as Promise<unknown>,
-    { enabled: valid, staleTime: IMMUTABLE, withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(epochInfoQuery(index!)), methodName: 'epoch.finalizedInfos', methodParams: query ? { ...query } : {} },
+    {
+      enabled: valid,
+      // A finalized record is immutable; its absence is not. A mounted detail
+      // page must notice when an unfinalized epoch acquires a finalized record.
+      staleTime: (q) => q.state.data instanceof Map && q.state.data.get(index) != null ? IMMUTABLE : LIVE,
+      refetchInterval: (q) => q.state.data instanceof Map && q.state.data.get(index) == null ? LIVE : false,
+      withProofFn: (sdk) => sdk.epoch.finalizedInfosWithProof(epochInfoQuery(index!)),
+      methodName: 'epoch.finalizedInfos', methodParams: query ? { ...query } : {},
+    },
   );
 }
 
