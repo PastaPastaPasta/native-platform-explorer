@@ -28,10 +28,11 @@ test('top-up accepts an identity without a signer and resets it after a network 
       ? route.continue()
       : route.abort('failed');
   });
-  await page.goto('settings/?network=testnet');
-  await expect(page.getByText('SDK status: ready', { exact: true })).toBeVisible();
-  await page.getByRole('link', { name: 'Broadcast', exact: true }).first().click();
-  await page.getByRole('button', { name: /^Top up an identity/ }).click();
+  await page.goto('broadcast/?network=testnet&op=identity.topUp');
+  await page.locator('footer').getByRole('button').click();
+  const inspector = page.getByRole('dialog', { name: 'Query Inspector', exact: true });
+  await expect(inspector.getByText('Current SDK: testnet · untrusted · ready', { exact: true })).toBeVisible();
+  await inspector.getByRole('button', { name: 'Close query inspector' }).click();
   await expect.poll(() => page.evaluate(() => localStorage.getItem('npe:network'))).toBe('testnet');
   await expect(page.getByText('External bridge', { exact: true })).toBeVisible();
   const identity = page.getByRole('textbox', { name: 'Identity', exact: true });
