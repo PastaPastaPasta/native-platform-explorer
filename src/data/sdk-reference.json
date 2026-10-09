@@ -1,0 +1,2808 @@
+{
+  "sdkPackage": "@dashevo/evo-sdk",
+  "sdkVersion": "4.0.0-rc.2",
+  "pages": [
+    {
+      "route": "/",
+      "source": "src/app/page.tsx",
+      "calls": [
+        {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 69,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 64,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRange",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 751,
+              "owner": "useEvonodesBlocksByRange"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRangeWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 752,
+              "owner": "useEvonodesBlocksByRange"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeState",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 825,
+              "owner": "useProtocolVersionUpgradeState"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeStateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 826,
+              "owner": "useProtocolVersionUpgradeState"
+            }
+          ]
+        },
+        {
+          "method": "system.currentQuorumsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 787,
+              "owner": "useCurrentQuorumsInfo"
+            }
+          ]
+        },
+        {
+          "method": "system.status",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 779,
+              "owner": "useSystemStatus"
+            }
+          ]
+        },
+        {
+          "method": "system.totalCreditsInPlatform",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 795,
+              "owner": "useTotalCreditsInPlatform"
+            }
+          ]
+        },
+        {
+          "method": "system.totalCreditsInPlatformWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 796,
+              "owner": "useTotalCreditsInPlatform"
+            }
+          ]
+        },
+        {
+          "method": "voting.votePollsByEndDate",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 857,
+              "owner": "useVotePollsByEndDate"
+            }
+          ]
+        },
+        {
+          "method": "voting.votePollsByEndDateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 858,
+              "owner": "useVotePollsByEndDate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/about/",
+      "source": "src/app/about/page.tsx",
+      "calls": []
+    },
+    {
+      "route": "/address/",
+      "source": "src/app/address/page.tsx",
+      "calls": [
+        {
+          "method": "addresses.get",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 430,
+              "owner": "useAddressInfo"
+            }
+          ]
+        },
+        {
+          "method": "addresses.getWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 431,
+              "owner": "useAddressInfo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/broadcast/",
+      "source": "src/app/broadcast/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 182,
+              "owner": "executeContractUpdate"
+            },
+            {
+              "file": "src/components/broadcast/forms/ContractUpdate.tsx",
+              "line": 30,
+              "owner": "ContractUpdateForm"
+            },
+            {
+              "file": "src/components/broadcast/forms/DocumentCreate.tsx",
+              "line": 48,
+              "owner": "DocumentCreateForm"
+            },
+            {
+              "file": "src/components/broadcast/forms/DocumentReplace.tsx",
+              "line": 60,
+              "owner": "DocumentReplaceForm"
+            }
+          ]
+        },
+        {
+          "method": "contracts.publish",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 147,
+              "owner": "executeContractRegister"
+            }
+          ]
+        },
+        {
+          "method": "contracts.update",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 201,
+              "owner": "executeContractUpdate"
+            }
+          ]
+        },
+        {
+          "method": "documents.create",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 274,
+              "owner": "executeDocumentCreate"
+            }
+          ]
+        },
+        {
+          "method": "documents.delete",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 352,
+              "owner": "executeDocumentDelete"
+            }
+          ]
+        },
+        {
+          "method": "documents.get",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 246,
+              "owner": "fetchExistingDocument"
+            },
+            {
+              "file": "src/components/broadcast/forms/DocumentReplace.tsx",
+              "line": 87,
+              "owner": "DocumentReplaceForm"
+            }
+          ]
+        },
+        {
+          "method": "documents.purchase",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 484,
+              "owner": "executeDocumentPurchase"
+            }
+          ]
+        },
+        {
+          "method": "documents.replace",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 317,
+              "owner": "executeDocumentReplace"
+            }
+          ]
+        },
+        {
+          "method": "documents.setPrice",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 442,
+              "owner": "executeDocumentSetPrice"
+            }
+          ]
+        },
+        {
+          "method": "documents.transfer",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 398,
+              "owner": "executeDocumentTransfer"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.registerName",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 667,
+              "owner": "executeDpnsRegister"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "identities.creditTransfer",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 533,
+              "owner": "executeIdentityCreditTransfer"
+            }
+          ]
+        },
+        {
+          "method": "identities.creditWithdrawal",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 570,
+              "owner": "executeIdentityCreditWithdrawal"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 252,
+              "owner": "fetchExistingIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.nonce",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 133,
+              "owner": "executeContractRegister"
+            }
+          ]
+        },
+        {
+          "method": "identities.update",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 614,
+              "owner": "executeIdentityUpdateKeys"
+            }
+          ]
+        },
+        {
+          "method": "version",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 116,
+              "owner": "getPlatformVersion"
+            }
+          ]
+        },
+        {
+          "method": "IdentityPublicKeyInCreation.fromJSON",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 607,
+              "owner": "executeIdentityUpdateKeys"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/contract/",
+      "source": "src/app/contract/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.getHistory",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 359,
+              "owner": "useContractHistory"
+            }
+          ]
+        },
+        {
+          "method": "contracts.getHistoryWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 360,
+              "owner": "useContractHistory"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "group.groupsDataContracts",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 529,
+              "owner": "useGroupsDataContracts"
+            }
+          ]
+        },
+        {
+          "method": "group.groupsDataContractsWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 530,
+              "owner": "useGroupsDataContracts"
+            }
+          ]
+        },
+        {
+          "method": "tokens.calculateId",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/contract/ContractTokensTab.tsx",
+              "line": 65,
+              "owner": "ContractTokensTab"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/contract/document/",
+      "source": "src/app/contract/document/page.tsx",
+      "calls": [
+        {
+          "method": "documents.get",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 372,
+              "owner": "useDocument"
+            }
+          ]
+        },
+        {
+          "method": "documents.getWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 373,
+              "owner": "useDocument"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/contract/documents/",
+      "source": "src/app/contract/documents/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "documents.query",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 563,
+              "owner": "useDocumentsQuery"
+            }
+          ]
+        },
+        {
+          "method": "documents.queryWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 564,
+              "owner": "useDocumentsQuery"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/contract/token/",
+      "source": "src/app/contract/token/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "tokens.calculateId",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/app/contract/token/page.tsx",
+              "line": 29,
+              "owner": "Content"
+            }
+          ]
+        },
+        {
+          "method": "tokens.contractInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 410,
+              "owner": "useTokenContractInfo"
+            }
+          ]
+        },
+        {
+          "method": "tokens.contractInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 411,
+              "owner": "useTokenContractInfo"
+            }
+          ]
+        },
+        {
+          "method": "tokens.directPurchasePrices",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 397,
+              "owner": "useTokenDirectPurchasePrices"
+            }
+          ]
+        },
+        {
+          "method": "tokens.directPurchasePricesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 398,
+              "owner": "useTokenDirectPurchasePrices"
+            }
+          ]
+        },
+        {
+          "method": "tokens.statuses",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 389,
+              "owner": "useTokenStatuses"
+            }
+          ]
+        },
+        {
+          "method": "tokens.statusesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 390,
+              "owner": "useTokenStatuses"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupply",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 381,
+              "owner": "useTokenTotalSupply"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupplyWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 382,
+              "owner": "useTokenTotalSupply"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/dpns/",
+      "source": "src/app/dpns/page.tsx",
+      "calls": [
+        {
+          "method": "dpns.getUsernameByName",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 463,
+              "owner": "useDpnsGetByName"
+            }
+          ]
+        },
+        {
+          "method": "dpns.getUsernameByNameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 464,
+              "owner": "useDpnsGetByName"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isNameAvailable",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 476,
+              "owner": "useDpnsIsAvailable"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isValidUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 492,
+              "owner": "useDpnsIsValid"
+            }
+          ]
+        },
+        {
+          "method": "dpns.resolveName",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 439,
+              "owner": "useDpnsResolve"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/dpns/search/",
+      "source": "src/app/dpns/search/page.tsx",
+      "calls": [
+        {
+          "method": "documents.query",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 563,
+              "owner": "useDocumentsQuery"
+            },
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 682,
+              "owner": "useDpnsPrefixSearch"
+            }
+          ]
+        },
+        {
+          "method": "documents.queryWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 564,
+              "owner": "useDocumentsQuery"
+            },
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 683,
+              "owner": "useDpnsPrefixSearch"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/epoch/",
+      "source": "src/app/epoch/page.tsx",
+      "calls": [
+        {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 69,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 64,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRange",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 751,
+              "owner": "useEvonodesBlocksByRange"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRangeWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 752,
+              "owner": "useEvonodesBlocksByRange"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/epoch/detail/",
+      "source": "src/app/epoch/detail/page.tsx",
+      "calls": [
+        {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 707,
+              "owner": "useEpochInfo"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 708,
+              "owner": "useEpochInfo"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRange",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 751,
+              "owner": "useEvonodesBlocksByRange"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRangeWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 752,
+              "owner": "useEvonodesBlocksByRange"
+            }
+          ]
+        },
+        {
+          "method": "epoch.finalizedInfos",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 734,
+              "owner": "useFinalizedEpochInfo"
+            }
+          ]
+        },
+        {
+          "method": "epoch.finalizedInfosWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 741,
+              "owner": "useFinalizedEpochInfo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/epoch/history/",
+      "source": "src/app/epoch/history/page.tsx",
+      "calls": [
+        {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 69,
+              "owner": "fetchCurrentEpoch"
+            },
+            {
+              "file": "src/sdk/epoch-queries.ts",
+              "line": 60,
+              "owner": "fetchEpochRange"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 64,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/evonode/",
+      "source": "src/app/evonode/page.tsx",
+      "calls": [
+        {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 69,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 64,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeVoteStatus",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 836,
+              "owner": "useProtocolVersionUpgradeVoteStatus"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeVoteStatusWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 837,
+              "owner": "useProtocolVersionUpgradeVoteStatus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/governance/contested/",
+      "source": "src/app/governance/contested/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "group.contestedResources",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 878,
+              "owner": "useContestedResources"
+            }
+          ]
+        },
+        {
+          "method": "group.contestedResourcesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 879,
+              "owner": "useContestedResources"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/governance/contested/detail/",
+      "source": "src/app/governance/contested/detail/page.tsx",
+      "calls": [
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "voting.contestedResourceVoteState",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 936,
+              "owner": "useContestedResourceVoteState"
+            }
+          ]
+        },
+        {
+          "method": "voting.contestedResourceVoteStateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 937,
+              "owner": "useContestedResourceVoteState"
+            }
+          ]
+        },
+        {
+          "method": "voting.votePollsByEndDate",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 857,
+              "owner": "useVotePollsByEndDate"
+            }
+          ]
+        },
+        {
+          "method": "voting.votePollsByEndDateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 858,
+              "owner": "useVotePollsByEndDate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/governance/polls/",
+      "source": "src/app/governance/polls/page.tsx",
+      "calls": [
+        {
+          "method": "voting.votePollsByEndDate",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 857,
+              "owner": "useVotePollsByEndDate"
+            }
+          ]
+        },
+        {
+          "method": "voting.votePollsByEndDateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 858,
+              "owner": "useVotePollsByEndDate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/groups/",
+      "source": "src/app/groups/page.tsx",
+      "calls": [
+        {
+          "method": "group.infos",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 887,
+              "owner": "useGroupInfos"
+            }
+          ]
+        },
+        {
+          "method": "group.infosWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 888,
+              "owner": "useGroupInfos"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/groups/detail/",
+      "source": "src/app/groups/detail/page.tsx",
+      "calls": [
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "group.actions",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 917,
+              "owner": "useGroupActions"
+            }
+          ]
+        },
+        {
+          "method": "group.actionsWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 918,
+              "owner": "useGroupActions"
+            }
+          ]
+        },
+        {
+          "method": "group.info",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 895,
+              "owner": "useGroupInfo"
+            }
+          ]
+        },
+        {
+          "method": "group.infoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 896,
+              "owner": "useGroupInfo"
+            }
+          ]
+        },
+        {
+          "method": "group.members",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 904,
+              "owner": "useGroupMembers"
+            }
+          ]
+        },
+        {
+          "method": "group.membersWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 905,
+              "owner": "useGroupMembers"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/identity/",
+      "source": "src/app/identity/page.tsx",
+      "calls": [
+        {
+          "method": "documents.query",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 563,
+              "owner": "useDocumentsQuery"
+            }
+          ]
+        },
+        {
+          "method": "documents.queryWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 564,
+              "owner": "useDocumentsQuery"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernames",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 455,
+              "owner": "useDpnsUsernames"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernamesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 456,
+              "owner": "useDpnsUsernames"
+            }
+          ]
+        },
+        {
+          "method": "group.identityGroups",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 521,
+              "owner": "useIdentityGroups"
+            }
+          ]
+        },
+        {
+          "method": "group.identityGroupsWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 522,
+              "owner": "useIdentityGroups"
+            }
+          ]
+        },
+        {
+          "method": "identities.balanceAndRevision",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 298,
+              "owner": "useIdentityBalanceAndRevision"
+            }
+          ]
+        },
+        {
+          "method": "identities.balanceAndRevisionWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 299,
+              "owner": "useIdentityBalanceAndRevision"
+            }
+          ]
+        },
+        {
+          "method": "identities.contractNonce",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 323,
+              "owner": "useIdentityContractNonce"
+            }
+          ]
+        },
+        {
+          "method": "identities.contractNonceWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 324,
+              "owner": "useIdentityContractNonce"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 290,
+              "owner": "useIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 291,
+              "owner": "useIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.getKeys",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 307,
+              "owner": "useIdentityKeys"
+            }
+          ]
+        },
+        {
+          "method": "identities.getKeysWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 308,
+              "owner": "useIdentityKeys"
+            }
+          ]
+        },
+        {
+          "method": "identities.nonce",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 315,
+              "owner": "useIdentityNonce"
+            }
+          ]
+        },
+        {
+          "method": "identities.nonceWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 316,
+              "owner": "useIdentityNonce"
+            }
+          ]
+        },
+        {
+          "method": "tokens.identityBalances",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 421,
+              "owner": "useTokenIdentityBalances"
+            }
+          ]
+        },
+        {
+          "method": "tokens.identityBalancesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 422,
+              "owner": "useTokenIdentityBalances"
+            }
+          ]
+        },
+        {
+          "method": "voting.contestedResourceIdentityVotes",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 511,
+              "owner": "useIdentityVotes"
+            }
+          ]
+        },
+        {
+          "method": "voting.contestedResourceIdentityVotesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 512,
+              "owner": "useIdentityVotes"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/identity/lookup/",
+      "source": "src/app/identity/lookup/page.tsx",
+      "calls": [
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "identities.byNonUniquePublicKeyHash",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 342,
+              "owner": "useIdentitiesByNonUniquePkh"
+            }
+          ]
+        },
+        {
+          "method": "identities.byNonUniquePublicKeyHashWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 343,
+              "owner": "useIdentitiesByNonUniquePkh"
+            }
+          ]
+        },
+        {
+          "method": "identities.byPublicKeyHash",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 331,
+              "owner": "useIdentityByPublicKeyHash"
+            }
+          ]
+        },
+        {
+          "method": "identities.byPublicKeyHashWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 332,
+              "owner": "useIdentityByPublicKeyHash"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/network/credits/",
+      "source": "src/app/network/credits/page.tsx",
+      "calls": [
+        {
+          "method": "system.prefundedSpecializedBalance",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 803,
+              "owner": "usePrefundedSpecializedBalance"
+            }
+          ]
+        },
+        {
+          "method": "system.prefundedSpecializedBalanceWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 804,
+              "owner": "usePrefundedSpecializedBalance"
+            }
+          ]
+        },
+        {
+          "method": "system.totalCreditsInPlatform",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 795,
+              "owner": "useTotalCreditsInPlatform"
+            }
+          ]
+        },
+        {
+          "method": "system.totalCreditsInPlatformWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 796,
+              "owner": "useTotalCreditsInPlatform"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/network/protocol/",
+      "source": "src/app/network/protocol/page.tsx",
+      "calls": [
+        {
+          "method": "protocol.versionUpgradeState",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 825,
+              "owner": "useProtocolVersionUpgradeState"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeStateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 826,
+              "owner": "useProtocolVersionUpgradeState"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeVoteStatus",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 836,
+              "owner": "useProtocolVersionUpgradeVoteStatus"
+            }
+          ]
+        },
+        {
+          "method": "protocol.versionUpgradeVoteStatusWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 837,
+              "owner": "useProtocolVersionUpgradeVoteStatus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/network/quorums/",
+      "source": "src/app/network/quorums/page.tsx",
+      "calls": [
+        {
+          "method": "system.currentQuorumsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 787,
+              "owner": "useCurrentQuorumsInfo"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/network/status/",
+      "source": "src/app/network/status/page.tsx",
+      "calls": [
+        {
+          "method": "system.currentQuorumsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 787,
+              "owner": "useCurrentQuorumsInfo"
+            }
+          ]
+        },
+        {
+          "method": "system.status",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 779,
+              "owner": "useSystemStatus"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/query/",
+      "source": "src/app/query/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "documents.query",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 563,
+              "owner": "useDocumentsQuery"
+            }
+          ]
+        },
+        {
+          "method": "documents.queryWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 564,
+              "owner": "useDocumentsQuery"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "getWasmSdkConnected",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 629,
+              "owner": "useDocumentsAggregate"
+            }
+          ]
+        },
+        {
+          "method": "getDocumentsAverage",
+          "kind": "wasm",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 633,
+              "owner": "useDocumentsAggregate"
+            }
+          ]
+        },
+        {
+          "method": "getDocumentsCount",
+          "kind": "wasm",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 631,
+              "owner": "useDocumentsAggregate"
+            }
+          ]
+        },
+        {
+          "method": "getDocumentsSum",
+          "kind": "wasm",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 632,
+              "owner": "useDocumentsAggregate"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/saved/",
+      "source": "src/app/saved/page.tsx",
+      "calls": []
+    },
+    {
+      "route": "/sdk-reference/",
+      "source": "src/app/sdk-reference/page.tsx",
+      "calls": []
+    },
+    {
+      "route": "/search/",
+      "source": "src/app/search/page.tsx",
+      "calls": [
+        {
+          "method": "addresses.get",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 430,
+              "owner": "useAddressInfo"
+            }
+          ]
+        },
+        {
+          "method": "addresses.getWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 431,
+              "owner": "useAddressInfo"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "dpns.getUsernameByName",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 463,
+              "owner": "useDpnsGetByName"
+            }
+          ]
+        },
+        {
+          "method": "dpns.getUsernameByNameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 464,
+              "owner": "useDpnsGetByName"
+            }
+          ]
+        },
+        {
+          "method": "identities.byNonUniquePublicKeyHash",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 342,
+              "owner": "useIdentitiesByNonUniquePkh"
+            }
+          ]
+        },
+        {
+          "method": "identities.byNonUniquePublicKeyHashWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 343,
+              "owner": "useIdentitiesByNonUniquePkh"
+            }
+          ]
+        },
+        {
+          "method": "identities.byPublicKeyHash",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 331,
+              "owner": "useIdentityByPublicKeyHash"
+            }
+          ]
+        },
+        {
+          "method": "identities.byPublicKeyHashWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 332,
+              "owner": "useIdentityByPublicKeyHash"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 290,
+              "owner": "useIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 291,
+              "owner": "useIdentity"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupply",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 381,
+              "owner": "useTokenTotalSupply"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupplyWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 382,
+              "owner": "useTokenTotalSupply"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/settings/",
+      "source": "src/app/settings/page.tsx",
+      "calls": []
+    },
+    {
+      "route": "/state-transition/",
+      "source": "src/app/state-transition/page.tsx",
+      "calls": [
+        {
+          "method": "stateTransitions.waitForStateTransitionResult",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 501,
+              "owner": "useStateTransitionResult"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/token/",
+      "source": "src/app/token/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "documents.query",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 655,
+              "owner": "useTokenHistoryDirectPurchases"
+            }
+          ]
+        },
+        {
+          "method": "documents.queryWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 656,
+              "owner": "useTokenHistoryDirectPurchases"
+            }
+          ]
+        },
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "tokens.contractInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 410,
+              "owner": "useTokenContractInfo"
+            }
+          ]
+        },
+        {
+          "method": "tokens.contractInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 411,
+              "owner": "useTokenContractInfo"
+            }
+          ]
+        },
+        {
+          "method": "tokens.directPurchasePrices",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 397,
+              "owner": "useTokenDirectPurchasePrices"
+            }
+          ]
+        },
+        {
+          "method": "tokens.directPurchasePricesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 398,
+              "owner": "useTokenDirectPurchasePrices"
+            }
+          ]
+        },
+        {
+          "method": "tokens.statuses",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 389,
+              "owner": "useTokenStatuses"
+            }
+          ]
+        },
+        {
+          "method": "tokens.statusesWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 390,
+              "owner": "useTokenStatuses"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupply",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 381,
+              "owner": "useTokenTotalSupply"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupplyWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 382,
+              "owner": "useTokenTotalSupply"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/token/holders/",
+      "source": "src/app/token/holders/page.tsx",
+      "calls": [
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.resolveName",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/token/SeededHoldersForm.tsx",
+              "line": 60,
+              "owner": "SeededHoldersForm"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "tokens.balances",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/token/SeededHoldersForm.tsx",
+              "line": 69,
+              "owner": "SeededHoldersForm"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/tools/",
+      "source": "src/app/tools/page.tsx",
+      "calls": [
+        {
+          "method": "contracts.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 351,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "contracts.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 352,
+              "owner": "useContract"
+            }
+          ]
+        },
+        {
+          "method": "system.pathElements",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 816,
+              "owner": "usePathElements"
+            }
+          ]
+        },
+        {
+          "method": "system.pathElementsWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 817,
+              "owner": "usePathElements"
+            }
+          ]
+        },
+        {
+          "method": "DataContract.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/tools/ContractDeserializerTool.tsx",
+              "line": 53,
+              "owner": "ContractDeserializerTool"
+            }
+          ]
+        },
+        {
+          "method": "Document.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/tools/DocumentDeserializerTool.tsx",
+              "line": 72,
+              "owner": "DocumentDeserializerTool"
+            }
+          ]
+        },
+        {
+          "method": "Identity.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/tools/IdentityDeserializerTool.tsx",
+              "line": 22,
+              "owner": "IdentityDeserializerTool"
+            }
+          ]
+        },
+        {
+          "method": "PlatformVersion.latest",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/tools/ContractDeserializerTool.tsx",
+              "line": 53,
+              "owner": "ContractDeserializerTool"
+            },
+            {
+              "file": "src/components/tools/DocumentDeserializerTool.tsx",
+              "line": 76,
+              "owner": "DocumentDeserializerTool"
+            }
+          ]
+        },
+        {
+          "method": "StateTransition.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/tools/StateTransitionTool.tsx",
+              "line": 22,
+              "owner": "StateTransitionTool"
+            }
+          ]
+        },
+        {
+          "method": "ensureInitialized",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/tools/ContractDeserializerTool.tsx",
+              "line": 52,
+              "owner": "ContractDeserializerTool"
+            },
+            {
+              "file": "src/components/tools/DocumentDeserializerTool.tsx",
+              "line": 71,
+              "owner": "DocumentDeserializerTool"
+            },
+            {
+              "file": "src/components/tools/IdentityDeserializerTool.tsx",
+              "line": 21,
+              "owner": "IdentityDeserializerTool"
+            },
+            {
+              "file": "src/components/tools/StateTransitionTool.tsx",
+              "line": 21,
+              "owner": "StateTransitionTool"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "route": "/wallet/",
+      "source": "src/app/wallet/page.tsx",
+      "calls": [
+        {
+          "method": "dpns.isContestedUsername",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 484,
+              "owner": "useDpnsIsContested"
+            }
+          ]
+        },
+        {
+          "method": "dpns.username",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 447,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "dpns.usernameWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 448,
+              "owner": "useDpnsUsername"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetch",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/signer/local.ts",
+              "line": 49,
+              "owner": "createLocalSigner"
+            }
+          ]
+        },
+        {
+          "method": "PrivateKey.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/local.ts",
+              "line": 122,
+              "owner": "createLocalSigner"
+            }
+          ]
+        },
+        {
+          "method": "wallet.derivationPathDip13Mainnet",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/mnemonic.ts",
+              "line": 22,
+              "owner": "createMnemonicSigner"
+            }
+          ]
+        },
+        {
+          "method": "wallet.derivationPathDip13Testnet",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/mnemonic.ts",
+              "line": 23,
+              "owner": "createMnemonicSigner"
+            }
+          ]
+        },
+        {
+          "method": "wallet.deriveKeyFromSeedWithPath",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/mnemonic.ts",
+              "line": 30,
+              "owner": "createMnemonicSigner"
+            }
+          ]
+        },
+        {
+          "method": "wallet.keyPairFromWif",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/local.ts",
+              "line": 158,
+              "owner": "decodeWif"
+            }
+          ]
+        },
+        {
+          "method": "wallet.validateMnemonic",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/mnemonic.ts",
+              "line": 16,
+              "owner": "createMnemonicSigner"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

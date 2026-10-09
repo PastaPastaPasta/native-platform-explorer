@@ -22,7 +22,7 @@ test.beforeEach(async ({ page, baseURL }) => {
 async function openDuringConnectionOutage(page: Page, path: string) {
   await page.goto(path);
   // The real provider's connection error confirms hydration and handler setup.
-  await expect(page.getByRole('alert')).toBeVisible();
+  await expect(page.getByRole('alert').filter({ hasText: 'Failed to prefetch quorums' })).toBeVisible();
 }
 
 test('empty inspector explains provenance and disables evidence actions', async ({ page }) => {

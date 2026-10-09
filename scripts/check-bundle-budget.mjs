@@ -107,6 +107,8 @@ function routeAssets(buildDirectory) {
   };
 }
 
+/** @param {string} buildDirectory
+ * @param {Record<string, { raw: number, gzip: number }>} budgets */
 export function measureInitialBundles(buildDirectory, budgets = ROUTE_BUDGETS) {
   const { directory, filesForRoute } = routeAssets(path.resolve(buildDirectory));
   const sizes = new Map();

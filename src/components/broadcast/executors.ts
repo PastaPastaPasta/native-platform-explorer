@@ -646,7 +646,7 @@ export async function executeIdentityTopUp(_args: {
   throw new OperationNotSubmittedError(
     'Top-up runs in the Dash Platform bridge — click "Open bridge" on the form ' +
       'instead. When the bridge completes the top-up, return to the explorer ' +
-      'and the balance will refresh automatically.',
+      'and refresh the identity page to check the balance.',
   );
 }
 
