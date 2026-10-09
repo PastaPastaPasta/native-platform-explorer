@@ -47,15 +47,37 @@ export function generateSdkReference(rootDir) {
     const symbol = checker.getSymbolAtLocation(node);
     return symbol?.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol;
   };
+  const sdkModule = ts.resolveModuleName(SDK_PACKAGE, configPath, parsed.options, ts.sys).resolvedModule;
+  const sdkSource = sdkModule && program.getSourceFile(sdkModule.resolvedFileName);
+  const sdkSymbol = sdkSource && checker.getSymbolAtLocation(sdkSource);
+  const sdkExports = sdkSymbol ? checker.getExportsOfModule(sdkSymbol) : [];
+  const sdkExportNames = new Map(sdkExports.map((symbol) => [
+    symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol, symbol.getName(),
+  ]));
 
   function sdkCall(expression) {
     const parts = propertyPath(expression);
-    if (parts.length < 2) return null;
+    if (!parts.length) return null;
     let root = unwrap(expression);
     while (ts.isPropertyAccessExpression(root)) root = unwrap(root.expression);
     if (!ts.isIdentifier(root)) return null;
     const symbol = resolveSymbol(root);
     const declarations = symbol?.declarations ?? [];
+    if (parts.length === 1) {
+      const exportedName = sdkExportNames.get(symbol);
+      if (exportedName) return { method: exportedName, kind: 'utility' };
+      for (const declaration of declarations) {
+        if (ts.isBindingElement(declaration) && ts.isVariableDeclaration(declaration.parent.parent)
+          && importsSdk(declaration.parent.parent.initializer)) {
+          const name = declaration.propertyName ?? declaration.name;
+          if ((ts.isIdentifier(name) || ts.isStringLiteral(name))
+            && sdkExports.some((exported) => exported.getName() === name.text)) {
+            return { method: name.text, kind: 'utility' };
+          }
+        }
+      }
+      return null;
+    }
     // Recognize EvoSDK-owned instance members by declaration, including nullable
     // contexts and Pick<EvoSDK, ...> helpers, without requiring a variable name.
     const member = checker.getPropertyOfType(checker.getNonNullableType(checker.getTypeAtLocation(root)), parts[1]);

@@ -93,6 +93,48 @@ test('walks JSX components, dynamic local imports and cycles while distinguishin
   });
 });
 
+test('records direct SDK exports by canonical names and ignores local, shadowed and unused imports', () => {
+  fixture({
+    'src/app/static/page.tsx': `import { ensureInitialized } from '@dashevo/evo-sdk';
+      export default function Page() { void ensureInitialized(); return null; }`,
+    'src/app/static-alias/page.tsx': `import { ensureInitialized as initializeSdk } from '@dashevo/evo-sdk';
+      export default function Page() { void initializeSdk(); return null; }`,
+    'src/app/dynamic/page.tsx': `export default function Page() {
+      async function run() { const { ensureInitialized } = await import('@dashevo/evo-sdk'); await ensureInitialized(); }
+      return <button onClick={run}>Initialize</button>;
+    }`,
+    'src/app/dynamic-alias/page.tsx': `export default function Page() {
+      async function run() { const { ensureInitialized: initializeSdk } = await import('@dashevo/evo-sdk'); await initializeSdk(); }
+      return <button onClick={run}>Initialize</button>;
+    }`,
+    'src/app/reexport-alias/page.tsx': `import { initializeSdk } from '@/barrel';
+      export default function Page() { void initializeSdk(); return null; }`,
+    'src/barrel.ts': `export { ensureInitialized as initializeSdk } from '@dashevo/evo-sdk';`,
+    'src/app/namespace/page.tsx': `export default function Page() {
+      async function run() { const sdkModule = await import('@dashevo/evo-sdk'); await sdkModule.ensureInitialized(); }
+      return <button onClick={run}>Initialize</button>;
+    }`,
+    'src/app/local/page.tsx': `function ensureInitialized() { return null; }
+      export default function Page() { ensureInitialized(); return null; }`,
+    'src/app/shadow/page.tsx': `import { ensureInitialized } from '@dashevo/evo-sdk';
+      function run(ensureInitialized: () => void) { ensureInitialized(); }
+      export default function Page() { run(() => {}); return null; }`,
+    'src/app/unused/page.tsx': `import { ensureInitialized } from '@dashevo/evo-sdk';
+      export default function Page() { return null; }`,
+  }, (root) => {
+    const map = generateSdkReference(root);
+    for (const route of ['/static/', '/static-alias/', '/dynamic/', '/dynamic-alias/', '/reexport-alias/', '/namespace/']) {
+      const calls = map.pages.find((page) => page.route === route).calls;
+      assert.deepEqual(calls.map(({ method, kind }) => [kind, method]), [['utility', 'ensureInitialized']], route);
+      assert.equal(calls[0].sources.length, 1, route);
+      assert.equal(calls[0].sources[0].file, `src/app${route}page.tsx`, route);
+    }
+    for (const route of ['/local/', '/shadow/', '/unused/']) {
+      assert.deepEqual(map.pages.find((page) => page.route === route).calls, [], route);
+    }
+  });
+});
+
 test('the shipped generated map binds actual epoch, aggregate, signer and no-call reference routes', () => {
   const map = JSON.parse(readFileSync(path.join(project, 'src/data/sdk-reference.json'), 'utf8'));
   const methods = (route) => map.pages.find((page) => page.route === route).calls.map((call) => call.method);
