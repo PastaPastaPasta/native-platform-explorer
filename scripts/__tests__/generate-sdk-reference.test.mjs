@@ -186,6 +186,95 @@ test('canonicalizes dynamic SDK namespace aliases without attributing local or s
   });
 });
 
+test('follows only selected quoted local dynamic exports, including aliased barrel exports', () => {
+  fixture({
+    'src/app/identifier/page.tsx': `export default function Page() {
+      async function run() { const { query: read } = await import('@/reads'); await read(); }
+      return <button onClick={run}>Read</button>;
+    }`,
+    'src/app/single-quoted/page.tsx': `export default function Page() {
+      async function run() { const { 'query': read } = await import('@/reads'); await read(); }
+      return <button onClick={run}>Read</button>;
+    }`,
+    'src/app/double-quoted/page.tsx': `export default function Page() {
+      async function run() { const { "query": read } = await import('@/reads'); await read(); }
+      return <button onClick={run}>Read</button>;
+    }`,
+    'src/app/quoted-barrel/page.tsx': `export default function Page() {
+      async function run() { const { 'readQuery': read } = await import('@/barrel'); await read(); }
+      return <button onClick={run}>Read</button>;
+    }`,
+    'src/app/named-control/page.tsx': `import { query as read } from '@/reads';
+      export default function Page() { void read(); return null; }`,
+    'src/app/local-control/page.tsx': `export default function Page() {
+      async function run() { const { 'query': read } = await import('@/local'); read(); }
+      return <button onClick={run}>Read</button>;
+    }`,
+    'src/app/unreferenced-module/page.tsx': `export default function Page() { return null; }`,
+    'src/reads.ts': `import type { EvoSDK } from '@dashevo/evo-sdk';
+      declare const client: EvoSDK;
+      export function query() { return client.identities.fetch('identity'); }
+      export function unused() { return client.tokens.totalSupply('token'); }`,
+    'src/barrel.ts': `export { query as readQuery, unused } from './reads';`,
+    'src/local.ts': `export function query() { return 'local'; }`,
+  }, (root) => {
+    const map = generateSdkReference(root);
+    assert.equal(map.pages.length, 7);
+    for (const route of ['/identifier/', '/single-quoted/', '/double-quoted/', '/quoted-barrel/', '/named-control/']) {
+      assert.deepEqual(map.pages.find((page) => page.route === route).calls, [{
+        method: 'identities.fetch', kind: 'facade',
+        sources: [{ file: 'src/reads.ts', line: 3, owner: 'query' }],
+      }], route);
+    }
+    for (const route of ['/local-control/', '/unreferenced-module/']) {
+      assert.deepEqual(map.pages.find((page) => page.route === route).calls, [], route);
+    }
+  });
+});
+
+test('follows only selected static namespace members and preserves named, dynamic and shadow controls', () => {
+  fixture({
+    'src/app/selected/page.tsx': `import * as hooks from '@/hooks';
+      export default function Page() { void hooks.selected(); return null; }`,
+    'src/app/barrel/page.tsx': `import * as hooks from '@/barrel';
+      export default function Page() { void hooks.chosen(); return null; }`,
+    'src/app/named-control/page.tsx': `import { selected } from '@/hooks';
+      export default function Page() { void selected(); return null; }`,
+    'src/app/dynamic-control/page.tsx': `export default function Page() {
+      async function run() { const hooks = await import('@/hooks'); await hooks.selected(); }
+      return <button onClick={run}>Read</button>;
+    }`,
+    'src/app/local-member/page.tsx': `import * as helpers from '@/mixed';
+      export default function Page() { helpers.selected(); return null; }`,
+    'src/app/unused-import/page.tsx': `import * as hooks from '@/hooks';
+      export default function Page() { return null; }`,
+    'src/app/shadow-control/page.tsx': `import * as hooks from '@/hooks';
+      function local(hooks: { selected: () => void }) { hooks.selected(); }
+      export default function Page() { local({ selected: () => {} }); return null; }`,
+    'src/hooks.ts': `import type { EvoSDK } from '@dashevo/evo-sdk';
+      declare const client: EvoSDK;
+      export function selected() { return client.identities.fetch('identity'); }
+      export function unused() { return client.tokens.totalSupply('token'); }`,
+    'src/barrel.ts': `export { selected as chosen, unused } from './hooks';`,
+    'src/mixed.ts': `import type { EvoSDK } from '@dashevo/evo-sdk';
+      declare const client: EvoSDK;
+      export function selected() { return 'local'; }
+      export function unused() { return client.tokens.totalSupply('token'); }`,
+  }, (root) => {
+    const map = generateSdkReference(root);
+    assert.equal(map.pages.length, 7);
+    for (const route of ['/selected/', '/barrel/', '/named-control/', '/dynamic-control/']) {
+      assert.deepEqual(map.pages.find((page) => page.route === route).calls, [{
+        method: 'identities.fetch', kind: 'facade',
+        sources: [{ file: 'src/hooks.ts', line: 3, owner: 'selected' }],
+      }], route);
+    }
+    for (const route of ['/local-member/', '/unused-import/', '/shadow-control/']) {
+      assert.deepEqual(map.pages.find((page) => page.route === route).calls, [], route);
+    }
+  });
+});
+
 test('the shipped generated map binds actual epoch, aggregate, signer and no-call reference routes', () => {
   const map = JSON.parse(readFileSync(path.join(project, 'src/data/sdk-reference.json'), 'utf8'));
   const methods = (route) => map.pages.find((page) => page.route === route).calls.map((call) => call.method);

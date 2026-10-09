@@ -125,15 +125,17 @@ export function generateSdkReference(rootDir) {
       // not import aliases. Follow only their selected export as well.
       if (ts.isBindingElement(node) && ts.isVariableDeclaration(node.parent.parent)) {
         const initializer = unwrap(node.parent.parent.initializer);
+        const name = node.propertyName ?? node.name;
         if (initializer && ts.isCallExpression(initializer)
           && initializer.expression.kind === ts.SyntaxKind.ImportKeyword
-          && ts.isStringLiteral(initializer.arguments[0])) {
+          && ts.isStringLiteral(initializer.arguments[0])
+          && (ts.isIdentifier(name) || ts.isStringLiteral(name))) {
           const resolved = ts.resolveModuleName(initializer.arguments[0].text,
             node.getSourceFile().fileName, parsed.options, ts.sys).resolvedModule;
           const imported = resolved && program.getSourceFile(resolved.resolvedFileName);
           const importedSymbol = imported && checker.getSymbolAtLocation(imported);
           const selected = importedSymbol && checker.getExportsOfModule(importedSymbol)
-            .find((s) => s.name === (node.propertyName ?? node.name).getText());
+            .find((s) => s.name === name.text);
           const actual = selected?.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(selected) : selected;
           for (const declaration of actual?.declarations ?? []) {
             if (isLocal(declaration) && !visited.has(declaration)) pending.push(declaration);
@@ -159,7 +161,7 @@ export function generateSdkReference(rootDir) {
       }
       if (ts.isIdentifier(node)) {
         for (const declaration of resolveSymbol(node)?.declarations ?? []) {
-          if (isLocal(declaration) && !visited.has(declaration)) pending.push(declaration);
+          if (!ts.isSourceFile(declaration) && isLocal(declaration) && !visited.has(declaration)) pending.push(declaration);
         }
       }
       ts.forEachChild(node, (child) => visit(child, owner));
