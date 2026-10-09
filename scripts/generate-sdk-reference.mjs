@@ -99,7 +99,10 @@ export function generateSdkReference(rootDir) {
       }
       if (ts.isBindingElement(declaration) && ts.isVariableDeclaration(declaration.parent.parent)
         && importsSdk(declaration.parent.parent.initializer)) {
-        return { method: parts.join('.'), kind: 'utility' };
+        const name = declaration.propertyName ?? declaration.name;
+        if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
+          return { method: [name.text, ...parts.slice(1)].join('.'), kind: 'utility' };
+        }
       }
       if (declaration.getSourceFile().fileName.includes('/@dashevo/')) {
         return { method: parts.join('.'), kind: 'utility' };

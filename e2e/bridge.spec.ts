@@ -23,6 +23,16 @@ test('top-up handoff explains manual entry and does not promise an automatic bal
   await page.goto('broadcast/?network=testnet&op=identity.topUp');
   const bridge = page.getByRole('link', { name: 'Open bridge →', exact: true });
   await expect(bridge).toHaveAttribute('href', 'https://bridge.dashhq.org/?network=testnet');
+  const identity = page.getByRole('textbox', { name: 'Identity', exact: true });
+  await expect(identity).toHaveValue('');
+  await expect(bridge).not.toHaveAttribute('disabled');
+  await expect(bridge).toHaveCSS('opacity', '1');
+  await expect(bridge).not.toHaveCSS('cursor', 'not-allowed');
+  await identity.fill('invalid identity');
+  await expect(bridge).not.toHaveAttribute('disabled');
+  await expect(bridge).toHaveCSS('opacity', '1');
+  await expect(bridge).not.toHaveCSS('cursor', 'not-allowed');
+  await expect(bridge).toHaveAttribute('href', 'https://bridge.dashhq.org/?network=testnet');
   await expect(page.getByText(/choose Manage Identity, then Top Up Identity/)).toBeVisible();
   await expect(page.getByText(/balance will refresh automatically/)).toHaveCount(0);
 });

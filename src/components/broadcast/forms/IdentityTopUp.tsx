@@ -89,7 +89,6 @@ export function IdentityTopUpForm({
                 href={bridgeUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                isDisabled={!isBase58Identifier(identityId.trim())}
               >
                 Open bridge →
               </Button>

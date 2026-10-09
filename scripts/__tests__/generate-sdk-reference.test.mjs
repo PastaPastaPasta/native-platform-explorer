@@ -135,6 +135,57 @@ test('records direct SDK exports by canonical names and ignores local, shadowed 
   });
 });
 
+test('canonicalizes dynamic SDK namespace aliases without attributing local or shadowed calls', () => {
+  fixture({
+    'src/app/dynamic-alias/page.tsx': `export default function Page() {
+      async function run() { const { wallet: w } = await import('@dashevo/evo-sdk'); await w.validateMnemonic('words'); }
+      return <button onClick={run}>Validate</button>;
+    }`,
+    'src/app/dynamic-string-alias/page.tsx': `export default function Page() {
+      async function run() { const { 'wallet': w } = await import('@dashevo/evo-sdk'); await w.validateMnemonic('words'); }
+      return <button onClick={run}>Validate</button>;
+    }`,
+    'src/app/named/page.tsx': `import { wallet } from '@dashevo/evo-sdk';
+      export default function Page() { void wallet.validateMnemonic('words'); return null; }`,
+    'src/app/namespace/page.tsx': `export default function Page() {
+      async function run() { const sdkModule = await import('@dashevo/evo-sdk'); await sdkModule.wallet.validateMnemonic('words'); }
+      return <button onClick={run}>Validate</button>;
+    }`,
+    'src/app/local-import/page.tsx': `export default function Page() {
+      async function run() { const { wallet: w } = await import('@/local'); w.validateMnemonic('words'); }
+      return <button onClick={run}>Validate</button>;
+    }`,
+    'src/local.ts': `export const wallet = { validateMnemonic: (words: string) => words.length > 0 };`,
+    'src/app/local-object/page.tsx': `export default function Page() {
+      const { wallet: w } = { wallet: { validateMnemonic: (words: string) => words.length > 0 } };
+      w.validateMnemonic('words'); return null;
+    }`,
+    'src/app/shadow/page.tsx': `export default function Page() {
+      async function run() {
+        const { wallet: w } = await import('@dashevo/evo-sdk');
+        function local(w: { validateMnemonic: (words: string) => boolean }) { return w.validateMnemonic('words'); }
+        return local({ validateMnemonic: () => true });
+      }
+      return <button onClick={run}>Validate</button>;
+    }`,
+    'src/app/unused/page.tsx': `export default function Page() {
+      async function run() { const { wallet: w } = await import('@dashevo/evo-sdk'); }
+      return <button onClick={run}>Validate</button>;
+    }`,
+  }, (root) => {
+    const map = generateSdkReference(root);
+    for (const route of ['/dynamic-alias/', '/dynamic-string-alias/', '/named/', '/namespace/']) {
+      const calls = map.pages.find((page) => page.route === route).calls;
+      assert.deepEqual(calls.map(({ method, kind }) => [kind, method]), [['utility', 'wallet.validateMnemonic']], route);
+      assert.equal(calls[0].sources.length, 1, route);
+      assert.equal(calls[0].sources[0].file, `src/app${route}page.tsx`, route);
+    }
+    for (const route of ['/local-import/', '/local-object/', '/shadow/', '/unused/']) {
+      assert.deepEqual(map.pages.find((page) => page.route === route).calls, [], route);
+    }
+  });
+});
+
 test('the shipped generated map binds actual epoch, aggregate, signer and no-call reference routes', () => {
   const map = JSON.parse(readFileSync(path.join(project, 'src/data/sdk-reference.json'), 'utf8'));
   const methods = (route) => map.pages.find((page) => page.route === route).calls.map((call) => call.method);
