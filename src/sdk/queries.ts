@@ -850,12 +850,12 @@ export function useProtocolVersionUpgradeVoteStatus(
 // There is no JS value (integer Number, BigInt, string, Float64Array,
 // Math.fround, etc.) that the SDK accepts. Track the upstream fix; until
 // then this hook is expected to error.
-export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number) {
+export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number, enabled = true) {
   const query = { startTimeMs: startDateMs, endTimeMs: endDateMs };
   return useSdkQuery(
     ['voting', 'votePollsByEndDate', startDateMs ?? 0, endDateMs ?? 0],
     (sdk) => sdk.voting.votePollsByEndDate(query) as Promise<unknown>,
-    { staleTime: LIVE, withProofFn: (sdk) => sdk.voting.votePollsByEndDateWithProof(query), methodName: 'voting.votePollsByEndDate', methodParams: { startDateMs, endDateMs } },
+    { enabled, staleTime: LIVE, withProofFn: (sdk) => sdk.voting.votePollsByEndDateWithProof(query), methodName: 'voting.votePollsByEndDate', methodParams: { startDateMs, endDateMs } },
   );
 }
 

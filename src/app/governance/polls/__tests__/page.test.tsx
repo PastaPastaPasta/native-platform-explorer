@@ -26,7 +26,11 @@ it('hydrates a static export without a date mismatch, then uses the current brow
     });
     expect(errors).toEqual([]);
     const start = Math.floor(visitedAt / 60_000) * 60_000;
-    expect(query).toHaveBeenLastCalledWith(start, undefined);
+    expect(query).toHaveBeenLastCalledWith(start, undefined, true);
+    // Every render before the clock was read keeps the query disabled.
+    for (const [callStart, , enabled] of query.mock.calls as unknown as [number | undefined, number | undefined, boolean][]) {
+      if (callStart === undefined) expect(enabled).toBe(false);
+    }
     expect(container).toHaveTextContent(`Querying ${new Date(start).toLocaleString()} → no upper bound`);
     const inputs = container.querySelectorAll('input[type="date"]');
     expect(inputs[0]).toHaveValue('2026-10-23');

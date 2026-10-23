@@ -81,7 +81,8 @@ export default function Page() {
     return { start, end: start + p.days * 86_400_000 };
   }, [preset, customStart, customEnd, nowMs]);
 
-  const q = useVotePollsByEndDate(range.start, range.end);
+  // Don't query until the visitor's clock is known; an unfiltered first request would be wasted.
+  const q = useVotePollsByEndDate(range.start, range.end, nowMs !== undefined);
   const polls = (q.data as unknown[] | undefined) ?? [];
 
   return (
