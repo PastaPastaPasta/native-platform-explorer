@@ -50,7 +50,7 @@ export function getTimeDelta(when: Date | number | string | bigint | null | unde
   const idx = units.findIndex((u) => abs < u.ms);
   const safe = idx === -1 ? units.length - 1 : idx;
   const bucket = units[safe] ?? units[units.length - 1]!;
-  const prev = safe === 0 ? 1 : (units[safe - 1]?.ms ?? 1);
+  const prev = safe === 0 ? 1000 : (units[safe - 1]?.ms ?? 1);
   const value = Math.max(1, Math.round(abs / prev));
 
   const short = past ? `${value}${bucket.short} ago` : `in ${value}${bucket.short}`;
