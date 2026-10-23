@@ -42,7 +42,7 @@ function contestedLink(label: string): string | null {
 function Content() {
   const params = useSearchParams();
   const rawName = params.get('name') ?? '';
-  const name = rawName ? normaliseDpnsName(decodeURIComponent(rawName)) : '';
+  const name = rawName ? normaliseDpnsName(rawName) : '';
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
