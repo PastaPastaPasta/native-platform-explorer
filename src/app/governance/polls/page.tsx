@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   Box,
   Button,
@@ -53,15 +53,21 @@ export default function Page() {
   ]);
 
   const [preset, setPreset] = useState<PresetKey>('all-upcoming');
-  // Memoised to a stable render so the React Query cache key isn't churning.
-  const nowMs = useMemo(() => Date.now(), []);
-  const [customStart, setCustomStart] = useState<string>(isoDate(nowMs));
-  const [customEnd, setCustomEnd] = useState<string>(
-    isoDate(nowMs + 30 * 86_400_000),
-  );
+  // The export's build time and locale differ from the visitor's. Initialize
+  // dates after hydration, then keep them stable for the query cache key.
+  const [nowMs, setNowMs] = useState<number>();
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  useEffect(() => {
+    const now = Date.now();
+    setNowMs(now);
+    setCustomStart(isoDate(now));
+    setCustomEnd(isoDate(now + 30 * 86_400_000));
+  }, []);
   const custom = useDisclosure({ defaultIsOpen: false });
 
   const range = useMemo(() => {
+    if (nowMs === undefined) return { start: undefined, end: undefined };
     if (preset === 'custom') {
       return {
         start: bucketHour(dateInputToMs(customStart)),
@@ -75,7 +81,8 @@ export default function Page() {
     return { start, end: start + p.days * 86_400_000 };
   }, [preset, customStart, customEnd, nowMs]);
 
-  const q = useVotePollsByEndDate(range.start, range.end);
+  // Don't query until the visitor's clock is known; an unfiltered first request would be wasted.
+  const q = useVotePollsByEndDate(range.start, range.end, nowMs !== undefined);
   const polls = (q.data as unknown[] | undefined) ?? [];
 
   return (
