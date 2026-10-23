@@ -53,7 +53,7 @@ export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Settings' }]);
   const { network, trusted, setNetwork, setTrusted, reconnect, status } = useSdk();
   const { enabled: inspectorEnabled, setEnabled: setInspectorEnabled } = useQueryProofStore();
-  const [diagEnabled, setDiagEnabled] = useLocalStorageBool(DIAG_KEY, false);
+  const [diagEnabled, setDiagEnabled] = useLocalStorageBool(DIAG_KEY, true);
   const viewed = useViewedIdentities();
   const modal = useDisclosure();
   // Force re-read of the registry after add/remove (mutations are out-of-state).

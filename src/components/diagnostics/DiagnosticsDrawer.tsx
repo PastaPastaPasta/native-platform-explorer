@@ -33,9 +33,13 @@ const DIAG_KEY = 'npe:diagnosticsEnabled';
 
 function diagEnabled(): boolean {
   if (typeof window === 'undefined') return false;
-  // Default to on so ⌘/ works out of the box. The settings page lets users
-  // disable the shortcut.
-  return window.localStorage.getItem(DIAG_KEY) !== 'false';
+  // Default to on so ⌘/ works out of the box. Settings can turn it off, which
+  // also stops recording. Unreadable storage falls back to the default.
+  try {
+    return window.localStorage.getItem(DIAG_KEY) !== 'false';
+  } catch {
+    return true;
+  }
 }
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -65,7 +69,7 @@ function useQueryLog(maxEntries = 100): LogEntry[] {
   useEffect(() => {
     const cache = qc.getQueryCache();
     const unsubscribe = cache.subscribe((ev) => {
-      if (!ev) return;
+      if (!ev || !diagEnabled()) return;
       const q = ev.query;
       const next: LogEntry = {
         key: JSON.stringify(q.queryKey),
