@@ -13,6 +13,9 @@ export default defineConfig({
   use: {
     baseURL: `http://127.0.0.1:${port}${basePath}/`,
     trace: 'retain-on-failure',
+    // A worker would answer same-origin requests that page.route mocks.
+    // e2e/offline.spec.ts opts back in.
+    serviceWorkers: 'block',
   },
   webServer: {
     command: 'node scripts/serve-export.mjs',
