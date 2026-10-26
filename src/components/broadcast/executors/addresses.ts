@@ -10,7 +10,7 @@ import type {
   PlatformAddressInput,
   PlatformAddressOutput,
 } from '@dashevo/evo-sdk';
-import { createAddressSigner, freeAll, withPrivateKey } from '@/signer/form-keys';
+import { createAddressSigner, freeAll } from '@/signer/form-keys';
 import { newIdentityKeyCount } from '@/signer/new-identity';
 import { coreScriptForAddress } from '@util/core-address';
 import { platformAddressError } from '@util/platform-address';
@@ -34,7 +34,7 @@ import {
   sumOutputs,
   type AddressOutput,
 } from '../forms/addresses/limits';
-import { assertAssetLockKey } from './asset-lock-key';
+import { withAssetLockKey } from './asset-lock-key';
 import { executeFormSigned, loadAssetLockProof } from './form-signed';
 import { buildNewIdentity } from './identity-create';
 
@@ -310,12 +310,11 @@ export async function executeAddressFundFromAssetLock({
     const { PlatformAddressSigner } = await import('@dashevo/evo-sdk');
     const signer = new PlatformAddressSigner();
     onRelease(() => freeAll(signer));
-    return withPrivateKey(
+    return withAssetLockKey(
       options.assetLockKeyWif,
-      network,
-      'asset-lock private key',
+      assetLockProof,
+      { network, explorerNetwork },
       async (key) => {
-        await assertAssetLockKey(assetLockProof, key, explorerNetwork ?? network);
         const infos = await submit(
           () =>
             sdk.addresses.fundFromAssetLock({

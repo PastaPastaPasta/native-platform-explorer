@@ -5,7 +5,7 @@
 
 import type { AssetLockProof, PrivateKey } from '@dashevo/evo-sdk';
 import { getNetwork } from '@sdk/networks';
-import { freeAll } from '@/signer/form-keys';
+import { freeAll, withPrivateKey } from '@/signer/form-keys';
 import { bytesToHex, hexToBytes } from '@util/hex';
 
 /** DIP-2 special transaction type of an asset lock. */
@@ -16,7 +16,7 @@ class TxReader {
   private offset = 0;
   constructor(private readonly bytes: Uint8Array) {}
   take(length: number): Uint8Array {
-    if (length < 0 || this.offset + length > this.bytes.length)
+    if (this.offset + length > this.bytes.length)
       throw new Error('The asset-lock transaction is truncated.');
     const out = this.bytes.subarray(this.offset, this.offset + length);
     this.offset += length;
@@ -166,4 +166,22 @@ export async function assertAssetLockKey(
     throw new Error(
       'The asset-lock private key does not control the asset-lock output. Enter the one-time key the asset-lock transaction pays, not a wallet or identity key.',
     );
+}
+
+/**
+ * Load the form's asset-lock private key and check it controls the proof's
+ * locked output before `fn` builds the write, so a wrong key fails as not
+ * submitted. `explorerNetwork` (a devnet name included) picks the Insight API;
+ * `network` is the key's mainnet/testnet encoding and the fallback.
+ */
+export function withAssetLockKey<T>(
+  wif: string,
+  proof: AssetLockProof,
+  { network, explorerNetwork }: { network: 'mainnet' | 'testnet'; explorerNetwork?: string },
+  fn: (key: PrivateKey) => Promise<T>,
+): Promise<T> {
+  return withPrivateKey(wif, network, 'asset-lock private key', async (key) => {
+    await assertAssetLockKey(proof, key, explorerNetwork ?? network);
+    return fn(key);
+  });
 }

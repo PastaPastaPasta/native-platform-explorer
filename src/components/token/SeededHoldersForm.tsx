@@ -42,12 +42,11 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
   // The identities to query, with the name each was entered as. Balances go
   // through the proof-aware query layer (proof chip, Query Inspector).
   const [resolved, setResolved] = useState<Array<{ id: string; label: string }>>([]);
-  const ids = useMemo(() => resolved.map((r) => r.id), [resolved]);
-  const balancesQ = useTokenBalances(ids.length > 0 ? ids : undefined, tokenId);
+  const balancesQ = useTokenBalances(resolved.map((r) => r.id), tokenId);
   const rows = useMemo(() => {
     if (!(balancesQ.data instanceof Map)) return [];
     return [...(balancesQ.data as Map<unknown, unknown>)].map(([key, val]) => {
-      const id = typeof key === 'string' ? key : String(key);
+      const id = String(key);
       return {
         id,
         balance: typeof val === 'bigint' ? val : BigInt(String(val ?? 0)),
@@ -61,8 +60,9 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
     setText((t) => (t ? `${t}\n${ids.join('\n')}` : ids.join('\n')));
   };
 
+  const ready = !!sdk && status === 'ready';
   const run = async () => {
-    if (!sdk || status !== 'ready') return;
+    if (!sdk || !ready) return;
     setResolving(true);
     setResolveError(null);
     setResolved([]);
@@ -138,8 +138,7 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
               size="sm"
               colorScheme="blue"
               onClick={() => void run()}
-              // Until the session is ready a click would do nothing.
-              isDisabled={entries.filter((e) => e.kind !== 'invalid').length === 0 || loading || !sdk || status !== 'ready'}
+              isDisabled={entries.filter((e) => e.kind !== 'invalid').length === 0 || loading || !ready}
             >
               Resolve &amp; query
             </Button>

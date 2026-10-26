@@ -708,6 +708,18 @@ describe('broadcast executors', () => {
     expect(write.mock.calls[0]![0].document.revision).toBe(4n);
   });
 
+  it('refuses a stored document without a revision before submission', async () => {
+    const transfer = vi.fn();
+    const error = await executeDocumentTransfer({
+      sdk: { contracts: noteContracts(), documents: { get: vi.fn().mockResolvedValue({ id: 'doc-1' }), transfer } } as never,
+      signer: createMockSigner(),
+      options: { contractId: 'contract-1', documentType: 'note', documentId: 'doc-1', recipientId: 'r' },
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OperationNotSubmittedError);
+    expect((error as Error).message).toMatch(/has no revision/);
+    expect(transfer).not.toHaveBeenCalled();
+  });
+
   it('keeps the recipient in an unknown transfer receipt', async () => {
     const error = await executeDocumentTransfer({
       sdk: {

@@ -7,7 +7,6 @@ export interface AppConfig {
   /** Build-time trusted quorum service overrides for the built-in networks
    *  (`NEXT_PUBLIC_QUORUM_URL_MAINNET` / `_TESTNET`). */
   quorumUrls: { mainnet: string | null; testnet: string | null };
-  disableWriteMode: boolean;
   rateProvider: RateProvider;
   wellKnownUrl: string | null;
 }
@@ -70,7 +69,6 @@ export function getConfig(): AppConfig {
       mainnet: parseQuorumUrl('NEXT_PUBLIC_QUORUM_URL_MAINNET', process.env.NEXT_PUBLIC_QUORUM_URL_MAINNET),
       testnet: parseQuorumUrl('NEXT_PUBLIC_QUORUM_URL_TESTNET', process.env.NEXT_PUBLIC_QUORUM_URL_TESTNET),
     },
-    disableWriteMode: !writeModeEnabled(),
     rateProvider: parseRateProvider(process.env.NEXT_PUBLIC_RATE_PROVIDER),
     wellKnownUrl: process.env.NEXT_PUBLIC_WELL_KNOWN_URL || null,
   };

@@ -3,13 +3,13 @@
 // key signs it. A new identity's keys come from a mnemonic or explicit WIFs.
 
 import type { EvoSDK, Identity, IdentitySigner } from '@dashevo/evo-sdk';
-import { freeAll, withPrivateKey } from '@/signer/form-keys';
+import { freeAll } from '@/signer/form-keys';
 import { prepareNewIdentityKeys, type NewIdentityKeyChoice } from '@/signer/new-identity';
 import type { DerivationNetwork as Network } from '@/signer/types';
 import { fetchExistingIdentity, type ExecuteArgs, type IdentityResult } from '../executors';
 import type { IdentityCreateOptions } from '../forms/identity/IdentityCreate';
 import type { IdentityTopUpOptions } from '../forms/identity/IdentityTopUp';
-import { assertAssetLockKey } from './asset-lock-key';
+import { withAssetLockKey } from './asset-lock-key';
 import { executeFormSigned, loadAssetLockProof } from './form-signed';
 
 /**
@@ -84,12 +84,11 @@ export async function executeIdentityCreate({
     }
     const created = await buildNewIdentity(sdk, options.keys, network, identityId);
     onRelease(created.release);
-    return withPrivateKey(
+    return withAssetLockKey(
       options.assetLockKeyWif,
-      network,
-      'asset-lock private key',
+      assetLockProof,
+      { network, explorerNetwork },
       async (key) => {
-        await assertAssetLockKey(assetLockProof, key, explorerNetwork ?? network);
         await submit(
           () =>
             sdk.identities.create({
@@ -122,12 +121,11 @@ export async function executeIdentityTopUp({
     const assetLockProof = await loadAssetLockProof(proof.proofHex, onRelease);
     const identity = await fetchExistingIdentity(sdk, identityId);
     onRelease(() => freeAll(identity));
-    return withPrivateKey(
+    return withAssetLockKey(
       options.assetLockKeyWif,
-      network,
-      'asset-lock private key',
+      assetLockProof,
+      { network, explorerNetwork },
       async (key) => {
-        await assertAssetLockKey(assetLockProof, key, explorerNetwork ?? network);
         const newBalance = await submit(
           () => sdk.identities.topUp({ identity, assetLockProof, assetLockPrivateKey: key }),
           { identityId },

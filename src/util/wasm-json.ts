@@ -6,14 +6,27 @@
 // `{"__wbg_ptr": …}`.  The helpers here walk the prototype chain to
 // surface the real data.
 
-/** An SDK Identifier's base58 text. Its value sits behind `toBase58()`, not a
- *  getter, so walking it would show only `{ "__type": "Identifier" }`. */
-function identifierBase58(value: object): string | undefined {
-  const candidate = value as { __type?: unknown; toBase58?: () => unknown };
+/** Leaf converter for `walkInstance`: an SDK Identifier as its canonical
+ *  base58 text (its value is not exposed through getters), undefined for
+ *  anything else. Throws when an Identifier serializes unexpectedly. */
+export function identifierLeaf(value: object): unknown {
+  const candidate = value as { __type?: unknown; toJSON?: () => unknown };
+  let type: unknown;
+  try { type = candidate.__type; }
+  catch { return undefined; } // The walker skips unreadable prototype getters.
+  if (type !== 'Identifier') return undefined;
+  const serialized = candidate.toJSON?.();
+  // rc.2 Identifier.toJSON() is canonical Base58, including 32 ones for zero.
+  if (typeof serialized !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(serialized)) {
+    throw new Error('SDK Identifier did not return a canonical JSON string.');
+  }
+  return serialized;
+}
+
+/** For display: an Identifier that fails to serialize is walked as usual. */
+function displayIdentifierLeaf(value: object): unknown {
   try {
-    if (candidate.__type !== 'Identifier' || typeof candidate.toBase58 !== 'function') return undefined;
-    const text = candidate.toBase58();
-    return typeof text === 'string' ? text : undefined;
+    return identifierLeaf(value);
   } catch {
     return undefined;
   }
@@ -137,7 +150,7 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     const isWasmShell =
       value != null && typeof value === 'object' && '__wbg_ptr' in (value as object);
     if (rendered === undefined || rendered === '{}' || isWasmShell || Array.isArray(value)) {
-      const walked = walkInstance(value, 0, identifierBase58);
+      const walked = walkInstance(value, 0, displayIdentifierLeaf);
       return JSON.stringify(walked, wasmReplacer, indent) ?? String(value);
     }
     return rendered;
@@ -145,7 +158,7 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     // JSON.stringify threw (typically circular references on WASM classes).
     // Fall back to a shallow walk.
     try {
-      return JSON.stringify(walkInstance(value, 0, identifierBase58), wasmReplacer, indent) ?? String(value);
+      return JSON.stringify(walkInstance(value, 0, displayIdentifierLeaf), wasmReplacer, indent) ?? String(value);
     } catch {
       return String(value);
     }

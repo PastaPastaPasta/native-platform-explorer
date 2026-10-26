@@ -86,6 +86,37 @@ describe('assertAssetLockKey', () => {
   });
 });
 
+describe('asset-lock writes with a chain-lock proof', () => {
+  it('check the key on the session network\'s Insight and refuse when it cannot be read', async () => {
+    const proof = await chainProof(tx, 1);
+    const topUp = vi.fn();
+    const sdk = { identities: { fetch: vi.fn().mockResolvedValue({ free: vi.fn() }), topUp } };
+    const run = (network: string) =>
+      executeIdentityTopUp({
+        sdk: sdk as never,
+        signer: null,
+        network,
+        options: { network: 'testnet', identityId: proof.identityId, proof, assetLockKeyWif: wif1 },
+      }).catch((e: unknown) => e);
+    // The session's devnet, not the form's testnet key encoding, picks Insight.
+    const devnet = await run('devnet-paloma');
+    expect(devnet).toBeInstanceOf(OperationNotSubmittedError);
+    expect((devnet as Error).message).toMatch(/no Insight API/);
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('', { status: 503 })));
+    try {
+      const down = await run('testnet');
+      expect(down).toBeInstanceOf(OperationNotSubmittedError);
+      expect((down as Error).message).toMatch(/Could not fetch/);
+      vi.stubGlobal('fetch', vi.fn(insightServing(tx)));
+      topUp.mockResolvedValue(5n);
+      await expect(run('testnet')).resolves.toMatchObject({ newBalance: '5' });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+    expect(topUp).toHaveBeenCalledOnce();
+  });
+});
+
 describe('asset-lock writes refuse a key that does not control the output, before submission', () => {
   const sdkFor = () => ({
     identities: {

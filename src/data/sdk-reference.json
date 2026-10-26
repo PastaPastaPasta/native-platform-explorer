@@ -12,12 +12,12 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 403,
+              "line": 389,
               "owner": "useContractsPreview"
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 411,
+              "line": 397,
               "owner": "useContractsPreview"
             }
           ]
@@ -72,7 +72,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 939,
+              "line": 925,
               "owner": "useCurrentQuorumsInfo"
             }
           ]
@@ -83,7 +83,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 931,
+              "line": 917,
               "owner": "useSystemStatus"
             }
           ]
@@ -94,7 +94,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 947,
+              "line": 933,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -105,7 +105,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 948,
+              "line": 934,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -116,7 +116,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1064,
+              "line": 1050,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -127,7 +127,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1065,
+              "line": 1051,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -149,7 +149,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 550,
+              "line": 536,
               "owner": "useAddressInfo"
             }
           ]
@@ -160,7 +160,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 551,
+              "line": 537,
               "owner": "useAddressInfo"
             }
           ]
@@ -177,7 +177,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 372,
+              "line": 371,
               "owner": "executeAddressCreateIdentity"
             }
           ]
@@ -188,7 +188,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 321,
+              "line": 320,
               "owner": "executeAddressFundFromAssetLock"
             }
           ]
@@ -204,7 +204,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 550,
+              "line": 536,
               "owner": "useAddressInfo"
             }
           ]
@@ -215,7 +215,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 551,
+              "line": 537,
               "owner": "useAddressInfo"
             }
           ]
@@ -410,7 +410,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -432,7 +432,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -443,7 +443,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -497,7 +497,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 1124,
+              "line": 1110,
               "owner": "useGroupActions"
             }
           ]
@@ -513,7 +513,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 1125,
+              "line": 1111,
               "owner": "useGroupActions"
             }
           ]
@@ -557,7 +557,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 95,
+              "line": 94,
               "owner": "executeIdentityCreate"
             }
           ]
@@ -605,7 +605,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 308,
+              "line": 294,
               "owner": "useIdentity"
             }
           ]
@@ -616,7 +616,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 309,
+              "line": 295,
               "owner": "useIdentity"
             }
           ]
@@ -627,7 +627,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 132,
+              "line": 130,
               "owner": "executeIdentityTopUp"
             }
           ]
@@ -913,7 +913,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1158,
+              "line": 1144,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -924,7 +924,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1159,
+              "line": 1145,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -1175,7 +1175,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -1186,7 +1186,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -1197,7 +1197,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 389,
+              "line": 375,
               "owner": "useContractHistory"
             }
           ]
@@ -1208,7 +1208,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 390,
+              "line": 376,
               "owner": "useContractHistory"
             }
           ]
@@ -1219,7 +1219,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -1230,7 +1230,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1241,7 +1241,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1252,7 +1252,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 680,
+              "line": 666,
               "owner": "useGroupsDataContracts"
             }
           ]
@@ -1263,7 +1263,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 681,
+              "line": 667,
               "owner": "useGroupsDataContracts"
             }
           ]
@@ -1285,7 +1285,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 482,
+              "line": 468,
               "owner": "useTokenDirectPurchasePrices"
             }
           ]
@@ -1296,7 +1296,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 483,
+              "line": 469,
               "owner": "useTokenDirectPurchasePrices"
             }
           ]
@@ -1307,7 +1307,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 474,
+              "line": 460,
               "owner": "useTokenStatuses"
             }
           ]
@@ -1318,7 +1318,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 475,
+              "line": 461,
               "owner": "useTokenStatuses"
             }
           ]
@@ -1329,7 +1329,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 466,
+              "line": 452,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -1340,7 +1340,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 467,
+              "line": 453,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -1362,7 +1362,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -1373,7 +1373,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -1384,7 +1384,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 435,
+              "line": 421,
               "owner": "useDocument"
             }
           ]
@@ -1395,7 +1395,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 436,
+              "line": 422,
               "owner": "useDocument"
             }
           ]
@@ -1406,7 +1406,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 457,
+              "line": 443,
               "owner": "useDocumentHistory"
             }
           ]
@@ -1417,7 +1417,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 458,
+              "line": 444,
               "owner": "useDocumentHistory"
             }
           ]
@@ -1428,7 +1428,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -1439,7 +1439,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1450,7 +1450,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1472,7 +1472,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -1483,7 +1483,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -1494,7 +1494,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 714,
+              "line": 700,
               "owner": "useDocumentsQuery"
             }
           ]
@@ -1505,7 +1505,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 715,
+              "line": 701,
               "owner": "useDocumentsQuery"
             }
           ]
@@ -1516,7 +1516,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -1527,7 +1527,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1538,7 +1538,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1549,7 +1549,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 931,
+              "line": 917,
               "owner": "useSystemStatus"
             }
           ]
@@ -1566,7 +1566,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -1577,7 +1577,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -1588,7 +1588,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -1599,7 +1599,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1610,7 +1610,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1632,7 +1632,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 495,
+              "line": 481,
               "owner": "useTokenContractInfo"
             }
           ]
@@ -1643,7 +1643,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 496,
+              "line": 482,
               "owner": "useTokenContractInfo"
             }
           ]
@@ -1654,7 +1654,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 482,
+              "line": 468,
               "owner": "useTokenDirectPurchasePrices"
             }
           ]
@@ -1665,7 +1665,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 483,
+              "line": 469,
               "owner": "useTokenDirectPurchasePrices"
             }
           ]
@@ -1676,7 +1676,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 506,
+              "line": 492,
               "owner": "useTokenIdentityBalances"
             }
           ]
@@ -1687,7 +1687,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 507,
+              "line": 493,
               "owner": "useTokenIdentityBalances"
             }
           ]
@@ -1698,7 +1698,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 529,
+              "line": 515,
               "owner": "useTokenIdentityTokenInfos"
             }
           ]
@@ -1709,7 +1709,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 530,
+              "line": 516,
               "owner": "useTokenIdentityTokenInfos"
             }
           ]
@@ -1720,7 +1720,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 541,
+              "line": 527,
               "owner": "usePerpetualDistributionLastClaim"
             }
           ]
@@ -1731,7 +1731,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 542,
+              "line": 528,
               "owner": "usePerpetualDistributionLastClaim"
             }
           ]
@@ -1742,7 +1742,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 474,
+              "line": 460,
               "owner": "useTokenStatuses"
             }
           ]
@@ -1753,7 +1753,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 475,
+              "line": 461,
               "owner": "useTokenStatuses"
             }
           ]
@@ -1764,7 +1764,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 466,
+              "line": 452,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -1775,7 +1775,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 467,
+              "line": 453,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -1792,7 +1792,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 583,
+              "line": 569,
               "owner": "useDpnsGetByName"
             }
           ]
@@ -1803,7 +1803,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 584,
+              "line": 570,
               "owner": "useDpnsGetByName"
             }
           ]
@@ -1814,7 +1814,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -1825,7 +1825,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 596,
+              "line": 582,
               "owner": "useDpnsIsAvailable"
             }
           ]
@@ -1836,7 +1836,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 612,
+              "line": 598,
               "owner": "useDpnsIsValid"
             }
           ]
@@ -1847,7 +1847,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 559,
+              "line": 545,
               "owner": "useDpnsResolve"
             }
           ]
@@ -1858,7 +1858,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1869,7 +1869,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1897,12 +1897,12 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 714,
+              "line": 700,
               "owner": "useDocumentsQuery"
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 836,
+              "line": 822,
               "owner": "useDpnsPrefixSearch"
             }
           ]
@@ -1913,12 +1913,12 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 715,
+              "line": 701,
               "owner": "useDocumentsQuery"
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 837,
+              "line": 823,
               "owner": "useDpnsPrefixSearch"
             }
           ]
@@ -1929,7 +1929,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -1940,7 +1940,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -1951,7 +1951,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2012,7 +2012,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 861,
+              "line": 847,
               "owner": "useEpochInfo"
             }
           ]
@@ -2028,7 +2028,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 862,
+              "line": 848,
               "owner": "useEpochInfo"
             }
           ]
@@ -2050,7 +2050,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 888,
+              "line": 874,
               "owner": "useFinalizedEpochInfo"
             }
           ]
@@ -2061,7 +2061,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 895,
+              "line": 881,
               "owner": "useFinalizedEpochInfo"
             }
           ]
@@ -2133,7 +2133,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 922,
+              "line": 908,
               "owner": "useEvonodesBlocksByIds"
             }
           ]
@@ -2144,7 +2144,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 923,
+              "line": 909,
               "owner": "useEvonodesBlocksByIds"
             }
           ]
@@ -2166,7 +2166,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 888,
+              "line": 874,
               "owner": "useFinalizedEpochInfo"
             }
           ]
@@ -2177,7 +2177,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 895,
+              "line": 881,
               "owner": "useFinalizedEpochInfo"
             }
           ]
@@ -2188,7 +2188,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1035,
+              "line": 1021,
               "owner": "useProtocolVersionUpgradeVoteStatus"
             }
           ]
@@ -2199,7 +2199,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1036,
+              "line": 1022,
               "owner": "useProtocolVersionUpgradeVoteStatus"
             }
           ]
@@ -2216,7 +2216,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -2227,7 +2227,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -2238,7 +2238,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1085,
+              "line": 1071,
               "owner": "useContestedResources"
             }
           ]
@@ -2249,7 +2249,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1086,
+              "line": 1072,
               "owner": "useContestedResources"
             }
           ]
@@ -2266,7 +2266,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -2277,7 +2277,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2288,7 +2288,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2299,7 +2299,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1185,
+              "line": 1171,
               "owner": "useContestedResourceVoters"
             }
           ]
@@ -2310,7 +2310,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1186,
+              "line": 1172,
               "owner": "useContestedResourceVoters"
             }
           ]
@@ -2321,7 +2321,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1158,
+              "line": 1144,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -2332,7 +2332,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1159,
+              "line": 1145,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -2343,7 +2343,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1064,
+              "line": 1050,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -2354,7 +2354,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1065,
+              "line": 1051,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -2371,7 +2371,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1064,
+              "line": 1050,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -2382,7 +2382,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1065,
+              "line": 1051,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -2399,7 +2399,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1094,
+              "line": 1080,
               "owner": "useGroupInfos"
             }
           ]
@@ -2410,7 +2410,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1095,
+              "line": 1081,
               "owner": "useGroupInfos"
             }
           ]
@@ -2427,7 +2427,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -2438,7 +2438,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2449,7 +2449,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2460,7 +2460,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1139,
+              "line": 1125,
               "owner": "useGroupActionSigners"
             }
           ]
@@ -2471,7 +2471,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1140,
+              "line": 1126,
               "owner": "useGroupActionSigners"
             }
           ]
@@ -2482,7 +2482,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1124,
+              "line": 1110,
               "owner": "useGroupActions"
             }
           ]
@@ -2493,7 +2493,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1125,
+              "line": 1111,
               "owner": "useGroupActions"
             }
           ]
@@ -2504,7 +2504,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1102,
+              "line": 1088,
               "owner": "useGroupInfo"
             }
           ]
@@ -2515,7 +2515,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1103,
+              "line": 1089,
               "owner": "useGroupInfo"
             }
           ]
@@ -2526,7 +2526,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1111,
+              "line": 1097,
               "owner": "useGroupMembers"
             }
           ]
@@ -2537,7 +2537,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1112,
+              "line": 1098,
               "owner": "useGroupMembers"
             }
           ]
@@ -2565,7 +2565,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 714,
+              "line": 700,
               "owner": "useDocumentsQuery"
             }
           ]
@@ -2576,7 +2576,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 715,
+              "line": 701,
               "owner": "useDocumentsQuery"
             }
           ]
@@ -2587,7 +2587,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -2598,7 +2598,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2609,7 +2609,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2620,7 +2620,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 575,
+              "line": 561,
               "owner": "useDpnsUsernames"
             }
           ]
@@ -2631,7 +2631,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 576,
+              "line": 562,
               "owner": "useDpnsUsernames"
             }
           ]
@@ -2642,7 +2642,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 672,
+              "line": 658,
               "owner": "useIdentityGroups"
             }
           ]
@@ -2653,7 +2653,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 673,
+              "line": 659,
               "owner": "useIdentityGroups"
             }
           ]
@@ -2664,7 +2664,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 316,
+              "line": 302,
               "owner": "useIdentityBalanceAndRevision"
             }
           ]
@@ -2675,7 +2675,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 317,
+              "line": 303,
               "owner": "useIdentityBalanceAndRevision"
             }
           ]
@@ -2686,7 +2686,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 352,
+              "line": 338,
               "owner": "useIdentityContractKeys"
             }
           ]
@@ -2697,7 +2697,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 353,
+              "line": 339,
               "owner": "useIdentityContractKeys"
             }
           ]
@@ -2708,7 +2708,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 341,
+              "line": 327,
               "owner": "useIdentityContractNonce"
             }
           ]
@@ -2719,7 +2719,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 342,
+              "line": 328,
               "owner": "useIdentityContractNonce"
             }
           ]
@@ -2730,7 +2730,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 308,
+              "line": 294,
               "owner": "useIdentity"
             }
           ]
@@ -2741,7 +2741,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 309,
+              "line": 295,
               "owner": "useIdentity"
             }
           ]
@@ -2752,7 +2752,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 325,
+              "line": 311,
               "owner": "useIdentityKeys"
             }
           ]
@@ -2763,7 +2763,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 326,
+              "line": 312,
               "owner": "useIdentityKeys"
             }
           ]
@@ -2774,7 +2774,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 333,
+              "line": 319,
               "owner": "useIdentityNonce"
             }
           ]
@@ -2785,7 +2785,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 334,
+              "line": 320,
               "owner": "useIdentityNonce"
             }
           ]
@@ -2796,7 +2796,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 506,
+              "line": 492,
               "owner": "useTokenIdentityBalances"
             }
           ]
@@ -2807,7 +2807,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 507,
+              "line": 493,
               "owner": "useTokenIdentityBalances"
             }
           ]
@@ -2818,7 +2818,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 529,
+              "line": 515,
               "owner": "useTokenIdentityTokenInfos"
             }
           ]
@@ -2829,7 +2829,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 530,
+              "line": 516,
               "owner": "useTokenIdentityTokenInfos"
             }
           ]
@@ -2840,7 +2840,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 662,
+              "line": 648,
               "owner": "useIdentityVotes"
             }
           ]
@@ -2851,7 +2851,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 663,
+              "line": 649,
               "owner": "useIdentityVotes"
             }
           ]
@@ -2868,7 +2868,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -2879,7 +2879,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2890,7 +2890,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -2901,7 +2901,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 371,
+              "line": 357,
               "owner": "useIdentitiesByNonUniquePkh"
             }
           ]
@@ -2912,7 +2912,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 372,
+              "line": 358,
               "owner": "useIdentitiesByNonUniquePkh"
             }
           ]
@@ -2923,7 +2923,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 360,
+              "line": 346,
               "owner": "useIdentityByPublicKeyHash"
             }
           ]
@@ -2934,7 +2934,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 361,
+              "line": 347,
               "owner": "useIdentityByPublicKeyHash"
             }
           ]
@@ -2951,7 +2951,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 955,
+              "line": 941,
               "owner": "usePrefundedSpecializedBalance"
             }
           ]
@@ -2962,7 +2962,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 956,
+              "line": 942,
               "owner": "usePrefundedSpecializedBalance"
             }
           ]
@@ -2973,7 +2973,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 947,
+              "line": 933,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -2984,7 +2984,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 948,
+              "line": 934,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -3034,7 +3034,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 888,
+              "line": 874,
               "owner": "useFinalizedEpochInfo"
             }
           ]
@@ -3045,7 +3045,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 895,
+              "line": 881,
               "owner": "useFinalizedEpochInfo"
             }
           ]
@@ -3056,7 +3056,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1023,
+              "line": 1009,
               "owner": "useProtocolVersionUpgradeState"
             }
           ]
@@ -3067,7 +3067,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1024,
+              "line": 1010,
               "owner": "useProtocolVersionUpgradeState"
             }
           ]
@@ -3095,7 +3095,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 939,
+              "line": 925,
               "owner": "useCurrentQuorumsInfo"
             }
           ]
@@ -3112,7 +3112,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 994,
+              "line": 980,
               "owner": "useShieldedAnchors"
             }
           ]
@@ -3123,7 +3123,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 995,
+              "line": 981,
               "owner": "useShieldedAnchors"
             }
           ]
@@ -3134,7 +3134,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1014,
+              "line": 1000,
               "owner": "useShieldedEncryptedNotes"
             }
           ]
@@ -3145,7 +3145,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1015,
+              "line": 1001,
               "owner": "useShieldedEncryptedNotes"
             }
           ]
@@ -3156,7 +3156,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 985,
+              "line": 971,
               "owner": "useShieldedMostRecentAnchor"
             }
           ]
@@ -3167,7 +3167,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 986,
+              "line": 972,
               "owner": "useShieldedMostRecentAnchor"
             }
           ]
@@ -3178,7 +3178,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1004,
+              "line": 990,
               "owner": "useShieldedNullifiers"
             }
           ]
@@ -3189,7 +3189,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1005,
+              "line": 991,
               "owner": "useShieldedNullifiers"
             }
           ]
@@ -3200,7 +3200,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 977,
+              "line": 963,
               "owner": "useShieldedPoolState"
             }
           ]
@@ -3211,7 +3211,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 978,
+              "line": 964,
               "owner": "useShieldedPoolState"
             }
           ]
@@ -3228,7 +3228,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 939,
+              "line": 925,
               "owner": "useCurrentQuorumsInfo"
             }
           ]
@@ -3239,7 +3239,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 931,
+              "line": 917,
               "owner": "useSystemStatus"
             }
           ]
@@ -3288,7 +3288,7 @@
             },
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -3299,7 +3299,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -3310,7 +3310,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 775,
+              "line": 761,
               "owner": "useDocumentsAggregate"
             }
           ]
@@ -3321,7 +3321,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 785,
+              "line": 771,
               "owner": "useDocumentsAggregate"
             }
           ]
@@ -3332,7 +3332,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 773,
+              "line": 759,
               "owner": "useDocumentsAggregate"
             }
           ]
@@ -3343,7 +3343,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 783,
+              "line": 769,
               "owner": "useDocumentsAggregate"
             }
           ]
@@ -3354,7 +3354,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 714,
+              "line": 700,
               "owner": "useDocumentsQuery"
             }
           ]
@@ -3365,7 +3365,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 715,
+              "line": 701,
               "owner": "useDocumentsQuery"
             }
           ]
@@ -3376,7 +3376,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 774,
+              "line": 760,
               "owner": "useDocumentsAggregate"
             }
           ]
@@ -3387,7 +3387,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 784,
+              "line": 770,
               "owner": "useDocumentsAggregate"
             }
           ]
@@ -3398,7 +3398,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -3409,7 +3409,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3420,7 +3420,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3431,7 +3431,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 931,
+              "line": 917,
               "owner": "useSystemStatus"
             }
           ]
@@ -3458,7 +3458,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 550,
+              "line": 536,
               "owner": "useAddressInfo"
             }
           ]
@@ -3469,7 +3469,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 551,
+              "line": 537,
               "owner": "useAddressInfo"
             }
           ]
@@ -3480,7 +3480,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -3491,7 +3491,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -3502,7 +3502,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 836,
+              "line": 822,
               "owner": "useDpnsPrefixSearch"
             }
           ]
@@ -3513,7 +3513,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 837,
+              "line": 823,
               "owner": "useDpnsPrefixSearch"
             }
           ]
@@ -3524,7 +3524,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 583,
+              "line": 569,
               "owner": "useDpnsGetByName"
             }
           ]
@@ -3535,7 +3535,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 584,
+              "line": 570,
               "owner": "useDpnsGetByName"
             }
           ]
@@ -3546,7 +3546,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -3557,7 +3557,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3568,7 +3568,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3579,7 +3579,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 371,
+              "line": 357,
               "owner": "useIdentitiesByNonUniquePkh"
             }
           ]
@@ -3590,7 +3590,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 372,
+              "line": 358,
               "owner": "useIdentitiesByNonUniquePkh"
             }
           ]
@@ -3601,7 +3601,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 360,
+              "line": 346,
               "owner": "useIdentityByPublicKeyHash"
             }
           ]
@@ -3612,7 +3612,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 361,
+              "line": 347,
               "owner": "useIdentityByPublicKeyHash"
             }
           ]
@@ -3623,7 +3623,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 308,
+              "line": 294,
               "owner": "useIdentity"
             }
           ]
@@ -3634,7 +3634,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 309,
+              "line": 295,
               "owner": "useIdentity"
             }
           ]
@@ -3645,7 +3645,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 466,
+              "line": 452,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -3656,7 +3656,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 467,
+              "line": 453,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -3673,7 +3673,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 931,
+              "line": 917,
               "owner": "useSystemStatus"
             }
           ]
@@ -3712,7 +3712,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 637,
+              "line": 623,
               "owner": "waitForStateTransition"
             }
           ]
@@ -3729,7 +3729,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -3740,7 +3740,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -3751,7 +3751,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 809,
+              "line": 795,
               "owner": "useTokenHistoryDirectPurchases"
             }
           ]
@@ -3762,7 +3762,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 810,
+              "line": 796,
               "owner": "useTokenHistoryDirectPurchases"
             }
           ]
@@ -3773,7 +3773,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -3784,7 +3784,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3795,7 +3795,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3806,7 +3806,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 495,
+              "line": 481,
               "owner": "useTokenContractInfo"
             }
           ]
@@ -3817,7 +3817,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 496,
+              "line": 482,
               "owner": "useTokenContractInfo"
             }
           ]
@@ -3828,7 +3828,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 482,
+              "line": 468,
               "owner": "useTokenDirectPurchasePrices"
             }
           ]
@@ -3839,7 +3839,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 483,
+              "line": 469,
               "owner": "useTokenDirectPurchasePrices"
             }
           ]
@@ -3850,7 +3850,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 506,
+              "line": 492,
               "owner": "useTokenIdentityBalances"
             }
           ]
@@ -3861,7 +3861,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 507,
+              "line": 493,
               "owner": "useTokenIdentityBalances"
             }
           ]
@@ -3872,7 +3872,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 529,
+              "line": 515,
               "owner": "useTokenIdentityTokenInfos"
             }
           ]
@@ -3883,7 +3883,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 530,
+              "line": 516,
               "owner": "useTokenIdentityTokenInfos"
             }
           ]
@@ -3894,7 +3894,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 541,
+              "line": 527,
               "owner": "usePerpetualDistributionLastClaim"
             }
           ]
@@ -3905,7 +3905,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 542,
+              "line": 528,
               "owner": "usePerpetualDistributionLastClaim"
             }
           ]
@@ -3916,7 +3916,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 474,
+              "line": 460,
               "owner": "useTokenStatuses"
             }
           ]
@@ -3927,7 +3927,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 475,
+              "line": 461,
               "owner": "useTokenStatuses"
             }
           ]
@@ -3938,7 +3938,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 466,
+              "line": 452,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -3949,7 +3949,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 467,
+              "line": 453,
               "owner": "useTokenTotalSupply"
             }
           ]
@@ -3966,7 +3966,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -3988,7 +3988,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -3999,7 +3999,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
@@ -4010,7 +4010,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 516,
+              "line": 502,
               "owner": "useTokenBalances"
             }
           ]
@@ -4021,7 +4021,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 517,
+              "line": 503,
               "owner": "useTokenBalances"
             }
           ]
@@ -4038,7 +4038,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 380,
+              "line": 366,
               "owner": "useContract"
             }
           ]
@@ -4049,7 +4049,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 381,
+              "line": 367,
               "owner": "useContract"
             }
           ]
@@ -4060,7 +4060,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 968,
+              "line": 954,
               "owner": "usePathElements"
             }
           ]
@@ -4071,7 +4071,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 969,
+              "line": 955,
               "owner": "usePathElements"
             }
           ]
@@ -4174,7 +4174,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 604,
+              "line": 590,
               "owner": "useDpnsIsContested"
             }
           ]
@@ -4185,7 +4185,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 567,
+              "line": 553,
               "owner": "useDpnsUsername"
             }
           ]
@@ -4196,7 +4196,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 568,
+              "line": 554,
               "owner": "useDpnsUsername"
             }
           ]
