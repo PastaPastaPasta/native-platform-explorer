@@ -255,12 +255,22 @@ NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
   switches silently.
 
 To switch the worker off, build with `NEXT_PUBLIC_SERVICE_WORKER=off`. Pages
-then stop registering it and unregister an existing one, and `sw.js` becomes a
-kill switch (`scripts/sw/unregister.js`). Browsers fetch `sw.js` on navigation
-(bypassing the HTTP cache), install it, and it deletes the caches and the
-registration without reloading open pages. Keep shipping the kill switch for a
-while: a browser that has not visited since still has the old worker until it
-fetches the new `sw.js`. Re-enabling later is an ordinary deploy.
+then stop registering it, unregister an existing one and delete its caches,
+and `sw.js` becomes a kill switch (`scripts/sw/unregister.js`) that does the
+same for a browser whose update check runs before any page script. Neither
+reloads open pages. Keep shipping the kill switch for a while: a browser that
+has not visited since still has the old worker until it fetches the new
+`sw.js`. Re-enabling later is an ordinary deploy.
+
+Browsers fetch `sw.js` bypassing their HTTP cache, but the production domain
+is fronted by Cloudflare, which caches `.js` at the edge for about the origin's
+10 minutes. A worker update or the kill switch can therefore take up to ~10
+minutes to reach browsers after a deploy; a stale edge copy fails its install
+check against the fresh pages, so the delay is safe. For an urgent rollout,
+purge `/sw.js` in Cloudflare or add a cache-bypass rule for it. Cloudflare
+features that inject or rewrite scripts (Rocket Loader, email obfuscation, the
+Web Analytics beacon) would be blocked by the CSP and integrity checks; keep
+them off.
 
 Rolling back to an earlier commit that also has the worker is an ordinary
 deploy: its pages name another build, so open tabs offer a reload. Rolling
