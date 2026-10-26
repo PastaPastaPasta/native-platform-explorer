@@ -62,11 +62,11 @@ function VerifyBuild() {
         </ListItem>
       </OrderedList>
       <Text color="gray.250" mb={3}>
-        Each page pins everything it runs: its Content Security Policy lists the SHA-256 of each inline
-        script, every script and stylesheet tag carries a Subresource Integrity hash, and the script
-        loader carries the hash of every chunk it loads later, including the SDK and its WASM. The
-        browser refuses a file that does not match. So once a page&apos;s HTML matches the source, so
-        does the code it executes. The check covers what the server returned to you when you ran it;
+        Each page pins every script it runs: its Content Security Policy lists the SHA-256 of each
+        inline script, every script and stylesheet tag carries a Subresource Integrity hash, and the
+        script loader carries the hash of every chunk it loads later, including the SDK and its WASM,
+        and refuses any file it has no hash for. The proof parser&apos;s WASM is fetched with its hash
+        too. So once a page&apos;s HTML matches the source, so does the code it executes. The check covers what the server returned to you when you ran it;
         it does not prove what other visitors receive. Platform data is a separate question, answered
         by the proofs described above.
       </Text>
