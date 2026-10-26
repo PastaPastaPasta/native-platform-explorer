@@ -187,8 +187,6 @@ describe('SDK error kinds', () => {
     [13, 'EpochNotFound', 'epoch not found'],
     [12, 'TotalCreditsNotFound', 'total credits not found'],
     [23, 'IdentityNonceNotFound', 'identity nonce not found'],
-    // Live rc.2 unproved identity fetch for an unknown ID.
-    [17, 'Generic', 'Failed to fetch identity: transport error: grpc error: code: \'Some requested entity was not found\', message: "identity 4EfA not found"'],
   ])('classifies %s %s as not-found, never as a proof failure', (kind, name, message) => {
     const error = sdkError(kind, name, message);
     expect(classifySdkError(error)).toBe('not-found');
@@ -257,10 +255,32 @@ describe('absence and kind provenance', () => {
     expect(isAbsentEntityError(sdkError(27, 'NotFound', 'Data contract not found'))).toBe(false);
   });
 
-  it('does not treat a gRPC NOT_FOUND carried by a transport error as proven absence', () => {
-    const error = sdkError(6, 'DapiClientError', "transport error: grpc error: code: 'Some requested entity was not found'");
-    expect(classifySdkError(error)).toBe('transport');
-    expect(isRetryableSdkError(error)).toBe(true);
+  // Queries throw normalizeError(raw): a plain Error whose message repeats the
+  // raw text, with the tagged WasmSdkError on `cause`. Classify both shapes.
+  it.each([
+    [6, 'DapiClientError', "transport error: grpc error: code: 'Some requested entity was not found'"],
+    [6, 'DapiClientError', "no available addresses to retry, last error: grpc error: code: 'Some requested entity was not found', message: \"identity 4EfA not found\""],
+    // Live rc.2 unproved identity fetch for an unknown ID: one node's answer.
+    [17, 'Generic', 'Failed to fetch identity: transport error: grpc error: code: \'Some requested entity was not found\', message: "identity 4EfA not found"'],
+  ])('does not treat a gRPC NOT_FOUND (%s %s) as proven absence, raw or normalized', (kind, name, message) => {
+    const raw = sdkError(kind, name, message);
+    const normalized = normalizeError(raw);
+    expect(normalized).not.toBe(raw);
+    for (const error of [raw, normalized, new Error('Identity read failed', { cause: normalized })]) {
+      expect(classifySdkError(error)).toBe('transport');
+      expect(isAbsentEntityError(error)).toBe(false);
+      expect(isProofFallbackBlocked(error)).toBe(false);
+      expect(shouldRetrySdkQuery(0, error)).toBe(true);
+    }
+    expect(classifySdkError('Some requested entity was not found')).toBe('transport');
+  });
+
+  it('keeps structured absences definite after normalization', () => {
+    for (const raw of [sdkError(13, 'EpochNotFound', 'epoch not found'), sdkError(27, 'NotFound', 'Data contract not found')]) {
+      expect(classifySdkError(normalizeError(raw))).toBe('not-found');
+      expect(shouldRetrySdkQuery(0, normalizeError(raw))).toBe(false);
+    }
+    expect(isAbsentEntityError(normalizeError(sdkError(13, 'EpochNotFound', 'epoch not found')))).toBe(true);
   });
 
   it('ignores numeric kinds from other enums (WasmDppError) when the name disagrees', () => {

@@ -69,12 +69,13 @@ export function* sdkErrorChain(error: unknown): Generator<SdkErrorFields> {
 /**
  * Coarse outcome of a failed SDK call, used for empty states, retry policy and
  * proof labels:
- * - `not-found`: the SDK reported a definite absence (pinned rc.2 kinds
+ * - `not-found`: the SDK reported an absence by kind (pinned rc.2
  *   TotalCreditsNotFound=12, EpochNotFound=13, IdentityNonceNotFound=23,
- *   NotFound=27, or a gRPC NOT_FOUND status).
- * - `timeout` / `transport`: no usable answer from DAPI; worth retrying.
- * - `missing-quorum`: the response was signed by a quorum the trusted context
- *   does not hold, so its proof could not be checked (not a failed check).
+ *   NotFound=27), raised after it checked the proof.
+ * - `timeout` / `transport`: no usable answer from DAPI; worth retrying. This
+ *   includes a gRPC NOT_FOUND status, which is one node's unproven answer.
+ * - `missing-quorum`: the response names a quorum the trusted context does not
+ *   hold, so its proof could not be checked.
  * - `proof-unavailable`: the proof could not be decoded or no proof context
  *   exists. `verification`: the proof was checked and did not verify.
  * - `invalid-request`: the SDK rejected the request itself.
@@ -115,9 +116,10 @@ const VERIFICATION_FAILURE = /\b(?:proof verification (?:failed|error)|invalid (
 const CRYPTOGRAPHIC_MISMATCH = /\b(?:invalid (?:quorum )?signature|(?:quorum )?signature (?:verification )?(?:failed|mismatch)|(?:state |merkle )?root (?:hash )?(?:mismatch|differs))\b/i;
 const PROOF_UNAVAILABLE = /\b(?:(?:unable|failed|cannot) to (?:decode|parse) (?:the )?(?:grovedb )?proof|unsupported (?:proof|protocol) version|non-trusted mode is not supported in wasm|(?:missing|unavailable) (?:proof context|quorum (?:public )?key)|(?:proof context|quorum (?:public )?key) (?:is )?(?:missing|unavailable)|failed to (?:retrieve|fetch) quorum (?:public )?key)\b/i;
 const MISSING_QUORUM = /\b(?:quorum not found in cache|failed to find quorum|quorum (?:public key )?(?:for hash \S+ )?not found)\b/i;
-const NOT_FOUND_MESSAGE = /\bsome requested entity was not found\b/i;
 const TIMEOUT_MESSAGE = /\b(?:timed? ?out|timeout|deadline (?:has )?(?:exceeded|elapsed))\b/i;
-const TRANSPORT_MESSAGE = /\b(?:no available addresses|transport error|fetch failed|failed to fetch|error sending request|network ?error|connection (?:refused|reset|closed)|service unavailable|operation is not implemented or not supported)\b/i;
+// A gRPC NOT_FOUND status ("Some requested entity was not found") is
+// transport too: no proof backs it, whatever wraps it.
+const TRANSPORT_MESSAGE = /\b(?:some requested entity was not found|no available addresses|transport error|fetch failed|failed to fetch|error sending request|network ?error|connection (?:refused|reset|closed)|service unavailable|operation is not implemented or not supported)\b/i;
 const ALL_ENDPOINTS_FAILED = /\bno available addresses to retry\b/i;
 
 /** Numeric kinds are WasmSdkErrorKind values only on SDK errors: WasmDppError
@@ -139,11 +141,10 @@ export function classifySdkError(error: unknown): SdkErrorClass {
     if (PROOF_UNAVAILABLE.test(message)) seen.add('proof-unavailable');
     if (VERIFICATION_FAILURE.test(message)) seen.add('verification');
     nativeProof ||= tagMatches(e, PROOF_KINDS, PROOF_TAG);
-    const transport = tagMatches(e, TRANSPORT_KINDS, TRANSPORT_TAG);
-    // A gRPC NOT_FOUND carried by a transport error is one node's unproven answer.
-    if (tagMatches(e, NOT_FOUND_KINDS, NOT_FOUND_TAG) || (!transport && NOT_FOUND_MESSAGE.test(message))) seen.add('not-found');
+    // Only a structured kind marks an absence; message text never does.
+    if (tagMatches(e, NOT_FOUND_KINDS, NOT_FOUND_TAG)) seen.add('not-found');
     if (tagMatches(e, TIMEOUT_KINDS, TIMEOUT_TAG) || TIMEOUT_MESSAGE.test(message)) seen.add('timeout');
-    if (transport || TRANSPORT_MESSAGE.test(message)) seen.add('transport');
+    if (tagMatches(e, TRANSPORT_KINDS, TRANSPORT_TAG) || TRANSPORT_MESSAGE.test(message)) seen.add('transport');
     if (tagMatches(e, INVALID_KINDS, INVALID_TAG)) seen.add('invalid-request');
   }
   if (seen.has('missing-quorum')) return 'missing-quorum';

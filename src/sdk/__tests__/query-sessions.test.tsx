@@ -16,7 +16,7 @@ import {
 import { QueryProofStoreProvider, useQueryProofStore } from '@/contexts/QueryProofStore';
 import { createMockSdk, createSdkContextValue } from '@/test/sdk';
 import { createTestQueryClient } from '@/test/render';
-import { SdkSessionError } from '../errors';
+import { SdkSessionError, shouldRetrySdkQuery } from '../errors';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -355,6 +355,24 @@ describe('SDK session failures and pending sessions', () => {
     await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('error:NotFound: Data contract not found'));
     expect(screen.getByTestId('proof')).toHaveTextContent('unavailable');
     expect(sdk.system.totalCreditsInPlatform).not.toHaveBeenCalled();
+  });
+
+  it('keeps a transport gRPC NOT_FOUND retryable after the query normalizes it', async () => {
+    const queryClient = client();
+    const nodeNotFound = Object.create({ get kind() { return 6; }, get name() { return 'DapiClientError'; }, get message() { return "transport error: grpc error: code: 'Some requested entity was not found'"; } });
+    const sdk = createMockSdk({ system: {
+      totalCreditsInPlatformWithProof: vi.fn().mockRejectedValue(nodeNotFound),
+      totalCreditsInPlatform: vi.fn().mockRejectedValue(nodeNotFound),
+    } });
+    function ReasonProbe() {
+      const q = useTotalCreditsInPlatform();
+      const reason = q.proofState.kind === 'unavailable' ? q.proofState.reason : q.proofState.kind;
+      return <div data-testid="card">{q.isError ? `error:${reason}:${String(shouldRetrySdkQuery(0, q.error))}` : 'pending'}</div>;
+    }
+    render(<Boundary client={queryClient} context={createSdkContextValue({ sdk })}><ReasonProbe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('error:transport:true'));
+    // A capture failure, not an absence: the ordinary method is tried too.
+    expect(sdk.system.totalCreditsInPlatform).toHaveBeenCalledOnce();
   });
 
   it('returns a new result object instead of mutating React Query\'s tracked result', async () => {
