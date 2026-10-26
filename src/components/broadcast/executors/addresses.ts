@@ -34,6 +34,7 @@ import {
   sumOutputs,
   type AddressOutput,
 } from '../forms/addresses/limits';
+import { assertAssetLockKey } from './asset-lock-key';
 import { executeFormSigned, loadAssetLockProof } from './form-signed';
 import { buildNewIdentity } from './identity-create';
 
@@ -298,6 +299,7 @@ export async function executeAddressFundFromAssetLock({
   sdk,
   options,
   assertCurrent,
+  network: explorerNetwork,
 }: ExecuteArgs<AddressFundFromAssetLockOptions>): Promise<AddressesResult> {
   return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, address, proof } = options;
@@ -313,6 +315,7 @@ export async function executeAddressFundFromAssetLock({
       network,
       'asset-lock private key',
       async (key) => {
+        await assertAssetLockKey(assetLockProof, key, explorerNetwork ?? network);
         const infos = await submit(
           () =>
             sdk.addresses.fundFromAssetLock({

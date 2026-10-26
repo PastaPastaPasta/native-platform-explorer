@@ -9,6 +9,7 @@ import type { DerivationNetwork as Network } from '@/signer/types';
 import { fetchExistingIdentity, type ExecuteArgs, type IdentityResult } from '../executors';
 import type { IdentityCreateOptions } from '../forms/identity/IdentityCreate';
 import type { IdentityTopUpOptions } from '../forms/identity/IdentityTopUp';
+import { assertAssetLockKey } from './asset-lock-key';
 import { executeFormSigned, loadAssetLockProof } from './form-signed';
 
 /**
@@ -65,6 +66,7 @@ export async function executeIdentityCreate({
   sdk,
   options,
   assertCurrent,
+  network: explorerNetwork,
 }: ExecuteArgs<IdentityCreateOptions>): Promise<IdentityResult> {
   return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, proof } = options;
@@ -87,6 +89,7 @@ export async function executeIdentityCreate({
       network,
       'asset-lock private key',
       async (key) => {
+        await assertAssetLockKey(assetLockProof, key, explorerNetwork ?? network);
         await submit(
           () =>
             sdk.identities.create({
@@ -112,6 +115,7 @@ export async function executeIdentityTopUp({
   sdk,
   options,
   assertCurrent,
+  network: explorerNetwork,
 }: ExecuteArgs<IdentityTopUpOptions>): Promise<IdentityResult> {
   return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, proof, identityId } = options;
@@ -123,6 +127,7 @@ export async function executeIdentityTopUp({
       network,
       'asset-lock private key',
       async (key) => {
+        await assertAssetLockKey(assetLockProof, key, explorerNetwork ?? network);
         const newBalance = await submit(
           () => sdk.identities.topUp({ identity, assetLockProof, assetLockPrivateKey: key }),
           { identityId },

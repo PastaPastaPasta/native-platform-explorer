@@ -11,7 +11,7 @@ import {
   executeAddressTransferFromIdentity,
   executeAddressWithdraw,
 } from '../addresses';
-import { parseAssetLockProof } from '../../forms/identity/asset-lock';
+import { KEY_1_HASH, assetLockTx, instantProof, p2pkh } from './asset-lock-fixture';
 
 // The protocol version guard is unit-tested in protocol-version.test.ts.
 const assertWritable = vi.hoisted(() => vi.fn());
@@ -306,12 +306,7 @@ describe('Platform address executors', () => {
 
   it('funds an address from an asset lock with one remainder output that pays the fee', async () => {
     const sdk = mockSdk();
-    const proof = await parseAssetLockProof({
-      kind: 'chain',
-      txid: 'a7383eb8e75f425b1da0b67ee735d612a652de1bad5c76d54f972f30b8ff3422',
-      outputIndex: '0',
-      coreChainLockedHeight: '1579591',
-    });
+    const proof = await instantProof(assetLockTx([p2pkh(KEY_1_HASH)]));
     let seen: Record<string, unknown> = {};
     sdk.addresses.fundFromAssetLock.mockImplementation(async (o) => {
       seen = {

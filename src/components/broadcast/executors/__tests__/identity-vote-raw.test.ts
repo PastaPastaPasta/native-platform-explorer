@@ -2,7 +2,8 @@ import { createHash } from 'node:crypto';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Identity, IdentityPublicKey, PrivateKey, wallet } from '@dashevo/evo-sdk';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../../outcomes';
-import { parseAssetLockProof, type ParsedAssetLockProof } from '../../forms/identity/asset-lock';
+import type { ParsedAssetLockProof } from '../../forms/identity/asset-lock';
+import { KEY_1_HASH, assetLockTx, instantProof, p2pkh } from './asset-lock-fixture';
 import { decodeStateTransition } from '../../forms/raw/decode';
 import { executeIdentityCreate, executeIdentityTopUp } from '../identity-create';
 import { prepareNewIdentityKeys, type NewIdentityKeyChoice } from '@/signer/new-identity';
@@ -31,12 +32,8 @@ let keys: NewIdentityKeyChoice;
 beforeAll(async () => {
   await wallet.validateMnemonic('abandon');
   wif = PrivateKey.fromHex('0'.repeat(63) + '1', 'testnet').toWIF();
-  proof = await parseAssetLockProof({
-    kind: 'chain',
-    txid: 'a7383eb8e75f425b1da0b67ee735d612a652de1bad5c76d54f972f30b8ff3422',
-    outputIndex: '0',
-    coreChainLockedHeight: '1579591',
-  });
+  // An InstantSend proof whose credit output pays the key above.
+  proof = await instantProof(assetLockTx([p2pkh(KEY_1_HASH)]));
   const source = { kind: 'mnemonic' as const, mnemonic: MNEMONIC, identityIndex: 0 };
   const prepared = await prepareNewIdentityKeys(source, 'testnet');
   prepared.release();

@@ -88,6 +88,9 @@ export interface ExecuteArgs<TOptions> {
   assertCurrent?: () => void;
   /** The key shown at review. Signing uses only this key, or fails as not submitted. */
   signingKeyId?: number;
+  /** The explorer network the reviewed session uses (a devnet name included).
+   *  Form `network` options only say mainnet or testnet. */
+  network?: string;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────
