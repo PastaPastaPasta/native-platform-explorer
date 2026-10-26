@@ -388,4 +388,17 @@ describe('SDK-compatible signers', () => {
       signer.destroy();
     }
   });
+
+  it('reports invalid WIFs without quoting them', async () => {
+    const { sdk } = fixture();
+    const secret = 'abandon-secret-material-123';
+    const error = (await createWifSigner(sdk, secret, ID).catch((e: unknown) => e)) as Error;
+    expect(error.message).toBe('That is not a valid WIF private key.');
+    const backupError = (await createBackupSigner(sdk, {
+      identityId: ID,
+      keys: [{ id: 4, purpose: 'AUTHENTICATION', securityLevel: 'HIGH', privateKeyWif: secret }],
+    }).catch((e: unknown) => e)) as Error;
+    expect(backupError.message).toBe('identityKeys[0] does not contain a valid WIF private key.');
+    expect(backupError.message).not.toContain(secret);
+  });
 });

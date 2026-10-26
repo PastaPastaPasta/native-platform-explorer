@@ -160,7 +160,13 @@ export async function createLocalSigner(
 
 export async function decodeWif(wif: string): Promise<ImportedPrivateKey> {
   const { wallet } = await import('@dashevo/evo-sdk');
-  const pair = await wallet.keyPairFromWif(wif);
+  let pair: Awaited<ReturnType<typeof wallet.keyPairFromWif>>;
+  try {
+    pair = await wallet.keyPairFromWif(wif);
+  } catch {
+    // Never surface SDK parser messages: they could quote the secret.
+    throw new SignerUnavailableError('That is not a valid WIF private key.');
+  }
   try {
     if (pair.network !== 'mainnet' && pair.network !== 'testnet') {
       throw new SignerUnavailableError('The WIF uses an unsupported network.');

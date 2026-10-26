@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   FormControl,
@@ -75,7 +75,7 @@ function ExtensionPane() {
 }
 
 function MnemonicPane() {
-  const { connect } = useSigner();
+  const { signer, connect } = useSigner();
   const { sdk, network, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [mnemonic, setMnemonic] = useState('');
@@ -83,6 +83,7 @@ function MnemonicPane() {
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  useEffect(() => setError(null), [signer]);
   const validIdentityIndex = /^\d{1,10}$/.test(identityIndex.trim()) && Number(identityIndex) < 2 ** 31;
 
   const onConnect = async () => {
@@ -199,12 +200,13 @@ function MnemonicPane() {
 }
 
 function WifPane() {
-  const { connect } = useSigner();
+  const { signer, connect } = useSigner();
   const { sdk, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [wif, setWif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  useEffect(() => setError(null), [signer]);
 
   const onConnect = async () => {
     if (!sdk || status !== 'ready') {

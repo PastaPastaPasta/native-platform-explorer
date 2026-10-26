@@ -116,4 +116,34 @@ describe('BridgeImportPane', () => {
     expect(input).toHaveValue(JSON.stringify(edited));
     expect(screen.queryByText(backup.identityId)).toBeNull();
   });
+
+  it('never echoes pasted text in a parse error', () => {
+    render(<BridgeImportPane />);
+    const input = screen.getByRole('textbox', { name: 'Bridge backup JSON' });
+    const secret = 'cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy';
+    fireEvent.change(input, { target: { value: secret } });
+    fireEvent.blur(input);
+    expect(screen.getByText(/The backup is not valid JSON/)).toBeVisible();
+    // Only the user's own draft may contain it, never the rendered error.
+    expect(
+      screen.queryAllByText(/cVt4o7/).filter((element) => element.tagName !== 'TEXTAREA'),
+    ).toEqual([]);
+  });
+
+  it('clears a previous error when a signer connects or disconnects', () => {
+    const view = render(<BridgeImportPane />);
+    const input = screen.getByRole('textbox', { name: 'Bridge backup JSON' });
+    fireEvent.change(input, { target: { value: '{' } });
+    fireEvent.blur(input);
+    expect(screen.getByText(/not valid JSON/)).toBeVisible();
+    vi.mocked(useSigner).mockReturnValue({
+      signer: createMockSigner(),
+      stash: null,
+      connect,
+      disconnect: vi.fn(),
+      clearStash: vi.fn(),
+    });
+    view.rerender(<BridgeImportPane />);
+    expect(screen.queryByText(/not valid JSON/)).not.toBeInTheDocument();
+  });
 });

@@ -115,7 +115,7 @@ function ParsedPreview({ parsed }: { parsed: ParsedBridgeBackup }) {
 
 export function BridgeImportPane() {
   const { sdk, network, status } = useSdk();
-  const { connect } = useSigner();
+  const { signer, connect } = useSigner();
   const fileRef = useRef<HTMLInputElement | null>(null);
   const draftGeneration = useRef(0);
   const [parsed, setParsed] = useState<ParsedBridgeBackup | null>(null);
@@ -141,12 +141,22 @@ export function BridgeImportPane() {
     [],
   );
 
+  // A connect or disconnect starts a new session; drop errors from the last one.
+  useEffect(() => setError(null), [signer]);
+
   const ingest = useCallback((raw: string) => {
     setError(null);
+    let json: unknown;
     try {
-      const json: unknown = JSON.parse(raw);
-      const ok = parseBridgeBackup(json);
-      setParsed(ok);
+      json = JSON.parse(raw);
+    } catch {
+      // JSON.parse messages quote the input, which may be a pasted secret.
+      setParsed(null);
+      setError(new Error('The backup is not valid JSON. Paste the whole backup file.'));
+      return;
+    }
+    try {
+      setParsed(parseBridgeBackup(json));
     } catch (e) {
       setParsed(null);
       setError(e instanceof Error ? e : new Error(String(e)));
