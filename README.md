@@ -232,8 +232,10 @@ NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
   the expected shape.
 - **`integrity.json`.** The SRI hash of every file in `out/` plus the commit,
   build ID, base path, `NEXT_PUBLIC_*` settings and toolchain. Next's build ID
-  is the git commit (override with `NPE_BUILD_ID`), which makes two builds of a
-  commit byte-identical. `pnpm verify:integrity <site URL>` compares a local
+  is the git commit (override with `NPE_BUILD_ID`), and client module IDs are
+  hashed without the checkout directory (`PortableModuleIdsPlugin` in
+  `next.config.mjs`), so two builds of a commit are byte-identical wherever
+  they run. `pnpm verify:integrity <site URL>` compares a local
   build with a deployment; `/about#verify` describes the steps for users.
 - **Offline service worker** (`sw.js`). Only same-origin files inside the base
   path are handled; DAPI, quorum, rate and other cross-origin requests never
