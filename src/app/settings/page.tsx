@@ -27,6 +27,7 @@ import {
 } from '@sdk/networks';
 import { CustomDevnetModal } from '@components/layout/CustomDevnetModal';
 import { ConnectionSettingsForm } from '@components/settings/ConnectionSettingsForm';
+import { ContractCacheSettings } from '@components/settings/ContractCacheSettings';
 import { WellKnownRegistrySettings } from '@components/settings/WellKnownRegistrySettings';
 import { getQuorumKeySource } from '@sdk/proofs';
 import { useProtocolVersionCheck } from '@sdk/version';
@@ -133,6 +134,7 @@ export default function Page() {
               longer timeouts.
             </Text>
             <ConnectionSettingsForm />
+            <ContractCacheSettings />
           </VStack>
         </InfoBlock>
 

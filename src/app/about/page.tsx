@@ -121,6 +121,17 @@ export default function Page() {
             No analytics, no telemetry. The session-viewed-identities log (opt-in)
             is stored only in your browser&apos;s localStorage and never transmitted.
           </Text>
+          <Text color="gray.250" mb={3}>
+            For mainnet and testnet, the SDK also keeps up to 100 data contracts it has
+            fetched (<code>dash-sdk.contracts.&lt;network&gt;</code>) and the network&apos;s
+            protocol version (<code>dash-sdk.protocol-version.&lt;network&gt;</code>) in
+            localStorage, so later visits load faster. These hold public Platform data only,
+            nothing about you or your keys. You can remove the cached contracts from{' '}
+            <Link as={NextLink} href="/settings/#connection" color="brand.light">
+              Settings → Connection
+            </Link>
+            .
+          </Text>
 
           <Heading as="h2" size="md" color="gray.100" mt={6} mb={2}>
             Credits
