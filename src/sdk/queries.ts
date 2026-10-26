@@ -508,6 +508,16 @@ export function useTokenIdentityBalances(
   );
 }
 
+/** One token's balances for a list of identities (the seeded holders view:
+ *  Platform has no holder index). Identities without a balance are absent. */
+export function useTokenBalances(identityIds: string[] | undefined, tokenId: string | undefined) {
+  return useSdkQuery(
+    ['tokens', 'balances', tokenId, identityIds?.join(',') ?? ''],
+    (sdk) => sdk.tokens.balances(identityIds!, tokenId!) as Promise<unknown>,
+    { enabled: !!tokenId && !!identityIds && identityIds.length > 0, staleTime: LIVE, withProofFn: (sdk) => sdk.tokens.balancesWithProof(identityIds!, tokenId!), methodName: 'tokens.balances', methodParams: { identityIds, tokenId } },
+  );
+}
+
 /** Per-token identity state; rc.2 exposes only `isFrozen`. Tokens for which the
  *  identity has no stored info are absent from the map. */
 export function useTokenIdentityTokenInfos(

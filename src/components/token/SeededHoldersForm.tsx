@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   Badge,
   Box,
@@ -20,9 +20,11 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { LoadingCard } from '@ui/LoadingCard';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { BigNumberDisplay } from '@components/data/BigNumber';
+import { ProofChip } from '@components/data/ProofChip';
 import { SortableTh, useSortState, useSortedRows } from '@components/data/SortableTh';
 import { parseSeededInput, type SeededEntry } from '@util/seededInput';
 import { useSdk } from '@sdk/hooks';
+import { useTokenBalances } from '@sdk/queries';
 import { useViewedIdentities } from '@hooks/useViewedIdentities';
 import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 
@@ -35,11 +37,24 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
   const { ids: viewedIds } = useViewedIdentities();
   const wellKnownIdentities = useWellKnownEntries('identity');
   const [text, setText] = useState('');
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<Error | null>(null);
-  const [rows, setRows] = useState<
-    Array<{ id: string; balance: bigint; label: string }>
-  >([]);
+  const [resolving, setResolving] = useState(false);
+  const [resolveError, setResolveError] = useState<Error | null>(null);
+  // The identities to query, with the name each was entered as. Balances go
+  // through the proof-aware query layer (proof chip, Query Inspector).
+  const [resolved, setResolved] = useState<Array<{ id: string; label: string }>>([]);
+  const ids = useMemo(() => resolved.map((r) => r.id), [resolved]);
+  const balancesQ = useTokenBalances(ids.length > 0 ? ids : undefined, tokenId);
+  const rows = useMemo(() => {
+    if (!(balancesQ.data instanceof Map)) return [];
+    return [...(balancesQ.data as Map<unknown, unknown>)].map(([key, val]) => {
+      const id = typeof key === 'string' ? key : String(key);
+      return {
+        id,
+        balance: typeof val === 'bigint' ? val : BigInt(String(val ?? 0)),
+        label: resolved.find((r) => r.id === id)?.label ?? id,
+      };
+    });
+  }, [balancesQ.data, resolved]);
 
   const addList = (ids: string[]) => {
     if (ids.length === 0) return;
@@ -48,39 +63,30 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
 
   const run = async () => {
     if (!sdk || status !== 'ready') return;
-    setLoading(true);
-    setError(null);
-    setRows([]);
+    setResolving(true);
+    setResolveError(null);
+    setResolved([]);
     try {
-      const entries = parseSeededInput(text);
-      const resolved: Array<{ id: string; label: string }> = [];
-      for (const e of entries) {
+      const next: Array<{ id: string; label: string }> = [];
+      for (const e of parseSeededInput(text)) {
         if (e.kind === 'identifier') {
-          resolved.push({ id: e.value, label: e.value });
+          next.push({ id: e.value, label: e.value });
         } else if (e.kind === 'dpns') {
+          // DPNS name resolution has no proof variant in the SDK.
           const id = await sdk.dpns.resolveName(e.value);
-          if (typeof id === 'string') resolved.push({ id, label: e.value });
+          if (typeof id === 'string') next.push({ id, label: e.value });
         }
       }
-      if (resolved.length === 0) {
-        setLoading(false);
-        return;
-      }
-      const ids = resolved.map((r) => r.id);
-      const result = (await sdk.tokens.balances(ids, tokenId)) as Map<unknown, bigint>;
-      const out: typeof rows = [];
-      for (const [key, val] of result) {
-        const idStr = typeof key === 'string' ? key : String(key);
-        const match = resolved.find((r) => r.id === idStr);
-        out.push({ id: idStr, balance: typeof val === 'bigint' ? val : BigInt(String(val ?? 0)), label: match?.label ?? idStr });
-      }
-      setRows(out);
+      setResolved(next);
     } catch (e) {
-      setError(e instanceof Error ? e : new Error(String(e)));
+      setResolveError(e instanceof Error ? e : new Error(String(e)));
     } finally {
-      setLoading(false);
+      setResolving(false);
     }
   };
+  const loading = resolving || balancesQ.isLoading;
+  const error = resolveError ?? (balancesQ.isError ? balancesQ.error : null);
+  const retry = () => (resolveError ? void run() : void balancesQ.refetch());
 
   const { sort, toggle } = useSortState<'identity' | 'balance'>({ key: 'balance', direction: 'desc' });
   const sortedRows = useSortedRows(rows, sort, {
@@ -152,10 +158,13 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
         </VStack>
       </InfoBlock>
 
-      {error ? <ErrorCard error={error} onRetry={() => void run()} /> : null}
+      {error ? <ErrorCard error={error} onRetry={retry} /> : null}
       {loading ? <LoadingCard lines={3} /> : null}
       {rows.length > 0 ? (
         <InfoBlock>
+          <HStack justify="flex-end" mb={2}>
+            <ProofChip proofState={balancesQ.proofState} size="xs" />
+          </HStack>
           <Box overflowX="auto">
             <Table size="sm">
               <Thead>
