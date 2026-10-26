@@ -14,12 +14,12 @@ import {
   TabPanels,
   Tabs,
   Text,
-  Textarea,
   VStack,
 } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { ErrorCard } from '@ui/ErrorCard';
+import { SecretInput } from '@ui/SecretInput';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
@@ -139,10 +139,9 @@ function MnemonicPane() {
       </FormControl>
       <FormControl isRequired>
         <FormLabel fontSize="sm">Mnemonic</FormLabel>
-        <Textarea
+        <SecretInput
+          multiline
           aria-label="Mnemonic"
-          autoComplete="off"
-          spellCheck={false}
           isDisabled={busy}
           size="sm"
           placeholder="twelve or twenty-four words …"
@@ -250,10 +249,8 @@ function WifPane() {
       </FormControl>
       <FormControl isRequired>
         <FormLabel fontSize="sm">WIF private key</FormLabel>
-        <Input
+        <SecretInput
           aria-label="WIF private key"
-          autoComplete="off"
-          spellCheck={false}
           isDisabled={busy}
           size="sm"
           placeholder="WIF"
@@ -262,7 +259,6 @@ function WifPane() {
           fontFamily="mono"
           bg="gray.800"
           borderColor="gray.700"
-          type="password"
         />
       </FormControl>
       <HStack>

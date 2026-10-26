@@ -30,7 +30,8 @@ describe('IdentityUpdateKeysForm', () => {
     renderWithProviders(<IdentityUpdateKeysForm {...options} />);
     fireEvent.click(screen.getByRole('button', { name: 'Add a key' }));
     const wif = screen.getByLabelText('New key 1 private key (WIF)');
-    expect(wif).toHaveAttribute('type', 'password');
+    expect(wif).toHaveAttribute('type', 'text');
+    expect(wif).toHaveAttribute('data-1p-ignore');
 
     fireEvent.change(wif, { target: { value: 'not-a-wif' } });
     expect(await screen.findByText('Not a valid WIF private key.')).toBeInTheDocument();

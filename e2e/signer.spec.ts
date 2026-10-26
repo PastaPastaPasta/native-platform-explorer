@@ -37,6 +37,9 @@ test('invalid WIF and mnemonic attempts show errors and clear credential fields'
   await page.getByRole('tab', { name: 'WIF', exact: true }).click();
   await page.getByRole('textbox', { name: 'Identity ID', exact: true }).fill(identityId);
   const wifInput = page.getByLabel('WIF private key', { exact: true });
+  // Masked text, not a password field the browser would offer to save.
+  await expect(wifInput).toHaveAttribute('type', 'text');
+  await expect(wifInput).toHaveCSS('-webkit-text-security', 'disc');
   await wifInput.fill('invalid-test-WIF');
   const connectWif = page.getByRole('button', { name: 'Connect WIF', exact: true });
   await expect(connectWif).toBeEnabled({ timeout: 20_000 });
@@ -51,6 +54,7 @@ test('invalid WIF and mnemonic attempts show errors and clear credential fields'
   await page.getByRole('tab', { name: 'Mnemonic', exact: true }).click();
   await page.getByRole('textbox', { name: 'Identity ID', exact: true }).fill(identityId);
   const mnemonicInput = page.getByRole('textbox', { name: 'Mnemonic', exact: true });
+  await expect(mnemonicInput).toHaveCSS('-webkit-text-security', 'disc');
   await mnemonicInput.fill(Array(12).fill('invalid-test-word').join(' '));
   const connectMnemonic = page.getByRole('button', { name: 'Connect mnemonic', exact: true });
   await expect(connectMnemonic).toBeEnabled();

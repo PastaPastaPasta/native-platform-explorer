@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Box, Button, HStack, Input, Select, Text, Textarea, VStack } from '@chakra-ui/react';
+import { Box, Button, HStack, Select, Text, Textarea, VStack } from '@chakra-ui/react';
+import { SecretInput } from '@ui/SecretInput';
 import type { OperationFormProps } from '../OperationShell';
 
 /** Purposes and security levels Platform accepts for keys added by an identity update. */
@@ -221,12 +222,9 @@ export function IdentityUpdateKeysForm({
                   Remove
                 </Button>
               </HStack>
-              <Input
+              <SecretInput
                 mt={2}
                 size="sm"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
                 aria-label={`New key ${index + 1} private key (WIF)`}
                 placeholder="Private key (WIF)"
                 value={key.privateKeyWif}

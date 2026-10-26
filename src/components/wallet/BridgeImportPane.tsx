@@ -8,11 +8,11 @@ import {
   HStack,
   Input,
   Text,
-  Textarea,
   VStack,
 } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { ErrorCard } from '@ui/ErrorCard';
+import { SecretInput } from '@ui/SecretInput';
 import { useSdk } from '@sdk/hooks';
 import { normalizeError } from '@sdk/errors';
 import { useSigner } from '@/signer/SignerProvider';
@@ -279,10 +279,9 @@ export function BridgeImportPane() {
         <Text fontSize="xs" color="gray.400" mb={1}>
           …or paste JSON
         </Text>
-        <Textarea
+        <SecretInput
+          multiline
           aria-label="Bridge backup JSON"
-          autoComplete="off"
-          spellCheck={false}
           isDisabled={busy}
           size="sm"
           rows={4}
