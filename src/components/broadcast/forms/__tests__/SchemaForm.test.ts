@@ -27,11 +27,13 @@ const noteSchema: SchemaObject = {
 };
 
 describe('emptyValueFor', () => {
-  it('initialises strings to empty and booleans to false', () => {
+  it('leaves strings and numbers unset and initialises booleans to false', () => {
+    // An optional field left blank must not be submitted as "".
     const v = emptyValueFor(noteSchema);
-    expect(v.title).toBe('');
+    expect(v).not.toHaveProperty('title');
+    expect(v).not.toHaveProperty('body');
     expect(v.pinned).toBe(false);
-    expect(v.priority).toBe('');
+    expect(v).not.toHaveProperty('priority');
     expect(v.tags).toEqual([]);
     expect(v.author).toEqual({});
   });
@@ -42,10 +44,10 @@ describe('emptyValueFor', () => {
       properties: {
         $id: { type: 'string' },
         $ownerId: { type: 'string' },
-        name: { type: 'string' },
+        flag: { type: 'boolean' },
       },
     });
-    expect(v).toEqual({ name: '' });
+    expect(v).toEqual({ flag: false });
     expect('$id' in v).toBe(false);
   });
 });

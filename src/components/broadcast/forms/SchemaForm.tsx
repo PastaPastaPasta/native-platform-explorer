@@ -67,13 +67,16 @@ function defaultForSchema(schema: SchemaObject): JsonValue {
   }
 }
 
-/** Produce an empty initial value for the form from a top-level schema. */
+/** Produce an empty initial value for the form from a top-level schema.
+ *  Blank strings and numbers are left out, as a cleared field is: an optional
+ *  property the user never fills is not submitted as "". */
 export function emptyValueFor(schema: SchemaObject): SchemaObject {
   const out: SchemaObject = {};
   const props = isObject(schema.properties) ? schema.properties : {};
   for (const [key, def] of Object.entries(props)) {
-    if (key.startsWith('$')) continue;
-    if (isObject(def)) out[key] = defaultForSchema(def);
+    if (key.startsWith('$') || !isObject(def)) continue;
+    const value = defaultForSchema(def);
+    if (value !== '') out[key] = value;
   }
   return out;
 }
