@@ -29,10 +29,12 @@ export class BroadcastOutcomeUnknownError extends Error {
 }
 
 /**
- * WASM error kinds the pinned SDK (4.0.0-rc.2) raises only while reading a
- * write method's options, before any request: `InvalidArgument` is a local
- * kind never mapped from network errors, and `NotImplemented` marks unwired
- * APIs. Every other failure inside a write call stays "outcome unknown".
+ * WASM error kinds the pinned SDK (5.0.0-rc.8) raises only before a write
+ * method submits its transition: `InvalidArgument` is a local kind never
+ * mapped from network errors, and `NotImplemented` marked unwired APIs (5.0
+ * no longer raises it). Every other failure inside a write call, including
+ * 5.0's `ExecutionNotProved` after an accepted broadcast, stays "outcome
+ * unknown". The audit is recorded in outcomes.test.ts.
  */
 const PRE_SUBMISSION_SDK_ERRORS = new Set(['InvalidArgument', 'NotImplemented']);
 

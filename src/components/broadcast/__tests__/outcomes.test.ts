@@ -75,11 +75,24 @@ describe('transaction outcome messages', () => {
 
   it('was audited against the pinned wasm-sdk', () => {
     // isPreSubmissionSdkError relies on InvalidArgument/NotImplemented being raised
-    // only before any request in this exact SDK. Re-audit the wasm-sdk sources
-    // (state_transitions/*.rs, dpns.rs, error.rs) before changing this version.
+    // only before the transition is submitted in this exact SDK. Re-audit the
+    // wasm-sdk sources (state_transitions/*.rs, dpns.rs, error.rs) before
+    // changing this version.
+    //
+    // 5.0.0-rc.8 audit (platform tag v5.0.0-rc.8): in all 50 write functions of
+    // state_transitions/{addresses,broadcast,contract,document,identity,token}.rs
+    // and dpns.rs, every explicit invalid_argument and every `?` on a
+    // WasmDppError (whose InvalidArgument kind maps to this one) runs before the
+    // submitting call. After it, errors are SdkError conversions (kind kept by
+    // with_context; From<SdkError> yields InvalidArgument only for EncryptedFor,
+    // which no write path raises), Generic (result object assembly), Protocol,
+    // or the new ExecutionNotProved, which strict waits raise after an accepted
+    // broadcast and which therefore stays "outcome unknown". The result
+    // converters (wasm-dpp2 convert_proof_result) are infallible.
+    // NotImplemented is no longer raised anywhere in 5.0.0-rc.8.
     // pnpm installs evo-sdk's wasm-sdk dependency next to it.
     const evo = realpathSync('node_modules/@dashevo/evo-sdk');
     const wasm = `${evo}/../wasm-sdk/package.json`;
-    expect(JSON.parse(readFileSync(wasm, 'utf8')).version).toBe('4.0.0-rc.2');
+    expect(JSON.parse(readFileSync(wasm, 'utf8')).version).toBe('5.0.0-rc.8');
   });
 });
