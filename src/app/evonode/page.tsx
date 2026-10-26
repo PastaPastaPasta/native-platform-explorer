@@ -23,6 +23,7 @@ import { Identifier } from '@components/data/Identifier';
 import { InfoLine } from '@components/data/InfoLine';
 import { BigNumberDisplay } from '@components/data/BigNumber';
 import { NotActive } from '@components/data/NotActive';
+import { WalkCapNotice } from '@components/data/WalkCapNotice';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useAllEvonodeBlocksInEpoch,
@@ -94,18 +95,26 @@ function Landing({ invalid }: { invalid?: string }) {
 function Standing({
   loading,
   error,
+  rankError,
   standing,
   blocks,
   epochLabel,
 }: {
   loading: boolean;
   error: Error | null;
+  /** Why rank and share are missing when only the block count loaded. */
+  rankError?: Error | null;
   standing: ProposerStanding | null;
-  /** Authoritative block count when it comes from a separate query. */
-  blocks?: number | null;
+  blocks: number | null;
   epochLabel: string;
 }) {
-  const own = blocks ?? standing?.blocks ?? null;
+  const missingRank = rankError ? (
+    <Text fontSize="xs" color="danger">
+      Ranking unavailable: {rankError.message || 'failed to load'}
+    </Text>
+  ) : (
+    <NotActive />
+  );
   return (
     <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
       <InfoBlock>
@@ -120,12 +129,12 @@ function Standing({
               <Text fontSize="sm" color="danger">
                 {error.message || 'Failed to load'}
               </Text>
-            ) : own ? (
+            ) : blocks ? (
               <VStack align="flex-start" spacing={1}>
-                <BigNumberDisplay value={own} />
+                <BigNumberDisplay value={blocks} />
                 {standing && standing.topBlocks > 0 ? (
                   <Progress
-                    value={(own / standing.topBlocks) * 100}
+                    value={(blocks / standing.topBlocks) * 100}
                     colorScheme="blue"
                     size="xs"
                     width="100%"
@@ -157,7 +166,7 @@ function Standing({
                 </Text>
               </Text>
             ) : (
-              <NotActive />
+              missingRank
             )
           }
         />
@@ -174,7 +183,7 @@ function Standing({
                 </Text>
               </Text>
             ) : (
-              <NotActive />
+              missingRank
             )
           }
         />
@@ -205,12 +214,17 @@ function Evonode({ hex }: { hex: string }) {
   }, [ownBlocksQ.data, hex]);
   const finalizedEntry =
     finalizedQ.data instanceof Map && epoch !== undefined ? finalizedQ.data.get(epoch) : undefined;
-  const standing = useMemo(() => {
-    const source = isCurrent
-      ? allBlocksQ.data
-      : readProp<unknown>(finalizedEntry, 'blockProposers');
-    return proposerStanding(proposerMapByHex(source), hex);
-  }, [isCurrent, allBlocksQ.data, finalizedEntry, hex]);
+  const proposerSource = isCurrent
+    ? allBlocksQ.data
+    : readProp<unknown>(finalizedEntry, 'blockProposers');
+  const standing = useMemo(
+    () => proposerStanding(proposerMapByHex(proposerSource), hex),
+    [proposerSource, hex],
+  );
+  // Count, rank and share all come from the complete map when it loaded, so
+  // they cannot disagree; the by-id count is only a fallback for a failed walk.
+  const walked = allBlocksQ.data instanceof Map;
+  const currentBlocks = walked ? standing?.blocks ?? 0 : allBlocksQ.isError ? ownBlocks : null;
 
   // The vote page starts at the first hash ≥ this one; findOwnVote rejects a
   // successor's entry when this node has no vote.
@@ -278,13 +292,19 @@ function Evonode({ hex }: { hex: string }) {
         {currentQ.isError ? (
           <ErrorCard error={currentQ.error} onRetry={() => currentQ.refetch()} />
         ) : isCurrent || epoch === undefined ? (
-          <Standing
-            epochLabel={epoch !== undefined ? `epoch #${epoch}, current` : 'current epoch'}
-            loading={currentQ.isLoading || ownBlocksQ.isLoading || allBlocksQ.isLoading}
-            error={ownBlocksQ.error ?? allBlocksQ.error ?? null}
-            standing={standing}
-            blocks={ownBlocks}
-          />
+          <VStack align="stretch" spacing={2}>
+            <Standing
+              epochLabel={epoch !== undefined ? `epoch #${epoch}, current` : 'current epoch'}
+              loading={
+                currentQ.isLoading || allBlocksQ.isLoading || (allBlocksQ.isError && ownBlocksQ.isLoading)
+              }
+              error={allBlocksQ.isError && ownBlocksQ.isError ? allBlocksQ.error : null}
+              rankError={allBlocksQ.isError ? allBlocksQ.error : null}
+              standing={standing}
+              blocks={currentBlocks}
+            />
+            <WalkCapNotice data={allBlocksQ.data} what="current-epoch proposers" />
+          </VStack>
         ) : finalizedQ.isError ? (
           <ErrorCard error={finalizedQ.error} onRetry={() => finalizedQ.refetch()} />
         ) : !finalizedQ.isLoading && !finalizedEntry ? (
@@ -300,6 +320,7 @@ function Evonode({ hex }: { hex: string }) {
             loading={finalizedQ.isLoading}
             error={null}
             standing={standing}
+            blocks={standing?.blocks ?? 0}
           />
         )}
 
@@ -308,18 +329,30 @@ function Evonode({ hex }: { hex: string }) {
             <HStack justify="space-between">
               <Heading size="sm" color="gray.100">
                 Protocol upgrade vote
+                {currentIdx !== undefined ? (
+                  <Text as="span" fontSize="xs" color="gray.400" fontWeight="normal" ml={2}>
+                    current epoch #{currentIdx}
+                  </Text>
+                ) : null}
               </Heading>
               <Button as={NextLink} href="/network/protocol/" size="xs" variant="ghost">
                 All votes →
               </Button>
             </HStack>
+            {!isCurrent && epoch !== undefined ? (
+              <Text fontSize="xs" color="gray.400">
+                Votes reset at every epoch boundary and Platform keeps only the current
+                epoch&apos;s, so this is the vote recorded in epoch #{currentIdx}, not #{epoch}.
+              </Text>
+            ) : null}
             {voteQ.isLoading ? (
               <LoadingCard lines={2} />
             ) : voteQ.isError ? (
               <ErrorCard error={voteQ.error} onRetry={() => voteQ.refetch()} />
             ) : myVote === null ? (
               <Text color="gray.400" fontSize="sm">
-                No protocol version vote is recorded for this proTxHash.
+                No protocol version vote is recorded for this proTxHash this epoch. An evonode
+                records its vote when it proposes a block, and votes reset each epoch.
               </Text>
             ) : (
               <HStack spacing={3} flexWrap="wrap">
@@ -329,7 +362,9 @@ function Evonode({ hex }: { hex: string }) {
                 {typeof currentProtocol === 'number' ? (
                   <Badge
                     variant="subtle"
-                    colorScheme={myVote > currentProtocol ? 'yellow' : 'green'}
+                    colorScheme={
+                      myVote > currentProtocol ? 'yellow' : myVote === currentProtocol ? 'green' : 'orange'
+                    }
                     textTransform="none"
                   >
                     {myVote > currentProtocol

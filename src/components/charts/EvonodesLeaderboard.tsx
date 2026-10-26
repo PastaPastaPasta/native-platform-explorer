@@ -80,6 +80,12 @@ export function EvonodesLeaderboard({
   const min = entries.reduce((m, e) => Math.min(m, e.blocks), max);
   const total = entries.reduce((s, e) => s + e.blocks, 0);
   const flat = max === min;
+  // Competition rank, as on /evonode/: 1 + proposers with strictly more
+  // blocks. Entries are sorted by blocks, so a tie repeats the rank above.
+  const ranks: number[] = [];
+  top.forEach((e, i) => {
+    ranks.push(i > 0 && e.blocks === top[i - 1]!.blocks ? ranks[i - 1]! : i + 1);
+  });
   const shown =
     top.length < entries.length
       ? `${top.length} of ${entries.length} proposers`
@@ -126,7 +132,7 @@ export function EvonodesLeaderboard({
       </HStack>
 
       {top.map((e, i) => {
-        const rank = i + 1;
+        const rank = ranks[i];
         const isTop = e.blocks === max;
         const pct = Math.max(2, Math.round((e.blocks / max) * 100));
         return (

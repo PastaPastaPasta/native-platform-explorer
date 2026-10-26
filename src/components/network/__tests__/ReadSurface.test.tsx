@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, screen, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import EvonodePage from '@/app/evonode/page';
 import ProtocolPage from '@/app/network/protocol/page';
@@ -6,10 +6,15 @@ import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
 import { QuorumsTable } from '@components/network/QuorumsTable';
 import { renderWithProviders } from '@/test/render';
 import { proTxHashToBase58 } from '@util/protx';
+import { WalkedMap } from '@util/paged-walk';
 
 const hash = (n: number) => n.toString(16).padStart(64, '0');
 const status = (version: number) => Object.create({ version, proTxHash: { __type: 'ProTxHash' } }) as object;
 const ok = (data: unknown) => ({ data, status: 'success', isSuccess: true, isLoading: false, isError: false, error: null, refetch: vi.fn() });
+const failed = (message: string) => ({ data: undefined, status: 'error', isSuccess: false, isLoading: false, isError: true, error: new Error(message), refetch: vi.fn() });
+// A query its caller disabled: neither loading nor settled.
+const idle = { data: undefined, status: 'pending', isSuccess: false, isLoading: false, isError: false, error: null, refetch: vi.fn() };
+const truncated = <K, V>(entries: Array<[K, V]>) => Object.assign(new WalkedMap(entries), { truncated: true });
 
 const state = vi.hoisted(() => ({
   params: '',
@@ -75,7 +80,51 @@ describe('evonode page', () => {
     state.params = `proTxHash=${hash(2)}`;
     state.hooks.useProtocolVersionUpgradeVoteStatus = ok(new Map([[hash(3), status(12)]]));
     renderWithProviders(<EvonodePage />);
-    expect(screen.getByText('No protocol version vote is recorded for this proTxHash.')).toBeVisible();
+    expect(screen.getByText(/No protocol version vote is recorded for this proTxHash this epoch/)).toBeVisible();
+  });
+
+  it('takes count, rank and share from the walk so they cannot disagree', () => {
+    state.params = `proTxHash=${hash(2)}`;
+    // The by-id count is from another moment; the walk wins when it loaded.
+    state.hooks.useEvonodesBlocksByIds = ok(new Map([[hash(2), 12n]]));
+    renderWithProviders(<EvonodePage />);
+    expect(screen.getByText('(10/25)')).toBeVisible();
+    expect(screen.queryByText('12')).toBeNull();
+  });
+
+  it('falls back to the by-id count when the walk fails', () => {
+    state.params = `proTxHash=${hash(2)}`;
+    state.hooks.useAllEvonodeBlocksInEpoch = failed('walk failed');
+    state.hooks.useEvonodesBlocksByIds = ok(new Map([[hash(2), 12n]]));
+    renderWithProviders(<EvonodePage />);
+    expect(screen.getByText('12')).toBeVisible();
+    expect(screen.getAllByText('Ranking unavailable: walk failed')).toHaveLength(2);
+  });
+
+  it('says the vote is the current epoch’s when a past epoch is selected', () => {
+    state.params = `proTxHash=${hash(2)}`;
+    renderWithProviders(<EvonodePage />);
+    expect(screen.queryByText(/so this is the vote recorded in epoch/)).toBeNull();
+    fireEvent.change(screen.getByLabelText('Epoch'), { target: { value: '85' } });
+    expect(screen.getByText(/so this is the vote recorded in epoch #86, not #85/)).toBeVisible();
+    expect(screen.getByText('current epoch #86')).toBeVisible();
+  });
+
+  it('styles a vote behind the current version unlike a current one', () => {
+    state.params = `proTxHash=${hash(2)}`;
+    renderWithProviders(<EvonodePage />);
+    const currentClass = screen.getByText('current version').className;
+    cleanup();
+    state.hooks.useProtocolVersionUpgradeVoteStatus = ok(new Map([[hash(2), status(12)]]));
+    renderWithProviders(<EvonodePage />);
+    expect(screen.getByText('behind current v13').className).not.toBe(currentClass);
+  });
+
+  it('warns when the proposer walk stopped at its page cap', () => {
+    state.params = `proTxHash=${hash(2)}`;
+    state.hooks.useAllEvonodeBlocksInEpoch = ok(truncated([[hash(1), 11], [hash(2), 10]]));
+    renderWithProviders(<EvonodePage />);
+    expect(screen.getByRole('status')).toHaveTextContent('Results may be incomplete');
   });
 
   it('reads earlier epochs from the finalized record (base58 keys)', () => {
@@ -126,5 +175,12 @@ describe('QuorumsTable', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: 'Hide raw response' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('numbers ties with competition rank, as on /evonode', () => {
+    const entries = [9, 5, 5, 1].map((blocks, i) => ({ proTxHash: hash(i + 1), blocks }));
+    renderWithProviders(<EvonodesLeaderboard entries={entries} />);
+    const ranks = screen.getAllByRole('link').map((row) => row.firstElementChild?.textContent);
+    expect(ranks).toEqual(['1', '2', '2', '4']);
   });
 });
