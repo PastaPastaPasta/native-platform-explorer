@@ -84,7 +84,8 @@ export function SdkSessionNotice() {
 
 const DISMISS_KEY = 'npe:protocolWarningDismissed';
 
-/** Small, dismissible (per tab session) protocol-version mismatch warning. */
+/** Small, dismissible (per tab session) warning that the network runs a
+ *  protocol newer than the bundled SDK supports. */
 export function SdkVersionNotice() {
   const { network } = useSdk();
   const { sdkVersion, networkVersion, mismatch } = useProtocolVersionCheck();
@@ -94,17 +95,14 @@ export function SdkVersionNotice() {
     try { setDismissed(window.sessionStorage.getItem(DISMISS_KEY)); } catch { /* optional */ }
   }, []);
   if (!mismatch || dismissed === id) return null;
-  const newer = (networkVersion ?? 0) > (sdkVersion ?? 0);
   return (
     <Box role="status" mb={3} px={3} py={2} borderWidth="1px" borderColor="warning" borderRadius="md">
       <HStack justify="space-between" align="flex-start" spacing={3}>
         <Text fontSize="xs" color="muted">
           <Text as="span" color="warning" fontWeight={600}>Protocol version mismatch: </Text>
           {getNetwork(network).label || network} runs Platform protocol v{networkVersion}; the bundled
-          SDK (@dashevo/evo-sdk {EVO_SDK_VERSION}) speaks v{sdkVersion}.{' '}
-          {newer
-            ? 'The explorer still works, but data added by newer protocol features may fail to load.'
-            : 'The explorer still works, but some responses may fail to decode.'}
+          SDK (@dashevo/evo-sdk {EVO_SDK_VERSION}) supports up to v{sdkVersion}. The explorer still
+          works, but data added by newer protocol features may fail to load.
         </Text>
         <CloseButton
           size="sm"

@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { toPlain } from '@util/contract';
 import { useSdk } from './hooks';
 import { useSystemStatus } from './queries';
@@ -14,34 +15,44 @@ export function networkProtocolVersion(status: unknown): number | null {
 }
 
 export interface ProtocolVersionCheck {
-  /** Protocol version the SDK session speaks (`sdk.version()`). */
+  /** Newest Platform protocol version the bundled SDK supports
+   *  (`EvoSDK.getLatestVersionNumber()`). */
   sdkVersion: number | null;
   networkVersion: number | null;
+  /** The network runs a protocol newer than the bundled SDK supports. */
   mismatch: boolean;
 }
 
 /**
- * PRD §11.7 version check. `sdk.version()` returns the Platform *protocol*
- * version the SDK was built for (12 for evo-sdk 4.0.0-rc.2), not the npm
- * package version, so it is compared with the protocol version the network
- * reports. Shares the polled `system.status` query, so it adds no requests.
+ * PRD §11.7 version check. Since evo-sdk 5.0 a session detects the network's
+ * protocol version from its responses (`sdk.version()` starts at the
+ * network's floor and rises after the first proved answer), so it follows an
+ * older network on its own. What it cannot follow is a network newer than the
+ * newest version it was built with, so that is the comparison made here.
+ * Shares the polled `system.status` query, so it adds no network requests.
  */
 export function useProtocolVersionCheck(): ProtocolVersionCheck {
-  const { sdk, status } = useSdk();
+  const { status } = useSdk();
   const statusQ = useSystemStatus();
-  let sdkVersion: number | null = null;
-  if (status === 'ready' && sdk) {
-    try {
-      const v = sdk.version();
-      sdkVersion = typeof v === 'number' && Number.isInteger(v) ? v : null;
-    } catch {
-      sdkVersion = null;
-    }
-  }
+  const latestQ = useQuery({
+    queryKey: ['sdk', 'latestProtocolVersion'],
+    queryFn: async () => {
+      const { EvoSDK } = await import('@dashevo/evo-sdk');
+      return EvoSDK.getLatestVersionNumber();
+    },
+    // The WASM module is initialized once a session is ready, so this reads
+    // a constant without loading anything.
+    enabled: status === 'ready',
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+  });
+  const latest = latestQ.data;
+  const sdkVersion = typeof latest === 'number' && Number.isInteger(latest) ? latest : null;
   const networkVersion = status === 'ready' ? networkProtocolVersion(statusQ.data) : null;
   return {
     sdkVersion,
     networkVersion,
-    mismatch: sdkVersion !== null && networkVersion !== null && sdkVersion !== networkVersion,
+    mismatch: sdkVersion !== null && networkVersion !== null && networkVersion > sdkVersion,
   };
 }
