@@ -133,6 +133,37 @@ describe('perpetual distribution', () => {
   });
 });
 
+describe('evo-sdk 5.0 internally tagged enums', () => {
+  // Shapes from the 5.0.0-rc.8 WASM `DataContract.toJSON()` of live testnet
+  // token stt-99 (contract Afk9QSj9…) and rs-dpp's 5.0 serializers.
+  it('names action takers and recipients', () => {
+    expect(describeActionTakers({ $type: 'noOne' }).label).toBe('No one');
+    expect(describeActionTakers({ $type: 'contractOwner' }).label).toBe('Contract owner');
+    expect(describeActionTakers({ $type: 'mainGroup' }).label).toBe('Main control group');
+    expect(describeActionTakers({ $type: 'identity', identity: 'abc' })).toEqual({ label: 'Identity', identityId: 'abc' });
+    expect(describeActionTakers({ $type: 'group', position: 2 })).toEqual({ label: 'Group #2', groupPosition: 2 });
+    expect(tokenFlagsFromConfig({
+      manualMintingRules: rule({ $type: 'contractOwner' }),
+      manualBurningRules: rule({ $type: 'noOne' }),
+    })).toMatchObject({ mintable: true, burnable: false });
+  });
+
+  it('describes a perpetual distribution', () => {
+    expect(describePerpetualDistribution({
+      $formatVersion: '0',
+      distributionType: { $type: 'blockBasedDistribution', interval: 100, function: { $type: 'fixedAmount', amount: 1 } },
+      distributionRecipient: { $type: 'contractOwner' },
+    })).toEqual({ kind: 'block', interval: 'every 100 blocks', intervalUnit: 'block intervals', emission: 'Fixed: 1 per interval', recipient: { label: 'Contract owner' } });
+    expect(describePerpetualDistribution({
+      distributionType: { $type: 'timeBasedDistribution', interval: 600000, function: { $type: 'stepwise', '10': 50, '0': 100 } },
+      distributionRecipient: { $type: 'identity', identity: 'id1' },
+    })).toMatchObject({ interval: 'every 10 minutes', emission: 'Stepwise: 100 from interval 0; 50 from interval 10', recipient: { identityId: 'id1' } });
+    expect(describeDistributionFunction({ $type: 'linear', a: -2, d: 1, start_step: null, starting_amount: 100, min_value: 10, max_value: null }))
+      .toBe('Linear: f(x) = -2·(x − start) / 1 + 100, never below 10');
+    expect(describeTradeMode('NotTradeable')).toBe('Not tradeable on the marketplace');
+  });
+});
+
 describe('other rules', () => {
   it('sorts a pre-programmed schedule by release time', () => {
     expect(preProgrammedSchedule({

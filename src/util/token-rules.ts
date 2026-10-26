@@ -1,17 +1,31 @@
 // Human-readable descriptions of a token configuration (rs-dpp
-// `TokenConfigurationV0`, as serialised by the rc.2 WASM `toJSON()`). Enums are
-// externally tagged: unit variants are strings (`"NoOne"`), others are
-// single-key objects (`{ "Identity": "<base58>" }`, `{ "Group": 0 }`).
+// `TokenConfigurationV0`, as serialised by the WASM `toJSON()`). rc.2 tags
+// enums externally: unit variants are strings (`"NoOne"`), others single-key
+// objects (`{ "Identity": "<base58>" }`, `{ "Group": 0 }`). evo-sdk 5.0 tags
+// them internally with a camelCase `$type` and flattens the fields beside it
+// (`{ "$type": "identity", "identity": "<base58>" }`, `{ "$type": "group",
+// "position": 0 }`, `{ "$type": "fixedAmount", "amount": 1 }`); the trade
+// mode stays a bare string.
 
 import { toRecord } from './contract';
 import { removeTrailingZeros } from './numbers';
 
+/** The single field 5.0 synthesizes for a newtype variant's value. */
+const NEWTYPE_FIELDS = new Set(['identity', 'position']);
 
-/** Split an externally tagged enum value into its variant name and payload. */
+/** Split a tagged enum value into its variant name (rc.2's PascalCase) and
+ *  payload. */
 export function enumVariant(value: unknown): { variant: string; payload?: unknown } | null {
   if (typeof value === 'string') return { variant: value };
   const rec = toRecord(value);
   if (!rec) return null;
+  if (typeof rec.$type === 'string') {
+    const variant = rec.$type.charAt(0).toUpperCase() + rec.$type.slice(1);
+    const { $type: _type, $formatVersion: _version, ...fields } = rec;
+    const names = Object.keys(fields);
+    if (names.length === 1 && NEWTYPE_FIELDS.has(names[0]!)) return { variant, payload: fields[names[0]!] };
+    return { variant, payload: names.length > 0 ? fields : undefined };
+  }
   const keys = Object.keys(rec).filter((k) => k !== '$formatVersion');
   if (keys.length !== 1) return null;
   return { variant: keys[0]!, payload: rec[keys[0]!] };
