@@ -22,7 +22,7 @@ Exports contain the current page. JSON records the SDK version, network, trust s
 
 ## Scope adaptations
 
-Schema discovery uses explicit controls rather than speculative editor autocomplete. Cancellation is logical because the installed SDK does not expose an abort signal for these calls. Aggregate examples match the current workspace WASM aggregate path; facade proof-capable aggregate transport is a separate SDK/provenance improvement. The workspace reports query context and retrieval time without claiming additional cryptographic verification.
+Schema discovery uses explicit controls rather than speculative editor autocomplete. Cancellation is logical because the installed SDK does not expose an abort signal for these calls. Aggregates use the SDK's documents count, sum and average facade; in trusted mode they go through the `…WithProof` variants, so responses are verified and their proofs appear in the Query Inspector like document queries. Examples use the same calls. The workspace reports query context and retrieval time without claiming additional cryptographic verification.
 
 ## Validation
 

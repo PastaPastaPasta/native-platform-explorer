@@ -226,18 +226,11 @@ export function buildSdkExample(
     if (parsed.select !== 'count' && !parsed.aggregateField) {
       throw new Error('SUM and AVG SDK examples require an aggregate field.');
     }
-    const method =
-      parsed.select === 'count'
-        ? 'getDocumentsCount'
-        : parsed.select === 'sum'
-          ? 'getDocumentsSum'
-          : 'getDocumentsAverage';
+    const method = parsed.select === 'count' ? 'count' : parsed.select === 'sum' ? 'sum' : 'average';
     const field = parsed.select === 'count' ? '' : `, ${JSON.stringify(parsed.aggregateField)}`;
-    query =
-      '// This workspace uses the WASM aggregate path without proof capture.\n' +
-      '// The pinned SDK also provides countWithProof, sumWithProof, and averageWithProof facades.\n' +
-      'const wasmSdk = await sdk.getWasmSdkConnected();\n' +
-      `const result = await wasmSdk.${method}(params${field});`;
+    query = trusted
+      ? `const response = await sdk.documents.${method}WithProof(params${field});\nconst result = response.data;`
+      : `const result = await sdk.documents.${method}(params${field});`;
   }
   return (
     `// npm install @dashevo/evo-sdk@4.0.0-rc.2\n` +

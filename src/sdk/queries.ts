@@ -557,7 +557,7 @@ export interface DocumentsQueryParams {
   limit?: number;
   startAfter?: string;
   /** SQL-shaped GROUP BY field list. Ignored on the regular `query` path,
-   *  honored by the new `getDocuments{Count,Sum,Average}` aggregate paths. */
+   *  honored by the documents count / sum / average aggregates. */
   groupBy?: string[];
 }
 
@@ -584,11 +584,9 @@ export function useDocumentsQuery(
 
 // ----- documents aggregates (count / sum / average) -----
 //
-// These ride the wasm-sdk's `getDocuments{Count,Sum,Average}` primitives
-// directly — there's no `evo-sdk` facade wrapper for them yet (3.1.0-dev.7).
-// We unwrap `sdk.getWasmSdkConnected()` once inside the `queryFn`. Skipping
-// the proof variant for now (`hasProofVariant: false`) — the inspector will
-// show these as "unverified, no proof variant available".
+// The pinned SDK's documents facade exposes count / sum / average and their
+// `…WithProof` variants, so trusted runs verify the response and the
+// inspector captures its proof like any other query.
 
 export type AggregateKind = 'count' | 'sum' | 'avg';
 
@@ -597,24 +595,17 @@ export interface CountSumPair {
   sum: bigint;
 }
 
-interface WasmAggregateApi {
-  getDocumentsCount(q: unknown): Promise<Map<string, bigint>>;
-  getDocumentsSum(q: unknown, p: string): Promise<Map<string, bigint>>;
-  getDocumentsAverage(q: unknown, p: string): Promise<Map<string, CountSumPair>>;
-}
-
-const WASM_METHODS: Record<AggregateKind, keyof WasmAggregateApi> = {
-  count: 'getDocumentsCount',
-  sum: 'getDocumentsSum',
-  avg: 'getDocumentsAverage',
+const AGGREGATE_METHODS: Record<AggregateKind, 'count' | 'sum' | 'average'> = {
+  count: 'count',
+  sum: 'sum',
+  avg: 'average',
 };
 
 export type DocumentsAggregateResult = Map<string, bigint | CountSumPair>;
 
-/** Run a count / sum / average aggregate against the new wasm-sdk primitives.
- *  Pass `undefined` for `params` or `kind` to keep the hook idle. `field`
- *  names the integer property to aggregate for SUM/AVG and is ignored for
- *  COUNT. */
+/** Run a count / sum / average aggregate. Pass `undefined` for `params` or
+ *  `kind` to keep the hook idle. `field` names the integer property to
+ *  aggregate for SUM/AVG and is ignored for COUNT. */
 export function useDocumentsAggregate(
   params: DocumentsQueryParams | undefined,
   kind: AggregateKind | undefined,
@@ -623,10 +614,11 @@ export function useDocumentsAggregate(
 ) {
   const needsField = kind === 'sum' || kind === 'avg';
   const enabled = !!params && !!kind && (!needsField || !!field);
-  const methodName = kind ? `documents.${WASM_METHODS[kind]}` : 'documents.aggregate';
+  const methodName = kind ? `documents.${AGGREGATE_METHODS[kind]}` : 'documents.aggregate';
+  const query = params as never;
   const methodParams = {
     ...((params ?? {}) as Record<string, unknown>),
-    ...(needsField ? { sumProperty: field } : {}),
+    ...(needsField ? { [kind === 'sum' ? 'sumProperty' : 'averageProperty']: field } : {}),
   };
   return useSdkQuery<DocumentsAggregateResult>(
     [
@@ -643,14 +635,25 @@ export function useDocumentsAggregate(
       ...(executionId === undefined ? [] : ['execution', executionId]),
     ],
     async (sdk) => {
-      const w = (await sdk.getWasmSdkConnected()) as unknown as WasmAggregateApi;
       switch (kind!) {
-        case 'count': return w.getDocumentsCount(params);
-        case 'sum':   return w.getDocumentsSum(params, field!);
-        case 'avg':   return w.getDocumentsAverage(params, field!);
+        case 'count': return sdk.documents.count(query);
+        case 'sum':   return sdk.documents.sum(query, field!);
+        case 'avg':   return sdk.documents.average(query, field!);
       }
     },
-    { enabled, staleTime: LIVE, hasProofVariant: false, methodName, methodParams },
+    {
+      enabled,
+      staleTime: LIVE,
+      withProofFn: async (sdk) => {
+        switch (kind!) {
+          case 'count': return sdk.documents.countWithProof(query);
+          case 'sum':   return sdk.documents.sumWithProof(query, field!);
+          case 'avg':   return sdk.documents.averageWithProof(query, field!);
+        }
+      },
+      methodName,
+      methodParams,
+    },
   );
 }
 

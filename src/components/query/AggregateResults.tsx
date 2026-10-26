@@ -83,7 +83,7 @@ function decodeUtf8(bytes: Uint8Array): string | undefined {
 
 /** GROUP BY map keys arrive as hex-encoded "canonical bytes" of the
  *  splitting property's value (per the wasm-sdk doc comment on
- *  getDocumentsCount). When we know the property schema we decode by type;
+ *  documents.count). When we know the property schema we decode by type;
  *  otherwise we fall back to printable-ASCII / fixed-width-int heuristics. */
 function decodeGroupKey(
   hex: string,

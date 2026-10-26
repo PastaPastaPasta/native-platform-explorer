@@ -269,27 +269,26 @@ describe('buildSdkExample', () => {
   });
 
   it.each([
-    ['count', 'getDocumentsCount'],
-    ['sum', 'getDocumentsSum'],
-    ['avg', 'getDocumentsAverage'],
-  ] as const)('uses the connected WASM SDK for %s', async (select, method) => {
-    const aggregateMethod = vi.fn(async () => new Map([['', 2n]]));
-    const sdk = {
-      connect: vi.fn(),
-      getWasmSdkConnected: vi.fn(async () => ({ [method]: aggregateMethod })),
-    };
+    ['count', 'count', true],
+    ['sum', 'sum', true],
+    ['avg', 'average', true],
+    ['count', 'count', false],
+    ['avg', 'average', false],
+  ] as const)('uses the documents facade for %s (%s, trusted %s)', async (select, method, trusted) => {
+    const plain = vi.fn(async () => new Map([['', 2n]]));
+    const withProof = vi.fn(async () => ({ data: new Map([['', 2n]]) }));
+    const sdk = { connect: vi.fn(), documents: { [method]: plain, [`${method}WithProof`]: withProof } };
     const parsed = {
       ...documentQuery,
       select,
       aggregateField: select === 'count' ? undefined : 'amount',
     };
-    const example = buildSdkExample(parsed, params, 'mainnet', true);
+    const example = buildSdkExample(parsed, params, 'mainnet', trusted);
     await executeExample(example, sdk);
-    expect(sdk.getWasmSdkConnected).toHaveBeenCalledOnce();
-    expect(aggregateMethod.mock.calls[0]).toEqual(
-      select === 'count' ? [params] : [params, 'amount'],
-    );
-    expect(example).toContain('WASM aggregate path without proof capture');
+    const called = trusted ? withProof : plain;
+    expect((trusted ? plain : withProof)).not.toHaveBeenCalled();
+    expect(called.mock.calls[0]).toEqual(select === 'count' ? [params] : [params, 'amount']);
+    expect(example).not.toContain('getWasmSdkConnected');
   });
 
   it('quotes query parameter strings so pasted code cannot execute their content', async () => {

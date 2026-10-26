@@ -9,7 +9,7 @@ export type { AggregateKind };
 
 export interface ParsedQuery {
   /** `'documents'` is the regular SELECT *; the others are aggregate queries
-   *  that hit the new wasm-sdk `getDocuments{Count,Sum,Average}` primitives. */
+   *  run through the SDK's documents count / sum / average facade. */
   select: 'documents' | AggregateKind;
   /** For SUM(field) / AVG(field) — the integer property to aggregate. Always
    *  unset for COUNT / documents. */
