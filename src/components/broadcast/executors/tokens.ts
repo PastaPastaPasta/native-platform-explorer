@@ -341,6 +341,8 @@ interface SignedActions {
   ownPending: string[];
   /** Lowest height the two reads were proved at, if both reported one. */
   height?: bigint;
+  /** The ACTIVE page was not full, so no pending matching action can be missing. */
+  activeComplete: boolean;
   /** Neither page was full, so no matching action can be missing. */
   complete: boolean;
 }
@@ -359,6 +361,7 @@ async function signedMatchingActions(sdk: EvoSDK, options: TokenOperationOptions
     signed: new Map([...mine(active!.actions), ...mine(closed!.actions)].map((a) => [a.actionId, a.proposerId])),
     ownPending: mine(active!.actions).filter((a) => a.proposerId === options.signerId).map((a) => a.actionId),
     height: heights.every((h) => h !== undefined) ? (heights[0]! < heights[1]! ? heights[0] : heights[1]) : undefined,
+    activeComplete: active!.complete,
     complete: active!.complete && closed!.complete,
   };
 }
@@ -380,10 +383,15 @@ async function confirmGroupSignature(
     const after = await signedMatchingActions(sdk, options).catch(() => undefined);
     if (!after?.complete || after.height === undefined || after.height <= before.height) continue;
     const added = [...after.signed].filter(([id]) => !before.signed.has(id));
+    // A newer read may still predate the write's block: keep waiting until it shows.
     const group = options.group;
-    if (group?.mode === 'cosign') return added.some(([id]) => id === group.actionId) ? group.actionId : undefined;
+    if (group?.mode === 'cosign') {
+      if (added.some(([id]) => id === group.actionId)) return group.actionId;
+      continue;
+    }
     const proposed = added.filter(([, proposer]) => proposer === options.signerId);
-    return proposed.length === 1 ? proposed[0]![0] : undefined;
+    if (proposed.length === 1) return proposed[0]![0];
+    if (proposed.length > 1) return undefined;
   }
   return undefined;
 }
@@ -419,6 +427,12 @@ export async function executeTokenOperation(args: ExecuteArgs<TokenOperationOpti
       // Group actions the signer already signed, to recognise a new signature
       // afterwards and to refuse proposing the same action twice.
       const signedBefore = options.group ? await signedMatchingActions(sdk, options) : undefined;
+      // Closed actions are never removed, so only a full ACTIVE page can hide a duplicate.
+      if (options.group?.mode === 'propose' && !signedBefore?.activeComplete)
+        throw new Error(
+          `Group #${options.group.groupPosition} has too many actions to check for an identical pending proposal. ` +
+            'Co-sign the pending action instead, or wait for some to close.',
+        );
       if (options.group?.mode === 'propose' && signedBefore?.ownPending.length)
         throw new Error(
           `You already proposed this exact action: group action ${signedBefore.ownPending[0]} is pending. ` +

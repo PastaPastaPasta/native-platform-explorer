@@ -12,6 +12,7 @@ import { parseActionTakers } from './model';
 import { toUnsignedBigInt } from '@util/numbers';
 import {
   CHANGE_RULES,
+  configChangeIdentityIds,
   ruleItemName,
   sortTiers,
   type ChangeRule,
@@ -232,5 +233,6 @@ export function cosignIdentityIds(parameters: CosignParameters | null): string[]
     'recipientId' in parameters ? parameters.recipientId : undefined,
     'targetIdentityId' in parameters ? parameters.targetIdentityId : undefined,
     parameters.kind === 'burn' ? parameters.burnFromId : undefined,
+    ...(parameters.kind === 'configUpdate' ? configChangeIdentityIds(parameters.change) : []),
   ].filter((id): id is string => !!id);
 }

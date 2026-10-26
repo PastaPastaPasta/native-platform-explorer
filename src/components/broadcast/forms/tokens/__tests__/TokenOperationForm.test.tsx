@@ -16,11 +16,11 @@ import {
   snapshot as makeSnapshot,
 } from '../../../tokens/__tests__/fixtures';
 
-const state = vi.hoisted(() => ({ snapshot: undefined as TokenSnapshot | undefined, actions: new Map() }));
+const state = vi.hoisted(() => ({ snapshot: undefined as TokenSnapshot | undefined, actions: new Map(), keys: [] as unknown[][] }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams({ token: TOKEN_ID }) }));
 vi.mock('@sdk/hooks', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  useSdkQuery: (key: unknown[]) => ({
+  useSdkQuery: (key: unknown[]) => (state.keys.push(key), {
     data: key[1] === 'target' ? { tokenId: TOKEN_ID, contractId: CONTRACT_ID, position: 0 } : state.snapshot,
     isLoading: false,
     isFetching: false,
@@ -137,5 +137,15 @@ describe('TokenOperationForm', () => {
     fireEvent.change(screen.getByRole('combobox', { name: 'Configuration item' }), { target: { value: 'maxSupply' } });
     fireEvent.change(screen.getByRole('textbox', { name: 'New max supply' }), { target: { value: '0.5' } });
     expect(await screen.findByText(/below the current total supply/)).toBeInTheDocument();
+  });
+
+  it('loads the identity a configuration change names before it can be reviewed', async () => {
+    const onOptionsChange = renderForm('configUpdate');
+    fireEvent.change(screen.getByRole('combobox', { name: 'Configuration item' }), { target: { value: 'newTokensDestinationIdentity' } });
+    fireEvent.change(screen.getByRole('textbox', { name: 'Destination identity' }), { target: { value: MEMBER } });
+    await waitFor(() =>
+      expect(onOptionsChange).toHaveBeenLastCalledWith(expect.objectContaining({ change: { item: 'newTokensDestinationIdentity', value: MEMBER } })),
+    );
+    expect(state.keys.some((key) => key[1] === 'snapshot' && key.includes(MEMBER))).toBe(true);
   });
 });

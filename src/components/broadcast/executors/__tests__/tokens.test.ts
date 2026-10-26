@@ -65,6 +65,11 @@ vi.mock('@dashevo/evo-sdk', () => {
   };
 });
 
+// The protocol version guard is unit-tested in protocol-version.test.ts; here it
+// passes unless a test makes it fail.
+const assertWritable = vi.hoisted(() => vi.fn());
+vi.mock('@sdk/protocol-version', () => ({ assertWritableProtocolVersion: assertWritable }));
+
 interface SdkState {
   config?: Record<string, unknown>;
   paused?: boolean;
@@ -148,6 +153,7 @@ async function run(options: TokenOperationOptions, state?: SdkState, identityId 
 }
 
 beforeEach(() => {
+  assertWritable.mockReset().mockResolvedValue(14);
   POST_WRITE_READ.attempts = 3;
   POST_WRITE_READ.delayMs = 0;
 });
@@ -276,6 +282,13 @@ describe('token executors', () => {
     expect(write).not.toHaveBeenCalled();
   });
 
+  it('does not submit when the network protocol cannot be confirmed', async () => {
+    assertWritable.mockRejectedValue(new Error('Could not read the protocol version'));
+    const { result, write } = await run({ ...base, kind: 'burn', amount: 1n });
+    await expect(result).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    expect(write).not.toHaveBeenCalled();
+  });
+
   it('refuses inputs built for another identity', async () => {
     const { result, write } = await run({ ...base, kind: 'burn', amount: 1n }, {}, MEMBER);
     await expect(result).rejects.toThrow(/built for another identity/);
@@ -320,7 +333,7 @@ describe('token executors', () => {
     });
 
     /** The SDK cannot verify the write; afterwards the group shows `after` (ACTIVE). */
-    function unverifiedProposal(after: Array<[string, unknown, Map<string, bigint>]>, page = 0) {
+    function unverifiedProposal(after: Array<[string, unknown, Map<string, bigint>]>, page = 0, pageStatus = 'ACTIVE') {
       const { sdk, write } = mockSdk();
       write.mockRejectedValue({ name: 'DriveProofError', message: 'Expected document in group action result' });
       const filler: Array<[string, unknown]> = Array.from({ length: page }, (_, i) => [`filler-${i}`, { toJSON: () => ({ event: {} }) }]);
@@ -330,7 +343,7 @@ describe('token executors', () => {
         const shown = reads > 2 && status === 'ACTIVE' ? after : [];
         return {
           data: new Map<string, { toJSON: () => unknown }>([
-            ...(filler as Array<[string, { toJSON: () => unknown }]>),
+            ...(status === pageStatus ? (filler as Array<[string, { toJSON: () => unknown }]>) : []),
             ...shown.map(([id, json]): [string, { toJSON: () => unknown }] => [id, { toJSON: () => json }]),
           ]),
           metadata: { height: 100 + reads },
@@ -353,8 +366,32 @@ describe('token executors', () => {
       const { signer } = signerFor();
       const other = unverifiedProposal([[ACTION_ID, theirs, new Map([[MEMBER, 1n], [OWNER, 1n]])]]);
       await expect(executeTokenOperation({ sdk: other.sdk as never, signer, options: propose })).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
+      // A full page may hide an identical pending proposal: refuse before signing.
       const full = unverifiedProposal([[ACTION_ID, MAX_SUPPLY_ACTION, new Map([[OWNER, 1n]])]], 100);
-      await expect(executeTokenOperation({ sdk: full.sdk as never, signer, options: propose })).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
+      await expect(executeTokenOperation({ sdk: full.sdk as never, signer, options: propose })).rejects.toThrow(/too many actions/);
+      expect(full.write).not.toHaveBeenCalled();
+    });
+
+    it('still proposes when only the closed actions fill a page, leaving the outcome unknown', async () => {
+      const { signer } = signerFor();
+      const closed = unverifiedProposal([[ACTION_ID, MAX_SUPPLY_ACTION, new Map([[OWNER, 1n]])]], 100, 'CLOSED');
+      await expect(executeTokenOperation({ sdk: closed.sdk as never, signer, options: propose })).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
+      expect(closed.write).toHaveBeenCalledOnce();
+    });
+
+    it('keeps reading when a newer proof does not show the write yet', async () => {
+      const { sdk } = unverifiedProposal([[ACTION_ID, MAX_SUPPLY_ACTION, new Map([[OWNER, 1n]])]]);
+      const original = sdk.group.actionsWithProof.getMockImplementation()!;
+      let reads = 0;
+      // The first post-write pair is newer but empty, as from a node one block behind the write.
+      sdk.group.actionsWithProof.mockImplementation(async (query: { status: 'ACTIVE' | 'CLOSED' }) => {
+        reads += 1;
+        const response = await original(query);
+        return reads === 3 || reads === 4 ? { ...response, data: new Map() } : response;
+      });
+      const { signer } = signerFor();
+      const value = await executeTokenOperation({ sdk: sdk as never, signer, options: propose });
+      expect(value.group).toMatchObject({ actionId: ACTION_ID });
     });
 
     it('refuses to propose an action the signer already has pending', async () => {

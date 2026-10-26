@@ -17,6 +17,7 @@ import { buildTokenDraft, EMPTY_FIELDS, type GroupChoice, type TokenFormFields }
 import {
   DISTRIBUTION_KINDS,
   GROUP_OPERATIONS,
+  configChangeIdentityIds,
   type TokenDistributionKind,
   type TokenOperationKind,
   type TokenOperationOptions,
@@ -91,6 +92,11 @@ export function TokenOperationForm({ kind, signer, onOptionsChange }: TokenOpera
   const recipientId = isBase58Identifier(fields.recipient.trim()) ? fields.recipient.trim() : undefined;
   const targetId = isBase58Identifier(fields.target.trim()) ? fields.target.trim() : undefined;
   const cosigning = groupMode === 'cosign' && isBase58Identifier(actionId);
+  // Identities a configuration change names must exist; load them with the rest.
+  const changeIds =
+    kind === 'configUpdate' && fields.change && typeof fields.change !== 'string'
+      ? configChangeIdentityIds(fields.change)
+      : [];
   const baseQ = useSdkQuery<TokenSnapshot>(
     ['tokenWrite', 'snapshot', target?.tokenId, signerId],
     (sdk) => loadTokenSnapshot(sdk, { target: target!, holderIds: [signerId] }),
@@ -123,13 +129,14 @@ export function TokenOperationForm({ kind, signer, onOptionsChange }: TokenOpera
       signerId,
       recipientId,
       targetId,
+      changeIds.join(','),
       kind === 'directPurchase',
       effectiveMode === 'cosign' ? `${groupPosition}/${actionId}` : '',
     ],
     (sdk) =>
       loadTokenSnapshot(sdk, {
         target: target!,
-        holderIds: [signerId, recipientId, targetId].filter((id): id is string => !!id),
+        holderIds: [signerId, recipientId, targetId, ...changeIds].filter((id): id is string => !!id),
         creditsOf: kind === 'directPurchase' ? signerId : undefined,
         cosign:
           effectiveMode === 'cosign' && cosigning && groupPosition !== undefined

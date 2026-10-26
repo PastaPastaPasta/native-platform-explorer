@@ -220,3 +220,12 @@ export function tokenKindFromOperationId(id: string): TokenOperationKind | undef
     ? (kind as TokenOperationKind)
     : undefined;
 }
+
+/** Identities a configuration change names, which Platform requires to exist. */
+export function configChangeIdentityIds(change: TokenConfigChange): string[] {
+  if (change.item === 'newTokensDestinationIdentity') return change.value ? [change.value] : [];
+  if (change.item === 'rule') return change.takers.type === 'identity' ? [change.takers.identityId] : [];
+  if (change.item === 'perpetualDistribution' && change.value?.recipient.type === 'identity')
+    return [change.value.recipient.identityId];
+  return [];
+}

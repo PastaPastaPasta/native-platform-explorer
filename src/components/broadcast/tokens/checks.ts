@@ -14,6 +14,7 @@ import { fingerprint } from '../fingerprint';
 import {
   CHANGE_RULES,
   DISTRIBUTION_KINDS,
+  configChangeIdentityIds,
   GROUP_OPERATIONS,
   type TokenConfigChange,
   type TokenDistributionKind,
@@ -21,15 +22,6 @@ import {
   type TokenOperationOptions,
 } from './options';
 import type { TokenSnapshot } from './state';
-
-/** Identities a configuration change names, which Platform requires to exist. */
-function configChangeIdentityIds(change: TokenConfigChange): string[] {
-  if (change.item === 'newTokensDestinationIdentity') return change.value ? [change.value] : [];
-  if (change.item === 'rule') return change.takers.type === 'identity' ? [change.takers.identityId] : [];
-  if (change.item === 'perpetualDistribution' && change.value?.recipient.type === 'identity')
-    return [change.value.recipient.identityId];
-  return [];
-}
 
 /** Identities whose existence, balance or frozen state the operation depends on. */
 export function holderIdsFor(options: TokenOperationOptions): string[] {
