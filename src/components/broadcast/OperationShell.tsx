@@ -647,13 +647,17 @@ export function OperationShell<TOptions, TResult>({
                   size="sm"
                   variant="outline"
                   alignSelf="flex-start"
-                  onClick={() =>
+                  onClick={() => {
+                    // Confirm only the key on screen, not one a pending refresh selected.
+                    const shown = describeKey(reviewSigningKey.key!);
                     setReviewKey((current) =>
-                      current?.key ? { ...current, confirmed: describeKey(current.key) } : current,
-                    )
-                  }
+                      current?.key && describeKey(current.key) === shown
+                        ? { ...current, confirmed: shown }
+                        : current,
+                    );
+                  }}
                 >
-                  Sign with key #{reviewSigningKey.key.id}
+                  Use key #{reviewSigningKey.key.id}
                 </Button>
               </VStack>
             ) : null}

@@ -1,4 +1,5 @@
 import { readdirSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { OPERATIONS, findOperationById } from '../operations';
 
@@ -6,11 +7,13 @@ const FORMS_DIR = 'src/components/broadcast/forms';
 
 /** Exported form components whose source collects a secret through SecretInput. */
 function formsWithSecretFields(): string[] {
-  return readdirSync(FORMS_DIR)
-    .filter((file) => file.endsWith('.tsx'))
-    .map((file) => readFileSync(`${FORMS_DIR}/${file}`, 'utf8'))
+  return readdirSync(FORMS_DIR, { recursive: true, encoding: 'utf8' })
+    .filter((file) => file.endsWith('.tsx') && !file.includes('__tests__'))
+    .map((file) => readFileSync(join(FORMS_DIR, file), 'utf8'))
     .filter((source) => source.includes('<SecretInput'))
-    .flatMap((source) => [...source.matchAll(/export function (\w+Form)\b/g)].map((m) => m[1]!));
+    .flatMap((source) =>
+      [...source.matchAll(/export (?:function|const) (\w+Form)\b/g)].map((m) => m[1]!),
+    );
 }
 
 describe('operation secret declarations', () => {

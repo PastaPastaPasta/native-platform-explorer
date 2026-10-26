@@ -496,7 +496,7 @@ describe('OperationShell', () => {
       );
       expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeDisabled();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Sign with key #3' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Use key #3' }));
       expect(screen.queryByRole('alert')).not.toBeInTheDocument();
       broadcast();
       await screen.findByText('Broadcast succeeded');
@@ -635,7 +635,7 @@ describe('OperationShell', () => {
         () => Promise.reject(new BroadcastOutcomeUnknownError(new Error('timeout'))),
         'Outcome unknown.',
       ],
-    ])('keeps no inputs once execution settles (%s)', async (_, outcome, settled) => {
+    ])('keeps no inputs in React state or the DOM once execution settles (%s)', async (_, outcome, settled) => {
       const execute = vi.fn((args: { options: TestOptions }) => {
         expect(args.options.secret).toBe(WIF);
         return outcome();

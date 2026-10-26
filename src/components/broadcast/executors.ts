@@ -179,9 +179,13 @@ function reviewedKeyUnavailable(keyId: number, cause: unknown): string {
       'Reconnect it on /wallet, then build and review the operation again.'
     );
   if (cause instanceof SignerUnavailableError)
-    return `The signer could not prepare key #${keyId} (${reason}). Check the signer and try again.`;
+    return (
+      `The signer could not prepare key #${keyId} (${reason}). ` +
+      'Check the identity, network and signer, then try again.'
+    );
+  // Usually a failed Platform read of the identity's keys; it may also be a local error.
   return (
-    `Could not load key #${keyId} from Platform before signing (${reason}). ` +
+    `Could not prepare key #${keyId} for signing (${reason}). ` +
     'Check the connection and try again.'
   );
 }

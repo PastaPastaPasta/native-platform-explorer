@@ -169,7 +169,7 @@ describe('broadcast executors', () => {
         new SignerUnavailableError('Identity not found on the current network.'),
         /signer could not prepare key #3 \(Identity not found/,
       ],
-      [new Error('Failed to fetch'), /Could not load key #3 from Platform before signing \(Failed to fetch\)/],
+      [new Error('Failed to fetch'), /Could not prepare key #3 for signing \(Failed to fetch\)/],
     ])('fails as not submitted, naming the cause, when it cannot be prepared (%s)', async (cause, message) => {
       const create = vi.fn();
       const execution = run(createMockSigner({ prepareSdk: vi.fn().mockRejectedValue(cause) }), create);

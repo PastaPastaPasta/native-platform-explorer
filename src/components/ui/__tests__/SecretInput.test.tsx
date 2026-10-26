@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 import { SecretInput } from '../SecretInput';
 
@@ -27,10 +27,21 @@ describe('SecretInput', () => {
 
   it('toggles showing the value', () => {
     renderWithProviders(<SecretInput aria-label="Secret" value="" onChange={() => {}} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Show Secret' }));
-    expect(screen.getByRole('button', { name: 'Hide Secret' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    );
+    const toggle = screen.getByRole('button', { name: 'Show Secret' });
+    fireEvent.click(toggle);
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveTextContent('Hide');
+  });
+
+  it('falls back to a password field where CSS masking is unsupported', () => {
+    vi.stubGlobal('CSS', { supports: () => false });
+    try {
+      renderWithProviders(<SecretInput aria-label="Secret" value="" onChange={() => {}} />);
+      expect(screen.getByLabelText('Secret')).toHaveAttribute('type', 'password');
+      fireEvent.click(screen.getByRole('button', { name: 'Show Secret' }));
+      expect(screen.getByLabelText('Secret')).toHaveAttribute('type', 'text');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
