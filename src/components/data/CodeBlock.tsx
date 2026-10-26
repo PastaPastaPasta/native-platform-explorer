@@ -27,9 +27,9 @@ export function CodeBlock({ value, collapsedHeight = 240, collapsible = true }: 
         borderRadius="md"
         px={1}
       >
-        <Tooltip label="Copy" hasArrow>
+        <Tooltip label="Copy contents" hasArrow>
           <IconButton
-            aria-label="Copy"
+            aria-label="Copy code block contents"
             icon={<CopyIcon />}
             size="xs"
             variant="ghost"

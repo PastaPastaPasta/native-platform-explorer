@@ -1,8 +1,9 @@
 'use client';
 
 import NextLink from 'next/link';
-import { HStack, VStack, Text, Box } from '@chakra-ui/react';
+import { Button, HStack, VStack, Text, Box } from '@chakra-ui/react';
 import { Eyebrow } from '@ui/Eyebrow';
+import { useSortState, useSortedRows, type SortDirection } from '@components/data/SortableTh';
 
 export interface EvonodeBar {
   proTxHash: string;
@@ -30,6 +31,32 @@ function Row({
     >
       {children}
     </HStack>
+  );
+}
+
+type LeaderboardSort = 'blocks' | 'proposer';
+
+function SortHeader({ column, label, sort, onSort, firstDirection }: {
+  column: LeaderboardSort;
+  label: string;
+  sort: { key: LeaderboardSort; direction: SortDirection };
+  onSort: (key: LeaderboardSort, first?: SortDirection) => void;
+  firstDirection: SortDirection;
+}) {
+  const active = sort.key === column;
+  const arrow = active ? (sort.direction === 'asc' ? ' ↑' : ' ↓') : '';
+  return (
+    <Button
+      variant="unstyled"
+      size="xs"
+      height="auto"
+      minW={0}
+      aria-label={`Sort by ${label.toLowerCase()}${active ? `, ${sort.direction === 'asc' ? 'ascending' : 'descending'}` : ''}`}
+      aria-pressed={active}
+      onClick={() => onSort(column, firstDirection)}
+    >
+      <Eyebrow size="9px">{label}{arrow}</Eyebrow>
+    </Button>
   );
 }
 
@@ -68,6 +95,12 @@ export function EvonodesLeaderboard({
   emptyLabel?: string;
 }) {
   const top = entries.slice(0, limit);
+  const { sort, toggle } = useSortState<LeaderboardSort>({ key: 'blocks', direction: 'desc' });
+  const ranked = top.map((e, i) => ({ ...e, position: i }));
+  const sorted = useSortedRows(ranked, sort, {
+    blocks: (e) => e.blocks,
+    proposer: (e) => e.proTxHash,
+  });
   if (top.length === 0) {
     return (
       <Text color="muted" fontSize="sm">
@@ -123,16 +156,16 @@ export function EvonodesLeaderboard({
       <HStack spacing={4} px={2} pb={1.5} borderBottom="1px solid" borderColor="hairline">
         <Box flexShrink={0} w="20px" />
         <Box w={{ base: 'auto', md: '190px' }} flexShrink={0}>
-          <Eyebrow size="9px">Proposer</Eyebrow>
+          <SortHeader column="proposer" label="Proposer" sort={sort} onSort={toggle} firstDirection="asc" />
         </Box>
         <Box flex="1" />
         <Box minW="40px" textAlign="right">
-          <Eyebrow size="9px">Blocks</Eyebrow>
+          <SortHeader column="blocks" label="Blocks" sort={sort} onSort={toggle} firstDirection="desc" />
         </Box>
       </HStack>
 
-      {top.map((e, i) => {
-        const rank = ranks[i];
+      {sorted.map((e) => {
+        const rank = ranks[e.position];
         const isTop = e.blocks === max;
         const pct = Math.max(2, Math.round((e.blocks / max) * 100));
         return (

@@ -11,7 +11,6 @@ import {
   Td,
   Text,
   Textarea,
-  Th,
   Thead,
   Tr,
   VStack,
@@ -21,10 +20,11 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { LoadingCard } from '@ui/LoadingCard';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { BigNumberDisplay } from '@components/data/BigNumber';
+import { SortableTh, useSortState, useSortedRows } from '@components/data/SortableTh';
 import { parseSeededInput, type SeededEntry } from '@util/seededInput';
 import { useSdk } from '@sdk/hooks';
 import { useViewedIdentities } from '@hooks/useViewedIdentities';
-import { WELL_KNOWN } from '@constants/well-known';
+import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 
 export interface SeededHoldersFormProps {
   tokenId: string;
@@ -33,6 +33,7 @@ export interface SeededHoldersFormProps {
 export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
   const { sdk, status } = useSdk();
   const { ids: viewedIds } = useViewedIdentities();
+  const wellKnownIdentities = useWellKnownEntries('identity');
   const [text, setText] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -81,6 +82,12 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
     }
   };
 
+  const { sort, toggle } = useSortState<'identity' | 'balance'>({ key: 'balance', direction: 'desc' });
+  const sortedRows = useSortedRows(rows, sort, {
+    identity: (r) => r.label,
+    balance: (r) => r.balance,
+  });
+
   const entries: SeededEntry[] = parseSeededInput(text);
   const invalid = entries.filter((e) => e.kind === 'invalid');
 
@@ -111,15 +118,15 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
             >
               Add viewed identities ({viewedIds.length})
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() =>
-                addList(WELL_KNOWN.filter((w) => w.kind === 'identity').map((w) => w.id))
-              }
-            >
-              Add well-known
-            </Button>
+            {wellKnownIdentities.length > 0 ? (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => addList(wellKnownIdentities.map((w) => w.id))}
+              >
+                Add well-known ({wellKnownIdentities.length})
+              </Button>
+            ) : null}
             <Box flex="1" />
             <Button
               size="sm"
@@ -153,12 +160,12 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
             <Table size="sm">
               <Thead>
                 <Tr>
-                  <Th color="gray.400" borderColor="gray.750">Identity</Th>
-                  <Th color="gray.400" borderColor="gray.750" isNumeric>Balance</Th>
+                  <SortableTh column="identity" sort={sort} onSort={toggle} color="gray.400" borderColor="gray.750">Identity</SortableTh>
+                  <SortableTh column="balance" sort={sort} onSort={toggle} firstDirection="desc" color="gray.400" borderColor="gray.750" isNumeric>Balance</SortableTh>
                 </Tr>
               </Thead>
               <Tbody>
-                {rows.map((r) => (
+                {sortedRows.map((r) => (
                   <Tr key={r.id} _hover={{ bg: 'gray.800' }}>
                     <Td borderColor="gray.750">
                       <IdentityLink id={r.id} dense />

@@ -3,7 +3,7 @@
 import { Box, HStack, Text } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import { minidenticon } from 'minidenticons';
-import { useMemo } from 'react';
+import { useMemo, type HTMLAttributes } from 'react';
 import { CopyButton } from '@ui/CopyButton';
 
 export type IdentifierHighlight =
@@ -23,6 +23,29 @@ export interface IdentifierProps {
   href?: string;
   as?: 'span' | 'div';
   dense?: boolean;
+  /** Accessible name of the copy button. Defaults to one derived from `href`,
+   *  e.g. "Copy identity ID". */
+  copyLabel?: string;
+  /** Extra props for the link, e.g. prefetch handlers. */
+  linkProps?: HTMLAttributes<HTMLElement>;
+}
+
+const COPY_LABELS: Array<[RegExp, string]> = [
+  [/^\/identity\/lookup\//, 'Copy public-key hash'],
+  [/^\/identity\//, 'Copy identity ID'],
+  [/^\/contract\//, 'Copy contract ID'],
+  [/^\/token\//, 'Copy token ID'],
+  [/^\/evonode\//, 'Copy proTxHash'],
+  [/^\/address\//, 'Copy address'],
+  [/^\/state-transition\//, 'Copy state transition hash'],
+  [/^\/groups\//, 'Copy contract ID'],
+];
+
+export function copyLabelFor(href: string | undefined): string {
+  if (href) {
+    for (const [pattern, label] of COPY_LABELS) if (pattern.test(href)) return label;
+  }
+  return 'Copy identifier';
 }
 
 function splitId(value: string, ellipsis: IdentifierProps['ellipsis']) {
@@ -59,6 +82,8 @@ export function Identifier({
   href,
   as = 'span',
   dense = false,
+  copyLabel,
+  linkProps,
 }: IdentifierProps) {
   const svg = useMemo(() => (avatar ? minidenticon(value || 'null', 80, 60) : null), [value, avatar]);
   const svgDataUrl = useMemo(
@@ -71,6 +96,8 @@ export function Identifier({
       as={as}
       spacing={dense ? 1.5 : 2}
       display="inline-flex"
+      maxW="100%"
+      minW={0}
       fontFamily="mono"
       fontSize={dense ? '2xs' : 'xs'}
       alignItems="center"
@@ -102,10 +129,13 @@ export function Identifier({
         borderRadius="badge"
         border="1px solid"
         borderColor="hairline"
+        minW={0}
+        // Long hashes wrap instead of widening the page on narrow screens.
+        wordBreak="break-all"
       >
         {render(value, highlight, ellipsis)}
       </Box>
-      {copy ? <CopyButton value={value} label="Copy" /> : null}
+      {copy ? <CopyButton value={value} label={copyLabel ?? copyLabelFor(href)} /> : null}
     </HStack>
   );
 
@@ -115,7 +145,10 @@ export function Identifier({
         as={NextLink}
         href={href}
         display="inline-flex"
+        maxW="100%"
+        minW={0}
         _hover={{ filter: 'brightness(1.08)' }}
+        {...linkProps}
       >
         {body}
       </Box>
