@@ -10,7 +10,7 @@ Every registered operation declares its signing path before review. The shell ch
 
 Retrying a failed key check refreshes both the signer card and the operation's capability check. Review stays disabled until the new capability check succeeds; retrying does not submit a transaction.
 
-Form-signed operations (#47) need no connected signer: address operations, asset-lock identity create and top-up, masternode votes and raw broadcast take their keys in the form. The bridge remains available for top-ups without a Core wallet. Changing network or signer resets the external top-up identity as well.
+Form-signed operations (#47) need no connected signer: `addresses.transfer`, `topUpIdentity`, `withdraw`, `fundFromAssetLock` and `createIdentity`, `identity.create` and `identity.topUp` from an asset lock, `voting.castVote`, and `stateTransitions.broadcast` take their keys in the form (or need none). `addresses.transferFromIdentity` still signs with the connected identity. The bridge remains available for top-ups without a Core wallet. Changing network or signer resets the external top-up identity as well.
 
 ## Outcomes
 

@@ -932,6 +932,7 @@ pnpm lint && pnpm typecheck
 pnpm test                      # vitest (test:coverage in CI)
 NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build   # check:sdk-reference, then next build → out/
 pnpm check:bundles             # route JavaScript budgets
+pnpm exec playwright install chromium   # once, before e2e
 pnpm e2e                       # Playwright against the export
 pnpm generate:sdk-reference    # refresh src/data/sdk-reference.json
 ```

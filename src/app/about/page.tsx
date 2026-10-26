@@ -64,8 +64,9 @@ export default function Page() {
           <Text color="gray.250" mb={3}>
             Some reads have no proof: system status, the quorum list (the SDK
             infers each quorum&apos;s type and threshold from its member count, and
-            the explorer marks them as inferred), state-transition results, the
-            local DPNS name checks, and the DASH/USD rate from Coinbase. Those are
+            the explorer marks them as inferred), state-transition results, DPNS name
+            resolution and availability (<code>dpns.resolveName</code>,{' '}
+            <code>dpns.isNameAvailable</code>), the local DPNS name checks, and the DASH/USD rate from Coinbase. Those are
             labeled &quot;No proof&quot;. Network and query errors are shown as
             unavailable; only explicit proof verification errors are labeled as
             failed verification.

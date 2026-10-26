@@ -62,7 +62,7 @@ observed bound. These observations were made on 2026-10-07, at mainnet height
 
 ## SDK version decision and limits
 
-This fix keeps 4.0.0-rc.2 and does not disable verification or retry a
+At the time, this fix kept 4.0.0-rc.2 (since replaced by 5.0.0-rc.8, #45) and did not disable verification or retry a
 cryptographic failure through an unverified transport. An isolated comparison
 with stable 4.1.1 reproduced the same broad-proof failure; upgrading alone is
 not a fix. GroveDB PR 944 raises the width limit in later 4.2 beta packages,

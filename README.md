@@ -47,6 +47,7 @@ pnpm typecheck
 pnpm test                     # vitest (CI runs pnpm test:coverage)
 NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build   # checks the SDK reference, then exports to out/
 pnpm check:bundles            # initial-JavaScript budgets (512 KiB gzip per checked route)
+pnpm exec playwright install chromium   # once, before the first e2e run
 pnpm e2e                      # Playwright (Chromium) against the export
 pnpm generate:sdk-reference   # update the page-to-SDK-call mapping after source changes
 ```
