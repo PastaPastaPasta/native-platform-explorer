@@ -14,9 +14,9 @@ Top-up runs in the external bridge and has no explorer broadcast button. Raw tra
 
 ## Outcomes
 
-- **Not submitted:** preparation, local validation, prerequisite read, or session checks failed before entering a write method. The user may return to Build and perform a fresh review.
+- **Not submitted:** preparation, local validation, prerequisite read, or session checks failed before entering a write method, or the write method rejected its options with an SDK `InvalidArgument`/`NotImplemented` error. In the pinned SDK those kinds are raised only while reading options, before any request, and are never mapped from network errors. The user may return to Build and perform a fresh review.
 - **Succeeded:** the SDK write resolved and the executor produced its receipt. All query variants for the submitted network are invalidated.
-- **Unknown:** a write method failed or receipt construction failed after entering a write method. The SDK does not expose a reliable broadcast boundary or a typed definitive network rejection. The console does not offer Retry or resubmit. It provides affected entity identifiers and Refresh status so the user can investigate first.
+- **Unknown:** a write method failed with any other error, or receipt construction failed after entering a write method. The SDK does not expose a reliable broadcast boundary or a typed definitive network rejection. The console does not offer Retry or resubmit. It provides affected entity identifiers and Refresh status so the user can investigate first.
 
 Unknown does not imply rejection, and a refreshed balance alone may not establish the outcome of one particular transition. No public transaction is sent by regression tests. The SDK does not consistently return a transition identifier, so receipts only show identifiers actually available from prepared entities, options, and results.
 

@@ -11,6 +11,7 @@ import {
 } from '@dashevo/evo-sdk';
 import type { IdentityPublicKeyInCreation } from '@dashevo/evo-sdk';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
+import { OperationNotSubmittedError, submitOperation } from '../outcomes';
 import {
   executeContractUpdate,
   executeIdentityCreditWithdrawal,
@@ -212,4 +213,12 @@ describe('executors with the real WASM SDK', () => {
       expect(creditWithdrawal).not.toHaveBeenCalled();
     },
   );
+
+  it('treats a real SDK argument error from a write call as not submitted', async () => {
+    const error = await submitOperation(async () => {
+      PrivateKey.fromWIF('not-a-wif');
+    }, {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OperationNotSubmittedError);
+    expect((error as Error).message).toMatch(/InvalidArgument/);
+  });
 });

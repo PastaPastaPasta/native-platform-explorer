@@ -52,4 +52,23 @@ describe('transaction outcome messages', () => {
       recipientId: 'r',
     });
   });
+
+  it.each([
+    ['InvalidArgument', OperationNotSubmittedError],
+    ['NotImplemented', OperationNotSubmittedError],
+    ['DapiClientError', BroadcastOutcomeUnknownError],
+    ['TimeoutReached', BroadcastOutcomeUnknownError],
+    ['StateTransitionBroadcastError', BroadcastOutcomeUnknownError],
+    ['Generic', BroadcastOutcomeUnknownError],
+  ])('classifies SDK %s raised by a write call', async (name, expected) => {
+    const cause = { name, kind: 0, message: 'boom' };
+    const error = await submitOperation(() => Promise.reject(cause), {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(expected);
+  });
+
+  it('does not trust an ordinary Error that merely claims a local error name', async () => {
+    const cause = Object.assign(new Error('Invalid'), { name: 'InvalidArgument' });
+    const error = await submitOperation(() => Promise.reject(cause), {}).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
+  });
 });
