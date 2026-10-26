@@ -142,7 +142,10 @@ export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<Contr
                 size="xs"
                 variant="ghost"
                 onClick={() => {
-                  if (contractQuery.data) resetToOnChain(contractQuery.data);
+                  // Refetch: the contract may have changed since the form loaded it.
+                  void contractQuery.refetch().then((result) => {
+                    if (result.data) resetToOnChain(result.data);
+                  });
                 }}
               >
                 Reset to on-chain

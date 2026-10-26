@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 import { createMockSigner } from '@/test/signer';
@@ -15,7 +15,11 @@ vi.mock('next/navigation', () => ({
 }));
 vi.mock('@sdk/hooks', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  useSdkQuery: (key: string[]) => ({ data: contracts.get(key[1] ?? ''), isLoading: false }),
+  useSdkQuery: (key: string[]) => ({
+    data: contracts.get(key[1] ?? ''),
+    isLoading: false,
+    refetch: async () => ({ data: contracts.get(key[1] ?? '') }),
+  }),
 }));
 
 beforeEach(() => {
@@ -68,7 +72,7 @@ describe('JSON operation forms', () => {
 
   it.each(['{"draft":{"type":"object"}}', '{unfinished'])(
     'preserves schema edits when the current recent contract is selected: %s',
-    (draft) => {
+    async (draft) => {
       contracts.set(contractA, { documentSchemas: { first: { type: 'object' } } });
       window.localStorage.setItem(
         'npe:recentContracts',
@@ -86,8 +90,10 @@ describe('JSON operation forms', () => {
       expect(options.onOptionsChange.mock.lastCall).toEqual(lastOptions);
 
       fireEvent.click(screen.getByRole('button', { name: 'Reset to on-chain' }));
-      expect(screen.getByRole('textbox', { name: 'Document schemas' })).toHaveValue(
-        JSON.stringify({ first: { type: 'object' } }, null, 2),
+      await waitFor(() =>
+        expect(screen.getByRole('textbox', { name: 'Document schemas' })).toHaveValue(
+          JSON.stringify({ first: { type: 'object' } }, null, 2),
+        ),
       );
     },
   );
@@ -113,7 +119,7 @@ describe('JSON operation forms', () => {
     });
   });
 
-  it('loads on-chain definitions and the base version into contract updates', () => {
+  it('loads on-chain definitions and the base version into contract updates', async () => {
     const defs = { title: { type: 'string', maxLength: 63 } };
     contracts.set(contractA, {
       version: 4,
@@ -140,8 +146,15 @@ describe('JSON operation forms', () => {
     expect(options.onOptionsChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ definitions: null }),
     );
+    // Reset refetches, so a newer on-chain version replaces the stale base.
+    contracts.set(contractA, {
+      version: 5,
+      documentSchemas: { first: { type: 'object' } },
+      toJSON: () => ({ schemaDefs: defs }),
+    });
     fireEvent.click(screen.getByRole('button', { name: 'Reset to on-chain' }));
-    expect(definitions).toHaveValue(JSON.stringify(defs, null, 2));
+    await waitFor(() => expect(definitions).toHaveValue(JSON.stringify(defs, null, 2)));
+    expect(screen.getByText(/Publishes version 6 \(on-chain version 5\)/)).toBeInTheDocument();
   });
 
   it('registers contracts with optional definitions', () => {
