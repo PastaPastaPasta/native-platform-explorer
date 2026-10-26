@@ -28,7 +28,7 @@ function writeFixture(t, files) {
 }
 
 // The shape of Next 16's minified webpack chunk loader.
-const RUNTIME = '(()=>{var o={};c.l=(e,t,r,n)=>{var a;(a=document.createElement("script")).charset="utf-8",a.setAttribute("data-webpack","_N_E:"+r),a.src=c.tu(e),document.head.appendChild(a)}})();';
+const runtime = (basePath = '') => `(()=>{var o={};c.p="${basePath}/_next/",c.l=(e,t,r,n)=>{var a;(a=document.createElement("script")).charset="utf-8",a.setAttribute("data-webpack","_N_E:"+r),a.src=c.tu(e),document.head.appendChild(a)}})();`;
 
 test('integrity attributes cover scripts, stylesheets and script preloads under the base path', () => {
   const html = [
@@ -63,7 +63,7 @@ test('the policy allows only self scripts plus the listed inline hashes', () => 
   const policy = contentSecurityPolicy(['sha256-b', 'sha256-a', 'sha256-a']);
   assert.match(policy, /script-src 'self' 'wasm-unsafe-eval' 'sha256-a' 'sha256-b';/);
   assert.doesNotMatch(policy, /script-src[^;]*unsafe-inline/);
-  for (const directive of ["default-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "img-src 'self' data:", "connect-src 'self' https:", "worker-src 'self' blob:"]) {
+  for (const directive of ["default-src 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'", "img-src 'self' data:", "connect-src 'self' https: http://localhost:* http://127.0.0.1:*;", "worker-src 'self' blob:"]) {
     assert.ok(policy.includes(directive), directive);
   }
 });
@@ -76,18 +76,19 @@ test('the CSP and build meta go right after the charset, before any script', () 
   assert.throws(() => injectHeadMeta('<html><head><title>x</title></head>', 'x', 'abc'), /no <head>/);
 });
 
-test('the patched webpack runtime sets integrity on the chunk scripts it inserts', () => {
-  const patched = patchWebpackRuntime(RUNTIME, { '/app/_next/static/chunks/sdk.js': 'sha256-sdk' });
+test('the patched webpack runtime sets integrity on the chunk scripts it inserts, failing closed', () => {
+  const patched = patchWebpackRuntime(runtime('/app'), { '/app/_next/static/chunks/app/[x]/sdk.js': 'sha256-sdk' }, '/app');
   const appended = [];
   const self = {};
   const element = () => ({ setAttribute() {}, set src(value) { this._src = value; } });
-  const c = { tu: (url) => url };
-  vm.runInNewContext(`${patched};c.l("/app/_next/static/chunks/sdk.js?v=1");c.l("/app/_next/static/chunks/other.js")`, {
-    self, c, document: { createElement: element, head: { appendChild: (node) => appended.push(node) } },
+  vm.runInNewContext(`var c={tu:(url)=>url};${patched};c.l("/app/_next/static/chunks/app/%5Bx%5D/sdk.js?v=1");c.l("/app/_next/static/chunks/evil.js")`, {
+    self, document: { createElement: element, head: { appendChild: (node) => appended.push(node) } },
   });
   assert.equal(appended[0].integrity, 'sha256-sdk');
-  assert.equal(appended[1].integrity, '');
+  // A well-formed hash nothing matches: an empty value would disable the check.
+  assert.match(appended[1].integrity, /^sha256-A{43}=$/);
   assert.throws(() => patchWebpackRuntime('(()=>{})()', {}), /found 0/);
+  assert.throws(() => patchWebpackRuntime(runtime(''), {}, '/app'), /public path is not "\/app\/_next\/"/);
 });
 
 test('hardenExport writes SRI, CSP, the service worker and a complete integrity manifest', (t) => {
@@ -98,8 +99,9 @@ test('hardenExport writes SRI, CSP, the service worker and a complete integrity 
     'out/offline/index.html': page('offline'),
     'out/query/index.html': page('query'),
     'out/_next/static/css/a.css': 'body{}',
-    'out/_next/static/chunks/webpack-1.js': RUNTIME,
+    'out/_next/static/chunks/webpack-1.js': runtime('/app'),
     'out/_next/static/chunks/sdk.js': 'sdk()',
+    'out/_next/static/media/parser.wasm': 'wasm',
     'out/_next/static/media/a.woff2': 'font',
   });
   const outDir = path.join(dir, 'out');
@@ -107,26 +109,26 @@ test('hardenExport writes SRI, CSP, the service worker and a complete integrity 
   const manifest = hardenExport({ outDir, nextDir: path.join(dir, 'next'), env });
   const read = (file) => readFileSync(path.join(outDir, file), 'utf8');
 
-  const runtime = Object.keys(manifest.files).find((file) => file.includes('/webpack-'));
-  const patched = read(runtime);
-  assert.equal(runtime, `_next/static/chunks/webpack-${createHash('sha256').update(patched).digest('hex').slice(0, 16)}.js`);
+  const runtimeFile = Object.keys(manifest.files).find((file) => file.includes('/webpack-'));
+  const patched = read(runtimeFile);
+  assert.equal(runtimeFile, `_next/static/chunks/webpack-${createHash('sha256').update(patched).digest('hex').slice(0, 16)}.js`);
   assert.ok(!('_next/static/chunks/webpack-1.js' in manifest.files));
-  assert.match(patched, /^self\.__NPE_SRI__=\{"\/app\/_next\/static\/chunks\/sdk\.js":"sha256-/);
+  assert.match(patched, /^self\.__NPE_SRI__=\{"\/app\/_next\/static\/chunks\/sdk\.js":"sha256-[^"]+","\/app\/_next\/static\/media\/parser\.wasm":"sha256-/);
   const query = read('query/index.html');
-  assert.ok(query.includes(`<script src="/app/${runtime}" async="" integrity="${sri(patched)}">`));
+  assert.ok(query.includes(`<script src="/app/${runtimeFile}" async="" integrity="${sri(patched)}">`));
   assert.ok(query.includes(`'${sha('query')}'`));
   assert.ok(query.includes('<meta name="npe-build" content="build-1"/>'));
 
   const config = JSON.parse(read('sw.js').match(/^const CONFIG = (.*);$/m)[1]);
   assert.equal(config.buildId, 'build-1');
-  assert.deepEqual(config.shell, ['', 'offline/', '_next/static/css/a.css', runtime]);
+  assert.deepEqual(config.shell, ['', 'offline/', '_next/static/css/a.css', runtimeFile]);
   assert.equal(config.assets['_next/static/chunks/sdk.js'], sri('sdk()'));
-  assert.equal(config.assets[runtime], sri(patched));
+  assert.equal(config.assets[runtimeFile], sri(patched));
   assert.ok(!config.shell.includes('_next/static/chunks/sdk.js'));
 
   assert.equal(manifest.buildId, 'build-1');
   assert.equal(manifest.basePath, '/app');
-  assert.deepEqual(manifest.env, { NEXT_PUBLIC_BASE_PATH: '/app', NEXT_PUBLIC_BRIDGE_URL: 'https://bridge.example' });
+  assert.deepEqual(manifest.env, { NEXT_PUBLIC_BRIDGE_URL: 'https://bridge.example' });
   assert.ok(!('integrity.json' in manifest.files));
   for (const file of ['sw.js', '.nojekyll', 'Fraunces-OFL.txt', 'JetBrainsMono-OFL.txt', 'index.html', '_next/static/chunks/sdk.js']) {
     assert.equal(manifest.files[file], sri(readFileSync(path.join(outDir, file))), file);
@@ -140,7 +142,7 @@ test('NEXT_PUBLIC_SERVICE_WORKER=off ships the unregistering worker', (t) => {
     'next/BUILD_ID': 'b',
     'out/index.html': page,
     'out/offline/index.html': page,
-    'out/_next/static/chunks/webpack-1.js': RUNTIME,
+    'out/_next/static/chunks/webpack-1.js': runtime(),
   });
   const manifest = hardenExport({ outDir: path.join(dir, 'out'), nextDir: path.join(dir, 'next'), env: { NEXT_PUBLIC_SERVICE_WORKER: 'off' } });
   assert.equal(manifest.serviceWorker, 'off');

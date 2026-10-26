@@ -2,7 +2,9 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { copyFileSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import vm from 'node:vm';
 
 // Postbuild hardening for the static export (PRD §11.11, §14.3, §15.4). Runs
 // after `next build` and rewrites out/ in place:
@@ -21,14 +23,18 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 export const sri = (bytes) => `sha256-${createHash('sha256').update(bytes).digest('base64')}`;
+// A well-formed hash no file matches. An unlisted chunk gets it, so the
+// browser refuses it; an empty or malformed integrity would disable the check.
+const UNLISTED = `sha256-${'A'.repeat(43)}=`;
 
 // GitHub Pages cannot send headers, so the policy ships as <meta>. A meta
 // policy ignores frame-ancestors, report-uri and sandbox, so clickjacking
 // protection is not available on this host. style-src needs 'unsafe-inline':
 // Chakra (emotion) writes <style> elements and style attributes at runtime.
 // DAPI nodes are arbitrary https hosts (e.g. https://68.67.122.1:1443), so
-// connect-src allows any https origin. The SDK compiles its WASM in a blob:
-// worker, which needs worker-src blob: and 'wasm-unsafe-eval'.
+// connect-src allows any https origin, plus http on loopback, which quorum
+// services and devnets may use (src/config.ts). The SDK compiles its WASM in
+// a blob: worker, which needs worker-src blob: and 'wasm-unsafe-eval'.
 export function contentSecurityPolicy(inlineScriptHashes) {
   const scripts = [...new Set(inlineScriptHashes)].sort().map((hash) => `'${hash}'`);
   return [
@@ -37,7 +43,7 @@ export function contentSecurityPolicy(inlineScriptHashes) {
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data:",
     "font-src 'self'",
-    "connect-src 'self' https:",
+    "connect-src 'self' https: http://localhost:* http://127.0.0.1:*",
     "worker-src 'self' blob:",
     "object-src 'none'",
     "base-uri 'self'",
@@ -51,9 +57,8 @@ function staticAssetPath(url, basePath) {
   return decodeURIComponent(url.slice(basePath.length + 1).split(/[?#]/)[0]);
 }
 
-const ATTRIBUTE = (name) => new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))`, 'i');
 function attribute(tag, name) {
-  const match = tag.match(ATTRIBUTE(name));
+  const match = tag.match(new RegExp(`\\s${name}\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s"'=<>\`]+))`, 'i'));
   return match ? (match[1] ?? match[2] ?? match[3]).replace(/&amp;/g, '&') : null;
 }
 
@@ -110,20 +115,27 @@ export function injectHeadMeta(html, policy, buildId) {
 
 // The runtime's script loader, as webpack 5 minifies it in Next 16:
 // `a.src=c.tu(e)` (script element, __webpack_require__, chunk URL). The loader
-// also serves chunks React requests during client navigation.
+// also serves chunks React requests during client navigation, whose file
+// names come from RSC payloads; a name missing from the map is refused.
 const RUNTIME_SCRIPT_SRC = /([\w$]+)\.src=([\w$]+)\.tu\(([\w$]+)\)/g;
 
 /** Make the webpack runtime set `integrity` on each chunk script it inserts.
  *  `hashes` maps served URL paths (base path included) to SRI values. */
-export function patchWebpackRuntime(source, hashes) {
+export function patchWebpackRuntime(source, hashes, basePath = '') {
   const matches = [...source.matchAll(RUNTIME_SCRIPT_SRC)];
   if (matches.length !== 1) {
     throw new Error(`Expected one chunk loader in the webpack runtime, found ${matches.length}. Next or webpack changed its runtime; update scripts/harden-export.mjs.`);
   }
-  const [found, script, , url] = matches[0];
+  const [found, script, webpackRequire, url] = matches[0];
+  // Chunk URLs are the public path plus a file name; the map's keys assume it.
+  if (!source.includes(`${webpackRequire}.p="${basePath}/_next/"`)) {
+    throw new Error(`The webpack runtime's public path is not "${basePath}/_next/"; update scripts/harden-export.mjs.`);
+  }
   const map = JSON.stringify(Object.fromEntries(Object.entries(hashes).sort(([a], [b]) => a.localeCompare(b))));
-  const lookup = `(${script}.integrity=self.__NPE_SRI__[${url}.split("?")[0]]||"")`;
-  return `self.__NPE_SRI__=${map};${source.replace(found, `${found},${lookup}`)}`;
+  const lookup = `(${script}.integrity=self.__NPE_SRI__[decodeURIComponent(${url}.split("?")[0])]||"${UNLISTED}")`;
+  const patched = `self.__NPE_SRI__=${map};${source.replace(found, `${found},${lookup}`)}`;
+  new vm.Script(patched); // A syntax error must fail the build, not the page.
+  return patched;
 }
 
 function listFiles(dir, prefix = '') {
@@ -174,16 +186,18 @@ export function hardenExport({ outDir = path.join(root, 'out'), nextDir = path.j
   // 1. Chunk hashes into the webpack runtime. Its webpack name hashes the
   //    unpatched source, so the patched file is renamed after its content:
   //    /_next/static URLs must stay immutable for browsers and the worker.
-  const runtimes = listFiles(outDir).filter((file) => /^_next\/static\/chunks\/webpack-[\w-]+\.js$/.test(file));
+  const built = listFiles(outDir);
+  const runtimes = built.filter((file) => /^_next\/static\/chunks\/webpack-[\w-]+\.js$/.test(file));
   if (runtimes.length !== 1) throw new Error(`Expected one webpack runtime, found ${runtimes.length}`);
   const [runtime] = runtimes;
   const chunkHashes = {};
-  for (const file of listFiles(outDir)) {
-    if (file.startsWith('_next/static/') && file.endsWith('.js') && file !== runtime) {
+  for (const file of built) {
+    // .wasm too: the proof parser fetches its module with this hash.
+    if (file.startsWith('_next/static/') && /\.(?:js|wasm)$/.test(file) && file !== runtime) {
       chunkHashes[`${basePath}/${file}`] = sri(read(file));
     }
   }
-  const patched = patchWebpackRuntime(read(runtime).toString('utf8'), chunkHashes);
+  const patched = patchWebpackRuntime(read(runtime).toString('utf8'), chunkHashes, basePath);
   const renamed = `_next/static/chunks/webpack-${createHash('sha256').update(patched).digest('hex').slice(0, 16)}.js`;
   rmSync(path.join(outDir, runtime));
   write(renamed, patched);
@@ -232,15 +246,17 @@ export function hardenExport({ outDir = path.join(root, 'out'), nextDir = path.j
   for (const file of listFiles(outDir)) {
     if (file !== 'integrity.json') manifestFiles[file] = sri(read(file));
   }
+  // The base path is recorded on its own: CI sets it empty for the root domain.
   const publicEnv = Object.fromEntries(Object.entries(env)
-    .filter(([name]) => name.startsWith('NEXT_PUBLIC_'))
+    .filter(([name]) => name.startsWith('NEXT_PUBLIC_') && name !== 'NEXT_PUBLIC_BASE_PATH')
     .sort(([a], [b]) => a.localeCompare(b)));
   const commit = git('rev-parse', 'HEAD');
+  const status = commit === null ? null : git('status', '--porcelain', '--untracked-files=no');
   const manifest = {
     schema: 1,
     commit,
     // Uncommitted changes to tracked files: such a build is not reproducible from `commit`.
-    dirty: commit === null ? null : git('status', '--porcelain', '--untracked-files=no') !== '',
+    dirty: status === null ? null : status !== '',
     buildId,
     basePath,
     serviceWorker: serviceWorkerOff ? 'off' : 'on',
@@ -258,6 +274,10 @@ export function hardenExport({ outDir = path.join(root, 'out'), nextDir = path.j
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  // Read .env files the way `next build` did, so NEXT_PUBLIC_* settings there
+  // (NEXT_PUBLIC_SERVICE_WORKER, the base path) apply here too.
+  const requireFromNext = createRequire(createRequire(import.meta.url).resolve('next/package.json'));
+  requireFromNext('@next/env').loadEnvConfig(root);
   const manifest = hardenExport();
   console.log(`Hardened export: ${Object.keys(manifest.files).length} files in integrity.json, build ${manifest.buildId}, service worker ${manifest.serviceWorker}`);
 }

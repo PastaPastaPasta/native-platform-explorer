@@ -8,6 +8,8 @@ import { routeOffline } from './quorum-fixtures';
 // loads after startup (the SDK chunk among them). Network is an outage here
 // apart from quorum fixtures, which get the real SDK chunk loaded and started.
 
+type ChunkLog = Array<[src: string, integrity: string]>;
+
 async function recordViolations(page: Page) {
   const violations: string[] = [];
   await page.exposeFunction('npeReportViolation', (text: string) => { violations.push(text); });
@@ -56,10 +58,24 @@ test('the proof parser WASM compiles under the CSP', async ({ page }) => {
   expect(violations).toEqual([]);
 });
 
+test('a tampered proof parser WASM is refused', async ({ page }) => {
+  await routeOffline(page);
+  await page.route('**/_next/static/media/*.wasm', async (route) => {
+    const response = await route.fetch();
+    const body = Buffer.concat([await response.body(), Buffer.from([0])]);
+    await route.fulfill({ response, body });
+  });
+  await page.goto('tools/?tool=proof&network=testnet');
+  const proof = readFileSync(new URL('../src/components/query-inspector/__tests__/fixtures/testnet-dpns-domain-asc.bin', import.meta.url));
+  await page.getByPlaceholder(/Paste hex/).fill(proof.toString('hex'));
+  await expect(page.getByText('The proof parser could not be loaded.', { exact: false })).toBeVisible();
+  await expect(page.getByText(/LayerProof/)).toHaveCount(0);
+});
+
 test('chunks loaded after startup carry integrity, and a tampered chunk is refused', async ({ page }) => {
   await page.addInitScript(() => {
-    const loaded: Array<[string, string]> = [];
-    (window as unknown as { npeChunks: typeof loaded }).npeChunks = loaded;
+    const loaded: ChunkLog = [];
+    (window as unknown as { npeChunks: ChunkLog }).npeChunks = loaded;
     const append = Node.prototype.appendChild;
     Node.prototype.appendChild = function appendChild<T extends Node>(this: Node, node: T): T {
       if (node instanceof HTMLScriptElement && node.dataset.webpack) loaded.push([node.src, node.integrity]);
@@ -70,7 +86,7 @@ test('chunks loaded after startup carry integrity, and a tampered chunk is refus
   await page.goto('?network=testnet');
   // The SDK chunk loads once the session starts.
   await expect.poll(() => page.evaluate(() => (window as unknown as { npeChunks: unknown[] }).npeChunks.length)).toBeGreaterThan(0);
-  const chunks = await page.evaluate(() => (window as unknown as { npeChunks: Array<[string, string]> }).npeChunks);
+  const chunks = await page.evaluate(() => (window as unknown as { npeChunks: ChunkLog }).npeChunks);
   for (const [src, integrity] of chunks) expect(integrity, src).toMatch(/^sha256-[A-Za-z0-9+/]+=*$/);
 
   const target = chunks[0]![0];

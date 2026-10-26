@@ -9,11 +9,24 @@ let compiled: WebAssembly.Module | undefined;
 /** Bumped whenever a trap discards the instance. */
 let instanceGeneration = 0;
 
+/** The WASM request, pinned to its hash in a hardened export: the patched
+ *  webpack runtime publishes every static file's SRI hash on `__NPE_SRI__`
+ *  (scripts/harden-export.mjs). Without the map (dev, tests) the glue fetches
+ *  the file itself. */
+function wasmRequest(): Promise<Response> | undefined {
+  const hashes = (globalThis as { __NPE_SRI__?: Record<string, string> }).__NPE_SRI__;
+  if (!hashes) return undefined;
+  const url = new URL('./grovedb-proof-parser/grovedb_proof_parser_bg.wasm', import.meta.url);
+  // An unlisted file gets a hash nothing matches, so it is refused.
+  return fetch(url, { integrity: hashes[url.pathname] ?? `sha256-${'A'.repeat(43)}=` });
+}
+
 function ensureLoaded(): Promise<ParserModule> {
   if (!loading) {
     const attempt = (async () => {
       const mod = await import('./grovedb-proof-parser/grovedb_proof_parser');
-      await mod.default(compiled ? { module_or_path: compiled } : undefined);
+      const source = compiled ?? wasmRequest();
+      await mod.default(source ? { module_or_path: source } : undefined);
       return mod;
     })();
     // A failed load (offline, blocked fetch) must not be cached forever.
