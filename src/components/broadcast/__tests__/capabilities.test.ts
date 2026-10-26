@@ -5,23 +5,38 @@ import {
   documentSecurityLevels,
   operationRequirement,
   resolveOperationCapability,
+  signsInForm,
 } from '../capabilities';
 
 const AUTH = { id: 1, purpose: 'AUTHENTICATION', securityLevel: 'HIGH' };
 
 describe('operation capabilities', () => {
-  it('exposes external and unsupported flows before connecting a signer', () => {
-    expect(
-      resolveOperationCapability(operationRequirement('identity.topUp'), null, []).status,
-    ).toBe('external-bridge');
+  it('needs no connected signer for operations signed with keys from the form', () => {
     expect(operationRequirement('unimplemented.operation').status).toBe('unsupported');
+    for (const id of [
+      'identity.create',
+      'identity.topUp',
+      'addresses.transfer',
+      'addresses.topUpIdentity',
+      'addresses.withdraw',
+      'addresses.fundFromAssetLock',
+      'addresses.createIdentity',
+      'voting.castVote',
+      'stateTransitions.broadcast',
+    ]) {
+      const requirement = operationRequirement(id);
+      expect(signsInForm(requirement), id).toBe(true);
+      expect(resolveOperationCapability(requirement, null, []).status, id).toBe('available');
+    }
+    // Funding addresses from an identity is signed by its transfer key.
+    const fromIdentity = operationRequirement('addresses.transferFromIdentity');
+    expect(signsInForm(fromIdentity)).toBe(false);
+    expect(resolveOperationCapability(fromIdentity, null, []).status).toBe('requires-another-signer');
     expect(
-      resolveOperationCapability(operationRequirement('stateTransitions.broadcast'), null, [])
-        .status,
-    ).toBe('unsupported');
-    expect(
-      resolveOperationCapability(operationRequirement('voting.castVote'), null, []).status,
-    ).toBe('unsupported');
+      resolveOperationCapability(fromIdentity, createMockSigner(), [
+        { id: 3, purpose: 'TRANSFER', securityLevel: 'CRITICAL' },
+      ]).status,
+    ).toBe('available');
   });
 
   it('requires SDK signing support and an operation-eligible key', () => {

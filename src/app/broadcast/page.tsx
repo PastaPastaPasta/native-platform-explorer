@@ -64,7 +64,7 @@ function GroupCard({
                     <Badge
                       flexShrink={0}
                       variant="subtle"
-                      colorScheme={status === 'Bridge' ? 'blue' : 'orange'}
+                      colorScheme={status === 'Keys in form' ? 'purple' : 'orange'}
                     >
                       {status}
                     </Badge>

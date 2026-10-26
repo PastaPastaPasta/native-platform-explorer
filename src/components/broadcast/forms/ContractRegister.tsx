@@ -75,7 +75,8 @@ export function ContractRegisterForm({
   signer,
   onOptionsChange,
 }: OperationFormProps<ContractRegisterOptions>) {
-  const ownerId = signer.identityId;
+  // Rendered only with a connected signer: the contract owner signs.
+  const ownerId = signer?.identityId ?? '';
   const [schemasText, setSchemasText] = useState(() => JSON.stringify(SAMPLE_SCHEMA, null, 2));
   const [definitionsText, setDefinitionsText] = useState('');
   const { definitions, error: definitionsError } = useMemo(

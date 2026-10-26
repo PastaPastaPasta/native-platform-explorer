@@ -72,4 +72,40 @@ describe('operation receipt navigation', () => {
       network: 'testnet',
     });
   });
+
+  it('links the addresses and identity of a form-signed operation without a signer', () => {
+    renderWithProviders(
+      <OperationReceipt
+        title="Top up an identity from a Platform address"
+        network="testnet"
+        trusted
+        identityId={null}
+        submittedAt="2026-10-26T09:00:00Z"
+        entities={{ identityId: 'identity-2', addresses: ['tdash1abc', 'tdash1def'] }}
+      />,
+    );
+    expect(screen.getByText('Signed with keys entered in the form')).toBeInTheDocument();
+    expectLink('Open identity', '/identity', { id: 'identity-2', network: 'testnet' });
+    expectLink('Open address tdash1abc…', '/address', { addr: 'tdash1abc', network: 'testnet' });
+    expectLink('Open address tdash1def…', '/address', { addr: 'tdash1def', network: 'testnet' });
+  });
+
+  it('links a raw broadcast to its state transition', () => {
+    renderWithProviders(
+      <OperationReceipt
+        title="Broadcast a signed state transition"
+        network="testnet"
+        trusted
+        identityId={null}
+        submittedAt="2026-10-26T09:00:00Z"
+        entities={{}}
+        result={{ kind: 'raw', stateTransitionHash: 'ab'.repeat(32) }}
+      />,
+    );
+    expectLink('Open state transition', '/state-transition', {
+      hash: 'ab'.repeat(32),
+      network: 'testnet',
+    });
+    expect(screen.queryByRole('link', { name: 'Open identity' })).not.toBeInTheDocument();
+  });
 });

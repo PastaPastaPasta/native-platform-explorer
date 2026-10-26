@@ -10,6 +10,8 @@ export class OperationNotSubmittedError extends Error {
 
 export interface ReceiptEntities {
   identityId?: string;
+  /** Platform addresses (bech32m) the operation spent from or paid to. */
+  addresses?: string[];
   recipientId?: string;
   contractId?: string;
   documentType?: string;
@@ -59,17 +61,26 @@ export async function submitOperation<T>(
   }
 }
 
-export function receiptEntities(value: unknown, identityId: string): ReceiptEntities {
+/**
+ * Receipt identifiers in `value` (the reviewed inputs or the result). With a
+ * connected signer the identity is always the signer: form inputs must not
+ * redirect receipt links. Form-signed operations have no signer, so their
+ * identity is the one the reviewed inputs or the confirmed result name.
+ */
+export function receiptEntities(value: unknown, signerIdentityId: string | null): ReceiptEntities {
   const record = value && typeof value === 'object' ? (value as Record<string, unknown>) : {};
   const string = (key: string) =>
     typeof record[key] === 'string' ? (record[key] as string) : undefined;
+  const addresses = Array.isArray(record.addresses)
+    ? record.addresses.filter((address): address is string => typeof address === 'string')
+    : [];
   const entities = {
-    // Always the signer: form inputs must not redirect receipt links.
-    identityId,
+    identityId: signerIdentityId ?? string('identityId'),
     recipientId: string('recipientId'),
     contractId: string('contractId'),
     documentType: string('documentType'),
     documentId: string('documentId'),
+    addresses: addresses.length ? addresses : undefined,
   };
   return Object.fromEntries(Object.entries(entities).filter(([, value]) => value !== undefined));
 }

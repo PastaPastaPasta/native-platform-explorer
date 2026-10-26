@@ -17,7 +17,8 @@ export function OperationReceipt({
   title: string;
   network: Network;
   trusted: boolean;
-  identityId: string;
+  /** The connected signer's identity; null when the form supplied the keys. */
+  identityId: string | null;
   submittedAt: string;
   entities: ReceiptEntities;
   result?: unknown;
@@ -43,7 +44,7 @@ export function OperationReceipt({
         Network: {network} · {trusted ? 'trusted quorum source' : 'proof verification'}
       </Text>
       <Text fontSize="sm" color="gray.250" wordBreak="break-all">
-        Signer identity: {identityId}
+        {identityId ? `Signer identity: ${identityId}` : 'Signed with keys entered in the form'}
       </Text>
       <Text fontSize="xs" color="gray.400">
         Started: {submittedAt}
@@ -70,14 +71,27 @@ export function OperationReceipt({
             Open state transition
           </Button>
         ) : null}
-        <Button
-          as="a"
-          href={link('/identity/', { id: entities.identityId ?? identityId })}
-          size="sm"
-          variant="outline"
-        >
-          Open identity
-        </Button>
+        {(entities.identityId ?? identityId) ? (
+          <Button
+            as="a"
+            href={link('/identity/', { id: (entities.identityId ?? identityId)! })}
+            size="sm"
+            variant="outline"
+          >
+            Open identity
+          </Button>
+        ) : null}
+        {entities.addresses?.map((address) => (
+          <Button
+            key={address}
+            as="a"
+            href={link('/address/', { addr: address })}
+            size="sm"
+            variant="outline"
+          >
+            Open address {address.slice(0, 10)}…
+          </Button>
+        ))}
         {entities.recipientId ? (
           <Button
             as="a"

@@ -127,16 +127,13 @@ describe('OperationShell', () => {
     expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
   });
 
-  it.each(['unsupported', 'external-bridge'] as const)(
-    'shows %s before collecting or reviewing inputs',
-    (status) => {
-      useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
-      setup({ capability: { status, reason: 'Use the supported external tool.' } });
-      expect(screen.getByText('Use the supported external tool.')).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
-      expect(screen.queryByText('form ready')).not.toBeInTheDocument();
-    },
-  );
+  it('shows unsupported operations before collecting or reviewing inputs', () => {
+    useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+    setup({ capability: { status: 'unsupported', reason: 'Use the supported external tool.' } });
+    expect(screen.getByText('Use the supported external tool.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
+    expect(screen.queryByText('form ready')).not.toBeInTheDocument();
+  });
 
   it('blocks a signer bound to another SDK session', async () => {
     useSignerMock.mockReturnValue({
@@ -150,26 +147,29 @@ describe('OperationShell', () => {
     expect(screen.getByRole('button', { name: 'Review' })).toBeDisabled();
   });
 
-  it('opens the top-up bridge form without requiring a signer or offering broadcast', () => {
-    useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
-    setup({ operationId: 'identity.topUp', capability: { status: 'external-bridge' } });
-    expect(screen.getByRole('textbox', { name: 'Identity' })).toHaveValue('');
-    expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Sign + broadcast' })).not.toBeInTheDocument();
-  });
-
-  it('clears an external top-up identity when the network and signer change', () => {
-    const { descriptor, rerender } = setup({
-      operationId: 'identity.topUp',
-      capability: { status: 'external-bridge' },
-    });
-    const identity = screen.getByRole('textbox', { name: 'Identity' });
-    fireEvent.change(identity, { target: { value: 'A'.repeat(43) } });
-    useSdkMock.mockReturnValue({ ...useSdkMock(), network: 'mainnet', sdk: createMockSdk() });
-    useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
-    rerender(<OperationShell descriptor={descriptor} />);
-    expect(screen.getByRole('textbox', { name: 'Identity' })).toHaveValue('');
-  });
+  it.each([null, createMockSigner({ prepareSdk: undefined })])(
+    'runs form-signed operations without a usable connected signer (%#)',
+    async (signer) => {
+      useSignerMock.mockReturnValue({ ...useSignerMock(), signer });
+      const { execute } = setup({
+        capability: { status: 'available', signer: 'form', reason: 'Keys come from the form.' },
+        feeNote: 'the paying address covers it.',
+      });
+      expect(screen.queryByText('No signer connected')).not.toBeInTheDocument();
+      expect(screen.getByText('Keys come from the form.')).toBeInTheDocument();
+      review();
+      expect(screen.getByText(/Keys: entered in the form/)).toBeInTheDocument();
+      expect(screen.getByText(/Fees: the paying address covers it\./)).toBeInTheDocument();
+      expect(screen.queryByText(/Signing key:/)).not.toBeInTheDocument();
+      broadcast();
+      await screen.findByText('Broadcast succeeded');
+      expect(execute).toHaveBeenCalledWith(
+        expect.objectContaining({ signer: null, options: initialOptions }),
+      );
+      expect(screen.getByText('Signed with keys entered in the form')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: 'Open identity' })).not.toBeInTheDocument();
+    },
+  );
 
   it('executes the exact reviewed snapshot and refreshes its network', async () => {
     initialOptions = { id: 'operation-1', amount: 9007199254740993n };
