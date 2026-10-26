@@ -12,7 +12,7 @@ vi.mock('@hooks/usePageBreadcrumbs', () => ({ usePageBreadcrumbs: () => {} }));
 vi.mock('@sdk/queries', () => ({
   useEpochInfo: () => hooks.epoch,
   useFinalizedEpochInfo: () => hooks.finalized,
-  useEvonodesBlocksByRange: (...args: unknown[]) => { hooks.useLive(...args); return hooks.live; },
+  useAllEvonodeBlocksInEpoch: (...args: unknown[]) => { hooks.useLive(...args); return hooks.live; },
 }));
 
 function query(status = 'success', data: unknown = new Map()) {
@@ -40,7 +40,7 @@ describe('historical epoch source presentation', () => {
     expect(screen.getByText('9007199254740993')).toBeVisible();
     expect(screen.getByText('Storage fees distributed (credits)').parentElement).toHaveTextContent('0');
     expect(screen.getByRole('link', { name: /finalized-/ })).toHaveAttribute('href', '/evonode?proTxHash=finalized-proposer');
-    expect(hooks.useLive).toHaveBeenCalledWith(undefined, 100);
+    expect(hooks.useLive).toHaveBeenCalledWith(undefined);
   });
   it('retains a cached finalized record and reports a refresh failure with its own retry', () => {
     hooks.finalized = query('error', new Map([[42, finalized()]]));
@@ -69,7 +69,7 @@ describe('historical epoch source presentation', () => {
     expect(screen.getByRole('heading', { name: 'Epoch #42' })).toBeVisible();
     expect(screen.queryByText('Epoch not found')).not.toBeInTheDocument();
     expect(screen.queryByText('No proposers yet this epoch.')).not.toBeInTheDocument();
-    expect(hooks.useLive).toHaveBeenCalledWith(undefined, 100);
+    expect(hooks.useLive).toHaveBeenCalledWith(undefined);
     if (status === 'error') {
       expect(screen.getByRole('heading', { name: 'Finalized details unavailable' })).toBeVisible();
       fireEvent.click(screen.getAllByRole('button', { name: 'Retry' })[0]!);
@@ -99,7 +99,7 @@ describe('historical epoch source presentation', () => {
     hooks.finalized = query();
     renderWithProviders(<Page />);
     expect(screen.getByRole('link', { name: /stale-live/ })).toBeVisible();
-    expect(hooks.useLive).toHaveBeenCalledWith(42, 100);
+    expect(hooks.useLive).toHaveBeenCalledWith(42);
   });
   it('retries metadata independently while keeping finalized data visible', () => {
     hooks.epoch = query('error');

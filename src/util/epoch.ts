@@ -1,3 +1,4 @@
+import type { EvoSDK } from '@dashevo/evo-sdk';
 import { readProp } from './sdk-shape';
 
 export interface NormalisedEpoch {
@@ -128,15 +129,7 @@ function keyToHex(key: unknown): string | undefined {
 }
 
 export async function fetchAllEvonodeBlocks(
-  sdk: {
-    epoch: {
-      evonodesProposedBlocksByRange: (q: {
-        epoch: number;
-        limit?: number;
-        startAfter?: string;
-      }) => Promise<Map<unknown, unknown>>;
-    };
-  },
+  sdk: Pick<EvoSDK, 'epoch'>,
   epoch: number,
 ): Promise<Map<string, number>> {
   const out = new Map<string, number>();
@@ -150,8 +143,8 @@ export async function fetchAllEvonodeBlocks(
     if (!(result instanceof Map) || result.size === 0) break;
     let lastHex: string | undefined;
     for (const [key, val] of result) {
-      // Display key = base58 (what Identifier components render and what
-      // /evonode/?proTxHash=… URLs use). Pagination cursor = hex.
+      // Display key = the SDK's map key (hex in rc.2, which /evonode/ links
+      // accept along with base58). Pagination cursor = hex.
       const displayKey = typeof key === 'string' ? key : String(key ?? '');
       const hex = keyToHex(key);
       if (!displayKey) continue;
@@ -176,6 +169,65 @@ export function evonodesMapToBars(
       blocks: typeof blocks === 'bigint' ? Number(blocks) : Number(blocks ?? 0),
     }))
     .filter((e) => e.proTxHash);
-  out.sort((a, b) => b.blocks - a.blocks);
+  out.sort((a, b) => b.blocks - a.blocks || (a.proTxHash < b.proTxHash ? -1 : a.proTxHash > b.proTxHash ? 1 : 0));
   return out;
+}
+
+export interface ProposerSummary {
+  bars: Array<{ proTxHash: string; blocks: number }>;
+  totalBlocks: number;
+  proposers: number;
+}
+
+/** Ranked proposers plus the totals the ranking was taken from. Only
+ *  meaningful for a complete proposer map (finalized record or full walk). */
+export function summariseProposers(m: unknown): ProposerSummary {
+  const bars = evonodesMapToBars(m);
+  return {
+    bars,
+    totalBlocks: bars.reduce((sum, e) => sum + e.blocks, 0),
+    proposers: bars.length,
+  };
+}
+
+/** Fills the end time and progress of an epoch whose record has only a start
+ *  time (the current epoch) from the network's configured epoch length. The
+ *  real boundary is the first block after start + duration, so the end is an
+ *  estimate. */
+export function withEpochDuration(
+  epoch: NormalisedEpoch,
+  durationMs: number | null,
+  now = Date.now(),
+): NormalisedEpoch {
+  if (epoch.endAtMs !== null || epoch.startAtMs === null || !durationMs || durationMs <= 0) {
+    return epoch;
+  }
+  const endAtMs = epoch.startAtMs + durationMs;
+  const pct = ((now - epoch.startAtMs) / durationMs) * 100;
+  return { ...epoch, endAtMs, progressPct: Math.min(100, Math.max(0, pct)) };
+}
+
+export interface ProposerStanding {
+  blocks: number;
+  /** Competition rank: 1 + proposers with strictly more blocks. */
+  rank: number;
+  proposers: number;
+  totalBlocks: number;
+  topBlocks: number;
+}
+
+/** One proposer's position in a complete proposer map keyed by canonical
+ *  hex proTxHash. Null when the proposer has no blocks in the map. */
+export function proposerStanding(m: Map<string, number>, hex: string): ProposerStanding | null {
+  const blocks = m.get(hex);
+  if (blocks === undefined) return null;
+  let ahead = 0;
+  let totalBlocks = 0;
+  let topBlocks = 0;
+  for (const b of m.values()) {
+    if (b > blocks) ahead++;
+    totalBlocks += b;
+    topBlocks = Math.max(topBlocks, b);
+  }
+  return { blocks, rank: ahead + 1, proposers: m.size, totalBlocks, topBlocks };
 }

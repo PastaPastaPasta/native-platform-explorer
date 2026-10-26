@@ -1,6 +1,6 @@
 'use client';
 
-import { Heading, Text, VStack } from '@chakra-ui/react';
+import { Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
@@ -9,7 +9,13 @@ import { NotFoundCard } from '@ui/NotFoundCard';
 import { EpochHeaderCard } from './EpochHeaderCard';
 import { FinalizedEpochCard } from './FinalizedEpochCard';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
-import { evonodesMapToBars, normaliseEpoch, normaliseFinalizedEpoch } from '@util/epoch';
+import { normaliseEpoch, normaliseFinalizedEpoch, summariseProposers, type ProposerSummary } from '@util/epoch';
+
+function ProposerTotals({ summary }: { summary: ProposerSummary }) {
+  return <Text fontSize="xs" color="muted" fontFamily="mono">
+    {summary.totalBlocks.toLocaleString('en-US')} blocks · {summary.proposers.toLocaleString('en-US')} evonodes
+  </Text>;
+}
 
 type SourceQuery = Pick<UseQueryResult<unknown, Error>, 'status' | 'error' | 'data' | 'refetch'>;
 
@@ -24,6 +30,9 @@ export function HistoricalEpochView({ index, epochQ, finalizedQ, evonodesQ }: {
   const metadata = headerEntry ? normaliseEpoch(headerEntry, index) : null;
   const finalized = finalizedEntry ? normaliseFinalizedEpoch(finalizedEntry) : null;
   const live = finalizedQ.status === 'success' && !finalized;
+  const finalizedProposers = finalized?.blockProposers ? summariseProposers(finalized.blockProposers) : null;
+  const liveProposers = live && evonodesQ.status === 'success' ? summariseProposers(evonodesQ.data) : null;
+  const totals = finalizedProposers ?? liveProposers;
 
   if (!headerEntry && epochQ.status === 'success' && finalizedQ.status === 'success') {
     return <NotFoundCard title="Epoch not found" description={`No epoch #${index} on this network.`}
@@ -52,9 +61,12 @@ export function HistoricalEpochView({ index, epochQ, finalizedQ, evonodesQ }: {
       error={finalizedQ.error} onRetry={() => { void finalizedQ.refetch(); }} /> : null}
 
     <InfoBlock>
-      <Heading size="sm" color="gray.100" mb={3}>Proposers in this epoch</Heading>
-      {finalized ? finalized.blockProposers ? <EvonodesLeaderboard
-        entries={evonodesMapToBars(finalized.blockProposers)} limit={50}
+      <HStack justify="space-between" align="baseline" flexWrap="wrap" mb={3}>
+        <Heading size="sm" color="gray.100">Proposers in this epoch</Heading>
+        {totals ? <ProposerTotals summary={totals} /> : null}
+      </HStack>
+      {finalized ? finalizedProposers ? <EvonodesLeaderboard
+        entries={finalizedProposers.bars} limit={50}
         emptyLabel="No recorded proposers for this finalized epoch." /> :
         <ErrorCard title="Finalized proposers unavailable" error={new Error('The finalized record did not contain a proposer map.')}
           onRetry={() => { void finalizedQ.refetch(); }} /> : !live ?
@@ -62,7 +74,7 @@ export function HistoricalEpochView({ index, epochQ, finalizedQ, evonodesQ }: {
         evonodesQ.status === 'pending' ? <LoadingCard lines={6} /> : evonodesQ.status === 'error' ?
         <ErrorCard title="Live proposers unavailable" error={evonodesQ.error}
           onRetry={() => { void evonodesQ.refetch(); }} /> :
-        <EvonodesLeaderboard entries={evonodesMapToBars(evonodesQ.data)} limit={50} />}
+        <EvonodesLeaderboard entries={liveProposers?.bars ?? []} limit={50} />}
     </InfoBlock>
   </VStack>;
 }
