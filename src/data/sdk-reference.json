@@ -1,6 +1,6 @@
 {
   "sdkPackage": "@dashevo/evo-sdk",
-  "sdkVersion": "4.0.0-rc.2",
+  "sdkVersion": "5.0.0-rc.8",
   "pages": [
     {
       "route": "/",
@@ -116,7 +116,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1061,
+              "line": 1053,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -127,7 +127,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1062,
+              "line": 1054,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -230,7 +230,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 371,
+              "line": 375,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -241,7 +241,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 443,
+              "line": 446,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -268,7 +268,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 571,
+              "line": 574,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -279,7 +279,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 411,
+              "line": 414,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -290,7 +290,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 528,
+              "line": 531,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -301,7 +301,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 488,
+              "line": 491,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -323,7 +323,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 798,
+              "line": 802,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -378,7 +378,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 628,
+              "line": 632,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -389,7 +389,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 661,
+              "line": 665,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -411,7 +411,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 697,
+              "line": 701,
               "owner": "executeIdentityUpdateKeys"
             }
           ]
@@ -433,12 +433,12 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 485,
+              "line": 488,
               "owner": "executeDocumentTransfer"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 568,
+              "line": 571,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -449,7 +449,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 736,
+              "line": 740,
               "owner": "newIdentityKeys"
             }
           ]
@@ -476,7 +476,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 655,
+              "line": 659,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -1535,7 +1535,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1082,
+              "line": 1074,
               "owner": "useContestedResources"
             }
           ]
@@ -1546,7 +1546,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1083,
+              "line": 1075,
               "owner": "useContestedResources"
             }
           ]
@@ -1596,7 +1596,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1182,
+              "line": 1174,
               "owner": "useContestedResourceVoters"
             }
           ]
@@ -1607,7 +1607,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1183,
+              "line": 1175,
               "owner": "useContestedResourceVoters"
             }
           ]
@@ -1618,7 +1618,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1155,
+              "line": 1147,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -1629,7 +1629,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1156,
+              "line": 1148,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -1640,7 +1640,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1061,
+              "line": 1053,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1651,7 +1651,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1062,
+              "line": 1054,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1668,7 +1668,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1061,
+              "line": 1053,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1679,7 +1679,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1062,
+              "line": 1054,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1696,7 +1696,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1091,
+              "line": 1083,
               "owner": "useGroupInfos"
             }
           ]
@@ -1707,7 +1707,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1092,
+              "line": 1084,
               "owner": "useGroupInfos"
             }
           ]
@@ -1757,7 +1757,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1136,
+              "line": 1128,
               "owner": "useGroupActionSigners"
             }
           ]
@@ -1768,7 +1768,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1137,
+              "line": 1129,
               "owner": "useGroupActionSigners"
             }
           ]
@@ -1779,7 +1779,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1121,
+              "line": 1113,
               "owner": "useGroupActions"
             }
           ]
@@ -1790,7 +1790,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1122,
+              "line": 1114,
               "owner": "useGroupActions"
             }
           ]
@@ -1801,7 +1801,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1099,
+              "line": 1091,
               "owner": "useGroupInfo"
             }
           ]
@@ -1812,7 +1812,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1100,
+              "line": 1092,
               "owner": "useGroupInfo"
             }
           ]
@@ -1823,7 +1823,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1108,
+              "line": 1100,
               "owner": "useGroupMembers"
             }
           ]
@@ -1834,7 +1834,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 1109,
+              "line": 1101,
               "owner": "useGroupMembers"
             }
           ]
@@ -2531,12 +2531,12 @@
           ]
         },
         {
-          "method": "version",
-          "kind": "facade",
+          "method": "EvoSDK.getLatestVersionNumber",
+          "kind": "utility",
           "sources": [
             {
               "file": "src/sdk/version.ts",
-              "line": 35,
+              "line": 41,
               "owner": "useProtocolVersionCheck"
             }
           ]
@@ -2944,12 +2944,12 @@
           ]
         },
         {
-          "method": "version",
-          "kind": "facade",
+          "method": "EvoSDK.getLatestVersionNumber",
+          "kind": "utility",
           "sources": [
             {
               "file": "src/sdk/version.ts",
-              "line": 35,
+              "line": 41,
               "owner": "useProtocolVersionCheck"
             }
           ]
