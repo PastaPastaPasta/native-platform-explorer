@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { aggregateProof, classifyProof, describeProofState, getQuorumKeySource, isProofFallbackBlocked, isProofVerificationError, type ProofState } from '../proofs';
-import { normalizeError } from '../errors';
+import { CancelledError } from '@tanstack/react-query';
+import { classifySdkError, isAbsentEntityError, isAllEndpointsFailure, isRetryableSdkError, normalizeError, shouldRetrySdkQuery } from '../errors';
 import { nativeProofError, SDK_PROOF_CONTEXT_MESSAGE, SDK_PROOF_DECODE_MESSAGE } from '@/test/proof-errors';
 
 describe('classifyProof', () => {
@@ -79,7 +80,7 @@ describe('classifyProof', () => {
       { status: 'error', data: undefined, error: new Error('x'), fetchStatus: 'idle', dataUpdatedAt: 1234 },
       { trusted: true, hasProofVariant: true },
     );
-    expect(r).toEqual({ kind: 'unavailable', error: 'x' });
+    expect(r).toEqual({ kind: 'unavailable', error: 'x', reason: 'unknown' });
   });
 
   it('returns in-flight while pending or fetching', () => {
@@ -162,5 +163,109 @@ describe('aggregateProof', () => {
 describe('describeProofState', () => {
   it('includes the error message in failed descriptions', () => {
     expect(describeProofState({ kind: 'failed', error: 'nope' })).toContain('nope');
+  });
+});
+
+/** Getter-shaped WasmSdkError like the pinned rc.2 runtime produces. */
+function sdkError(kind: number, name: string, message: string): unknown {
+  return Object.create({
+    get kind() { return kind; },
+    get name() { return name; },
+    get code() { return -1; },
+    get message() { return message; },
+  }, { __wbg_ptr: { value: 1, enumerable: true } });
+}
+
+describe('SDK error kinds', () => {
+  const unavailable = (error: unknown) => classifyProof(
+    { status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 },
+    { trusted: true, hasProofVariant: true },
+  );
+
+  it.each([
+    [27, 'NotFound', 'Data contract not found'],
+    [13, 'EpochNotFound', 'epoch not found'],
+    [12, 'TotalCreditsNotFound', 'total credits not found'],
+    [23, 'IdentityNonceNotFound', 'identity nonce not found'],
+    // Live rc.2 unproved identity fetch for an unknown ID.
+    [17, 'Generic', 'Failed to fetch identity: transport error: grpc error: code: \'Some requested entity was not found\', message: "identity 4EfA not found"'],
+  ])('classifies %s %s as not-found, never as a proof failure', (kind, name, message) => {
+    const error = sdkError(kind, name, message);
+    expect(classifySdkError(error)).toBe('not-found');
+    expect(isProofVerificationError(error)).toBe(false);
+    expect(isProofFallbackBlocked(error)).toBe(true);
+    expect(isRetryableSdkError(error)).toBe(false);
+    expect(unavailable(error)).toMatchObject({ kind: 'unavailable', reason: 'not-found' });
+  });
+
+  it.each([
+    [14, 'TimeoutReached', 'request timed out', 'timeout'],
+    // Live rc.2 responses: an old node and an exhausted address list.
+    [6, 'DapiClientError', "transport error: grpc error: code: 'Operation is not implemented or not supported'", 'transport'],
+    [17, 'Generic', "Failed to get status: no available addresses to retry, last error: grpc error: code: 'Internal error', message: \"Failed to call gRPC service: JS API error: TypeError: fetch failed\"", 'transport'],
+  ] as const)('classifies %s %s as a retryable outage', (kind, name, message, expected) => {
+    const error = sdkError(kind, name, message);
+    expect(classifySdkError(error)).toBe(expected);
+    expect(isProofVerificationError(error)).toBe(false);
+    expect(isProofFallbackBlocked(error)).toBe(false);
+    expect(isRetryableSdkError(error)).toBe(true);
+    const state = unavailable(error);
+    expect(state).toMatchObject({ kind: 'unavailable', reason: expected });
+    expect(describeProofState(state)).toMatch(/Retry may succeed/);
+  });
+
+  it.each([
+    [18, 'ContextProviderError', 'Quorum not found in cache for hash 0000004c…'],
+    [4, 'Proof', 'context provider error: Failed to find quorum 0000004c…'],
+  ])('labels a missing quorum (%s %s) unavailable, not failed, and does not fall back', (kind, name, message) => {
+    const error = new Error('Request failed', { cause: sdkError(kind, name, message) });
+    expect(classifySdkError(error)).toBe('missing-quorum');
+    expect(isProofVerificationError(error)).toBe(false);
+    expect(isProofFallbackBlocked(error)).toBe(true);
+    expect(isRetryableSdkError(error)).toBe(false);
+    const state = unavailable(error);
+    expect(state).toMatchObject({ kind: 'unavailable', reason: 'missing-quorum' });
+    expect(describeProofState(state)).toMatch(/not a failed proof/);
+  });
+
+  it('keeps cryptographic mismatches as verification failures and never retries them', () => {
+    const error = sdkError(4, 'Proof', 'invalid quorum signature');
+    expect(classifySdkError(error)).toBe('verification');
+    expect(isRetryableSdkError(error)).toBe(false);
+    expect(unavailable(error).kind).toBe('failed');
+  });
+
+  it('does not retry rejected requests or cancelled sessions, retries unknown errors once', () => {
+    expect(shouldRetrySdkQuery(0, sdkError(25, 'InvalidArgument', 'bad id'))).toBe(false);
+    expect(shouldRetrySdkQuery(0, new CancelledError())).toBe(false);
+    expect(shouldRetrySdkQuery(0, new Error('offline'))).toBe(true);
+    expect(shouldRetrySdkQuery(1, new Error('offline'))).toBe(false);
+  });
+
+  it('detects an exhausted DAPI address list through wrappers', () => {
+    expect(isAllEndpointsFailure(new Error('x', { cause: sdkError(17, 'Generic', 'no available addresses to retry') }))).toBe(true);
+    expect(isAllEndpointsFailure(sdkError(6, 'DapiClientError', 'transport error'))).toBe(false);
+  });
+});
+
+describe('absence and kind provenance', () => {
+  it('treats only entity-specific absences as a definite empty answer', () => {
+    expect(isAbsentEntityError(sdkError(12, 'TotalCreditsNotFound', 'total credits not found'))).toBe(true);
+    expect(isAbsentEntityError(new Error('x', { cause: sdkError(13, 'EpochNotFound', 'epoch not found') }))).toBe(true);
+    // Live rc.2: a documents query against a missing contract. The contract is
+    // a dependency, so "no documents" would be the wrong answer.
+    expect(isAbsentEntityError(sdkError(27, 'NotFound', 'Data contract not found'))).toBe(false);
+  });
+
+  it('does not treat a gRPC NOT_FOUND carried by a transport error as proven absence', () => {
+    const error = sdkError(6, 'DapiClientError', "transport error: grpc error: code: 'Some requested entity was not found'");
+    expect(classifySdkError(error)).toBe('transport');
+    expect(isRetryableSdkError(error)).toBe(true);
+  });
+
+  it('ignores numeric kinds from other enums (WasmDppError) when the name disagrees', () => {
+    expect(classifySdkError(sdkError(2, 'Serialization', 'cannot deserialize document'))).toBe('unknown');
+    expect(classifySdkError(sdkError(4, 'Generic', 'dpp failure'))).toBe('unknown');
+    expect(classifySdkError(sdkError(0, 'Protocol', 'protocol error'))).toBe('unknown');
   });
 });

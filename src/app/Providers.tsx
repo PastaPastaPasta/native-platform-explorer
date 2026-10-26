@@ -12,14 +12,17 @@ import { BreadcrumbsProvider } from '@contexts/BreadcrumbsContext';
 import { ErrorBoundary } from '@components/layout/ErrorBoundary';
 import { SignerProvider } from '@/signer/SignerProvider';
 import { ProofInspectorProvider } from '@components/proof/ProofInspectorContext';
+import { shouldRetrySdkQuery } from '@sdk/errors';
 
 function makeQueryClient() {
   return new QueryClient({
     defaultOptions: {
       queries: {
         staleTime: 30_000,
+        // Retired SDK sessions are removed by SdkProvider, so this only keeps
+        // the current session's unobserved results.
         gcTime: 24 * 60 * 60_000,
-        retry: 1,
+        retry: shouldRetrySdkQuery,
         refetchOnWindowFocus: false,
       },
     },
