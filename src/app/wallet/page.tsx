@@ -37,7 +37,8 @@ function SafetyBanner() {
     <InfoBlock>
       <Text fontSize="sm" color="gray.250">
         The explorer never persists your keys. Imported keys stay in this tab&apos;s memory.
-        Disconnect, inactivity (&gt; 10 minutes hidden), or reload clears the local signer.
+        Disconnecting, 10 minutes without mouse, keyboard, or touch input (visible or hidden),
+        leaving the wallet and broadcast pages, or reloading clears the local signer.
         An operation already in progress can retain signing material until it finishes.
         Mnemonic and WIF fields are cleared after each connection attempt. JavaScript cannot
         guarantee that every copy of a secret is erased from memory.

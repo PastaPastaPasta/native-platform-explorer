@@ -129,7 +129,8 @@ function Hub() {
             </Heading>
             <Text fontSize="sm" color="gray.250">
               Pick an operation. Every form runs through the same Build → Review
-              → Sign → Broadcast → Result flow with mainnet guardrails.
+              → Sign → Broadcast → Result flow with mainnet guardrails. Leaving the
+              wallet and broadcast pages clears the connected signer.
             </Text>
             <HStack pt={2} spacing={2}>
               <Button as={NextLink} href="/wallet/" size="sm" variant="outline">
