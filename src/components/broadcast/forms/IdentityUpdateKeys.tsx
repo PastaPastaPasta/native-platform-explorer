@@ -145,9 +145,11 @@ export function IdentityUpdateKeysForm({
         </Text>
         <Text fontSize="xs" color="gray.400" mb={2}>
           Platform requires every new ECDSA_SECP256K1 key to sign the update with its own private
-          key, so enter each new key&apos;s WIF. The public key is derived from it, the key ID is
-          assigned automatically, and the private key stays in this tab&apos;s memory only for this
-          operation. Save the new keys in your wallet first.
+          key, so enter each new key&apos;s WIF. ECDSA_HASH160 keys are not signed, but the explorer
+          still asks for their WIF so the key data comes from a key you actually hold. The public
+          key (or its hash) is derived from the WIF, the key ID is assigned automatically, and the
+          private key stays in this tab&apos;s memory only for this operation. Save the new keys in
+          your wallet first.
         </Text>
         <VStack align="stretch" spacing={3}>
           {keys.map((key, index) => (

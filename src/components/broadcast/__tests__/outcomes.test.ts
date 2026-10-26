@@ -1,3 +1,4 @@
+import { readFileSync, realpathSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import {
   BroadcastOutcomeUnknownError,
@@ -70,5 +71,15 @@ describe('transaction outcome messages', () => {
     const cause = Object.assign(new Error('Invalid'), { name: 'InvalidArgument' });
     const error = await submitOperation(() => Promise.reject(cause), {}).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
+  });
+
+  it('was audited against the pinned wasm-sdk', () => {
+    // isPreSubmissionSdkError relies on InvalidArgument/NotImplemented being raised
+    // only before any request in this exact SDK. Re-audit the wasm-sdk sources
+    // (state_transitions/*.rs, dpns.rs, error.rs) before changing this version.
+    // pnpm installs evo-sdk's wasm-sdk dependency next to it.
+    const evo = realpathSync('node_modules/@dashevo/evo-sdk');
+    const wasm = `${evo}/../wasm-sdk/package.json`;
+    expect(JSON.parse(readFileSync(wasm, 'utf8')).version).toBe('4.0.0-rc.2');
   });
 });
