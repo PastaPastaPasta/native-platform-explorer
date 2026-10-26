@@ -3,7 +3,7 @@ import { readFile, realpath } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import type { WasmSdkError } from '@dashevo/evo-sdk';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { extractErrorMessage, normalizeError } from '../errors';
+import { extractErrorMessage, normalizeError, SDK_ERROR_KINDS } from '../errors';
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
@@ -50,5 +50,14 @@ describe('SDK error formatting', () => {
     expect(normalized.message).not.toContain('[object Object]');
     expect(normalized.cause).toBe(original);
     original.free();
+  });
+
+  it('pins the numeric error kinds to the installed SDK enum', async () => {
+    // Kinds are positional: an SDK release that inserts one (5.0 added
+    // ExecutionNotProved) renumbers the rest, and a stale map misclassifies.
+    const { WasmSdkErrorKind } = await import('@dashevo/evo-sdk');
+    for (const [name, value] of Object.entries(SDK_ERROR_KINDS)) {
+      expect({ name, value: WasmSdkErrorKind[name as keyof typeof WasmSdkErrorKind] }).toEqual({ name, value });
+    }
   });
 });
