@@ -418,4 +418,79 @@ describe('OperationShell', () => {
       vi.unstubAllEnvs();
     }
   });
+
+  describe('review details', () => {
+    const transferKeys = [
+      { id: 2, purpose: 'TRANSFER', securityLevel: 'CRITICAL' },
+      { id: 7, purpose: 'AUTHENTICATION', securityLevel: 'HIGH', contractBounds: { contractId: 'C' } },
+    ];
+    beforeEach(() => {
+      useSignerMock.mockReturnValue({
+        ...useSignerMock(),
+        signer: createMockSigner({ availableKeys: vi.fn().mockResolvedValue(transferKeys) }),
+      });
+    });
+
+    it('shows the key that will sign and how fees are charged', async () => {
+      const signingCriteria = vi.fn().mockResolvedValue({ purpose: 'TRANSFER' });
+      setup({ capability: { status: 'available' }, signingCriteria });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      expect(await screen.findByText('Signing key: #2 · TRANSFER · CRITICAL')).toBeInTheDocument();
+      expect(signingCriteria).toHaveBeenCalledWith(useSdkMock().sdk, initialOptions);
+      expect(screen.getByText(/does not provide an estimate in advance/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeEnabled();
+    });
+
+    it('names contract bounds and blocks signing when no key qualifies', async () => {
+      setup({
+        capability: { status: 'available' },
+        signingCriteria: vi.fn().mockResolvedValue({ purpose: 'OWNER' }),
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      expect(await screen.findByText(/No key can sign this operation/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeDisabled();
+    });
+
+    it('describes contract-bound signing keys', async () => {
+      setup({
+        capability: { status: 'available' },
+        signingCriteria: vi
+          .fn()
+          .mockResolvedValue({ purpose: 'AUTHENTICATION', target: { contractId: 'C' } }),
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      expect(
+        await screen.findByText('Signing key: #7 · AUTHENTICATION · HIGH · bound to contract C'),
+      ).toBeInTheDocument();
+    });
+
+    it('shows review data instead of raw options when the descriptor redacts them', () => {
+      initialOptions = { id: 'secret-value' };
+      setup({ reviewData: () => ({ id: 'hidden' }) });
+      review();
+      expect(screen.queryByText(/"secret-value"/)).not.toBeInTheDocument();
+      expect(screen.getByText(/"hidden"/)).toBeInTheDocument();
+    });
+  });
+
+  it.each([
+    [{ stateTransitionHash: 'ab'.repeat(32) }, true],
+    [{ ok: true }, false],
+  ])('links the state transition when the result has its hash (%o)', async (result, linked) => {
+    const { execute } = setup();
+    execute.mockResolvedValue(result);
+    review();
+    broadcast();
+    await screen.findByText('Broadcast succeeded');
+    if (linked)
+      expect(screen.getByRole('link', { name: 'Open state transition' })).toHaveAttribute(
+        'href',
+        `/state-transition/?hash=${'ab'.repeat(32)}&network=testnet`,
+      );
+    else
+      expect(screen.getByText(/does not return the state-transition hash/)).toBeInTheDocument();
+  });
 });

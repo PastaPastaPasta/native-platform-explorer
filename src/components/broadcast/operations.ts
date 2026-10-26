@@ -1,7 +1,7 @@
 'use client';
 
 import type { OperationDescriptor } from './OperationShell';
-import { operationRequirement } from './capabilities';
+import { operationRequirement, resolveSigningCriteria } from './capabilities';
 import { ContractRegisterForm, type ContractRegisterOptions } from './forms/ContractRegister';
 import { ContractUpdateForm, type ContractUpdateOptions } from './forms/ContractUpdate';
 import { DocumentCreateForm, type DocumentCreateOptions } from './forms/DocumentCreate';
@@ -78,6 +78,7 @@ function makeEntry<O, R>(
       ...descriptor,
       operationId: id,
       capability: operationRequirement(id),
+      signingCriteria: (sdk, options) => resolveSigningCriteria(id, sdk, options),
     } as OperationDescriptor<unknown, unknown>,
   };
 }

@@ -38,7 +38,12 @@ import { invalidateNetworkQueries, useSdk } from '@sdk/hooks';
 import { normalizeError } from '@sdk/errors';
 import { getDerivationNetwork, type Network } from '@sdk/networks';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import type { ExplorerSigner, SignerKeyDescriptor } from '@/signer/types';
+import type {
+  ExplorerSigner,
+  KeySelectionCriteria,
+  SignerKeyDescriptor,
+} from '@/signer/types';
+import { selectSigningKey } from '@/signer/keys';
 
 export interface OperationFormProps<TOptions> {
   signer: ExplorerSigner;
@@ -56,6 +61,8 @@ export interface OperationDescriptor<TOptions, TResult> {
   summarise: (options: TOptions) => string;
   /** What the review step shows for the inputs; use it to hide secrets. Defaults to the options. */
   reviewData?: (options: TOptions) => unknown;
+  /** Key requirements for these inputs; the review step shows the key they select. */
+  signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
   execute: (args: {
     sdk: EvoSDK;
     signer: ExplorerSigner;
@@ -81,6 +88,17 @@ function fingerprint(value: unknown): string {
     ];
   }
   return JSON.stringify(encode(value));
+}
+
+function describeKey(key: SignerKeyDescriptor): string {
+  const bounds = key.contractBounds
+    ? ` · bound to contract ${key.contractBounds.contractId}${
+        key.contractBounds.documentType ? ` (${key.contractBounds.documentType})` : ''
+      }`
+    : '';
+  return `#${key.id} · ${String(key.purpose ?? 'unknown purpose')} · ${String(
+    key.securityLevel ?? 'unknown level',
+  )}${bounds}`;
 }
 
 interface Review<TOptions, TResult> {
@@ -122,6 +140,11 @@ export function OperationShell<TOptions, TResult>({
   const [keyState, setKeyState] = useState<{
     binding: object;
     keys: SignerKeyDescriptor[];
+    error?: string;
+  } | null>(null);
+  const [reviewKey, setReviewKey] = useState<{
+    review: Review<TOptions, TResult>;
+    key?: SignerKeyDescriptor;
     error?: string;
   } | null>(null);
   const inFlight = useRef(false);
@@ -220,6 +243,29 @@ export function OperationShell<TOptions, TResult>({
     setKeyRefresh((value) => value + 1);
   };
 
+  // Show the key that will sign; executors resolve the same criteria again.
+  const currentKeys = keyState?.binding === contextBinding ? keyState.keys : null;
+  useEffect(() => {
+    const signingCriteria = review?.descriptor.signingCriteria;
+    if (!review || !signingCriteria || !currentKeys) return;
+    let cancelled = false;
+    void signingCriteria(review.sdk, review.options)
+      .then((criteria) => selectSigningKey(currentKeys, criteria))
+      .then(
+        (key) => {
+          if (!cancelled) setReviewKey({ review, key });
+        },
+        (error: unknown) => {
+          if (!cancelled) setReviewKey({ review, error: normalizeError(error).message });
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [review, currentKeys]);
+  const reviewSigningKey = reviewKey?.review === review ? reviewKey : null;
+  const signingKeyReady = !review?.descriptor.signingCriteria || !!reviewSigningKey?.key;
+
   const reset = useCallback(() => {
     setReview(null);
     setSubmission(null);
@@ -277,6 +323,7 @@ export function OperationShell<TOptions, TResult>({
   const canProceed =
     reviewIsCurrent &&
     capabilityAvailable &&
+    signingKeyReady &&
     (!descriptor.destructive || destructiveAck) &&
     mainnetConfirmed &&
     !busy;
@@ -472,6 +519,24 @@ export function OperationShell<TOptions, TResult>({
             <CodeBlock
               value={review.descriptor.reviewData?.(review.options) ?? review.options}
             />
+            {review.descriptor.signingCriteria ? (
+              <Text
+                fontSize="sm"
+                role="status"
+                color={reviewSigningKey?.error ? 'warning' : 'gray.250'}
+              >
+                {reviewSigningKey?.key
+                  ? `Signing key: ${describeKey(reviewSigningKey.key)}`
+                  : reviewSigningKey?.error
+                    ? `No key can sign this operation: ${reviewSigningKey.error}`
+                    : 'Selecting the signing key…'}
+              </Text>
+            ) : null}
+            <Text fontSize="sm" color="gray.250">
+              Fees: Platform deducts processing fees from the identity&apos;s credit balance when
+              the transition executes. The SDK does not provide an estimate in advance, so the exact
+              fee is only known afterwards.
+            </Text>
             {descriptor.destructive ? (
               <InfoBlock>
                 <VStack align="stretch" spacing={2}>
