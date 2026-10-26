@@ -7,6 +7,7 @@ import { useSdkQuery } from '@sdk/hooks';
 import { isBase58Identifier, shortId } from '@util/identifier';
 import { formatTokenAmount } from '@util/token-rules';
 import type { OperationFormProps } from '../../OperationShell';
+import type { ExplorerSigner } from '@/signer/types';
 import { fingerprint } from '../../fingerprint';
 import { describeTokenAmount, publicNoteError } from '../../tokens/amount';
 import { claimProblem, tokenOperationProblems, tokenOperationUnavailable } from '../../tokens/checks';
@@ -28,7 +29,11 @@ import { PriceScheduleFields } from './PriceScheduleFields';
 import { ConfigChangeFields } from './ConfigChangeFields';
 import { Field, IdentityInput } from './fields';
 
-export type TokenOperationFormProps = OperationFormProps<TokenOperationOptions> & { kind: TokenOperationKind };
+/** Token writes are signed by the connected identity, so the form needs it. */
+export type TokenOperationFormProps = Omit<OperationFormProps<TokenOperationOptions>, 'signer'> & {
+  signer: ExplorerSigner;
+  kind: TokenOperationKind;
+};
 
 const DISTRIBUTION_LABELS: Record<TokenDistributionKind, string> = {
   perpetual: 'Perpetual distribution',

@@ -50,8 +50,9 @@ const SPECS: Array<[TokenOperationKind, string, string, string]> = [
 ];
 
 function formFor(kind: TokenOperationKind) {
-  function TokenForm(props: OperationFormProps<TokenOperationOptions>) {
-    return <TokenOperationForm kind={kind} {...props} />;
+  function TokenForm({ signer, ...props }: OperationFormProps<TokenOperationOptions>) {
+    // The shell asks for a signer before showing forms of signer-signed operations.
+    return signer ? <TokenOperationForm kind={kind} signer={signer} {...props} /> : null;
   }
   TokenForm.displayName = `TokenForm(${kind})`;
   return TokenForm;
