@@ -16,6 +16,7 @@ import {
   executeVotingCastVote,
 } from '../executors';
 import { operationRequirement } from '../capabilities';
+import type * as ProtocolVersion from '@sdk/protocol-version';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../outcomes';
 import {
   SignerDisconnectedError,
@@ -472,7 +473,7 @@ describe('broadcast executors', () => {
     const drive = (current: number) => ({ version: { protocol: { drive: { current, latest: current } } } });
 
     beforeEach(async () => {
-      const actual = await vi.importActual<typeof import('@sdk/protocol-version')>('@sdk/protocol-version');
+      const actual = await vi.importActual<typeof ProtocolVersion>('@sdk/protocol-version');
       assertWritable.mockImplementation(actual.assertWritableProtocolVersion);
     });
 
