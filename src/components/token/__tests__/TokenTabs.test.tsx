@@ -6,6 +6,7 @@ import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
 import { TokenOverview } from '../TokenOverview';
 import { TokenBalanceLookup } from '../TokenBalanceLookup';
+import { TokenPrice } from '../TokenPrice';
 
 const signer = vi.hoisted(() => ({ current: null as { identityId: string } | null }));
 vi.mock('@/signer/SignerProvider', () => ({ useSigner: () => ({ signer: signer.current }) }));
@@ -118,5 +119,25 @@ describe('TokenBalanceLookup', () => {
     expect(screen.getByText('Token has no perpetual distribution.')).toBeVisible();
     expect(tokens.perpetualDistributionLastClaim).not.toHaveBeenCalled();
     expect(tokens.perpetualDistributionLastClaimWithProof).not.toHaveBeenCalled();
+  });
+});
+
+describe('TokenPrice', () => {
+  it('shows prices per whole token, keeping the raw per-unit credits', () => {
+    // 500 credits per smallest unit of an 8-decimal token is 0.5 DASH per token,
+    // which would round to 0 if shown per unit.
+    renderWithProviders(<TokenPrice info={{ basePrice: '500', currentPrice: '500' }} decimals={8} />);
+    expect(screen.getByText('0.50000000 DASH / token')).toHaveAccessibleName('0.50000000 DASH per token (500 credits per smallest unit)');
+  });
+
+  it('labels tiers and falls back to credits when decimals are unknown', () => {
+    renderWithProviders(<TokenPrice info={{ basePrice: '100000000000', currentPrice: '90000000000' }} />);
+    expect(screen.getByText('100,000,000,000 credits per smallest unit')).toBeVisible();
+    expect(screen.getByText('(largest tier)')).toBeVisible();
+  });
+
+  it('says when a token is not for sale', () => {
+    renderWithProviders(<TokenPrice info={undefined} />);
+    expect(screen.getByText('not for sale')).toBeVisible();
   });
 });

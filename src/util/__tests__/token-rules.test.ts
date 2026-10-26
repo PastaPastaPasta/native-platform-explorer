@@ -107,7 +107,7 @@ describe('perpetual distribution', () => {
     expect(d.kind).toBe('time');
     expect(d.interval).toBe('every 10 minutes');
     expect(d.emission).toBe(
-      'Step-decreasing: starts at 100000000, reduced by 1/100 every 1 interval, then 1 per interval',
+      'Step-decreasing: starts at 100000000, reduced by 1/100 every 1 interval, for at most 128 (default) reductions, then 1 per interval',
     );
     expect(d.recipient).toEqual({ label: 'Contract owner' });
   });

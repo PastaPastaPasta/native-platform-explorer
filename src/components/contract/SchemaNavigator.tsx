@@ -5,19 +5,15 @@ import { Badge, Box, Button, Grid, HStack, Text, VStack } from '@chakra-ui/react
 import { ChevronDownIcon, ChevronRightIcon } from '@chakra-ui/icons';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { getIndicesForType } from '@util/schema';
-import { toPlain } from '@util/contract';
+import { toRecord } from '@util/contract';
 
 type Json = Record<string, unknown>;
 
 type Selection = { type: string; property?: string } | null;
 
-function asRecord(value: unknown): Json | undefined {
-  const plain = toPlain(value);
-  return plain && typeof plain === 'object' && !Array.isArray(plain) ? (plain as Json) : undefined;
-}
 
 function propertyType(def: unknown): string {
-  const d = asRecord(def);
+  const d = toRecord(def);
   if (!d) return '?';
   if (d.byteArray === true) return d.contentMediaType === 'application/x.dash.dpp.identifier' ? 'identifier' : 'bytes';
   return typeof d.type === 'string' ? d.type : '?';
@@ -32,11 +28,11 @@ export function SchemaNavigator({ schemas }: { schemas: Json | undefined }) {
   const [selection, setSelection] = useState<Selection>(null);
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(types.slice(0, 1)));
 
-  const selectedSchema = selection ? asRecord(schemas?.[selection.type]) : undefined;
+  const selectedSchema = selection ? toRecord(schemas?.[selection.type]) : undefined;
   const value = !selection
     ? schemas
     : selection.property
-      ? asRecord(selectedSchema?.properties)?.[selection.property]
+      ? toRecord(selectedSchema?.properties)?.[selection.property]
       : selectedSchema;
   const label = !selection ? 'All document types' : selection.property ? `${selection.type}.${selection.property}` : selection.type;
 
@@ -68,8 +64,8 @@ export function SchemaNavigator({ schemas }: { schemas: Json | undefined }) {
         </Button>
         <VStack align="stretch" spacing={0}>
           {types.map((type) => {
-            const schema = asRecord(schemas?.[type]);
-            const props = Object.entries(asRecord(schema?.properties) ?? {});
+            const schema = toRecord(schemas?.[type]);
+            const props = Object.entries(toRecord(schema?.properties) ?? {});
             const required = new Set(Array.isArray(schema?.required) ? (schema.required as string[]) : []);
             const indices = getIndicesForType(schema);
             const open = expanded.has(type);

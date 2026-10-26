@@ -69,7 +69,10 @@ export function DocumentsFiltersPanel({
   onLimitChange,
   onReset,
 }: DocumentsFiltersPanelProps) {
-  const fields = indexedFields(indices);
+  const indexed = indexedFields(indices);
+  // A field from a hand-edited URL stays visible (Platform will judge it).
+  const fields = [...indexed, ...filters.map(([f]) => f), ...(orderBy ? [orderBy[0]] : [])]
+    .filter((f, i, all) => all.indexOf(f) === i);
   // Drafts start from the applied state; the parent re-keys the panel when
   // the applied state changes (URL navigation, reset).
   const [draft, setDraft] = useState<DocumentFilter[]>(filters);
@@ -81,7 +84,8 @@ export function DocumentsFiltersPanel({
       const field = next.field ?? row[0];
       const ops = operatorsFor(fieldKind(docSchema, field));
       const op = next.op ?? (ops.includes(row[1]) ? row[1] : ops[0]!);
-      const value = next.value ?? (next.field && fieldKind(docSchema, field) === 'boolean' ? 'true' : row[2]);
+      const kindChanged = next.field !== undefined && fieldKind(docSchema, next.field) !== fieldKind(docSchema, row[0]);
+      const value = next.value ?? (kindChanged ? (fieldKind(docSchema, field) === 'boolean' ? 'true' : '') : row[2]);
       return [field, op, value];
     }));
 
@@ -118,7 +122,7 @@ export function DocumentsFiltersPanel({
                   {fields.map((f) => <option key={f} value={f}>{f}</option>)}
                 </Select>
                 <Select size="sm" aria-label={`Filter ${i + 1} operator`} value={op} onChange={(e) => update(i, { op: e.target.value as FilterOperator })} bg="gray.800" borderColor="gray.700">
-                  {operatorsFor(kind).map((o) => <option key={o} value={o}>{OPERATOR_LABELS[o]}</option>)}
+                  {[...new Set([...operatorsFor(kind), op])].map((o) => <option key={o} value={o}>{OPERATOR_LABELS[o]}</option>)}
                 </Select>
                 {kind === 'boolean' ? (
                   <Select size="sm" aria-label={`Filter ${i + 1} value`} value={value} onChange={(e) => update(i, { value: e.target.value })} bg="gray.800" borderColor="gray.700">

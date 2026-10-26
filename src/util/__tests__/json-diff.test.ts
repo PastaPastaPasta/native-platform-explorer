@@ -32,6 +32,14 @@ describe('diffJson', () => {
     expect(diffJson(1, 2)).toEqual([{ path: '(root)', kind: 'changed', before: 1, after: 2 }]);
   });
 
+  it('compares byte fields as single values', () => {
+    const a = new Uint8Array([1, 2, 3]);
+    expect(diffJson({ id: a }, { id: new Uint8Array([1, 2, 3]) })).toEqual([]);
+    expect(diffJson({ id: a }, { id: new Uint8Array([1, 9, 3]) })).toEqual([
+      { path: 'id', kind: 'changed', before: a, after: new Uint8Array([1, 9, 3]) },
+    ]);
+  });
+
   it('summarizes counts', () => {
     const entries = diffJson({ a: 1, b: 2 }, { a: 2, c: 3 });
     expect(summarizeDiff(entries)).toEqual({ added: 1, removed: 1, changed: 1 });

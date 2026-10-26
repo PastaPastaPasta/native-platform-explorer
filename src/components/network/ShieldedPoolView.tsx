@@ -34,7 +34,8 @@ import {
   useShieldedPoolState,
 } from '@sdk/queries';
 import { readProp } from '@util/sdk-shape';
-import { SHIELDED_NOTES_WINDOW, bytesToHex, parseNullifierList } from '@util/shielded';
+import { bytesToHex } from '@sdk/evidence';
+import { SHIELDED_NOTES_WINDOW, parseNullifierList } from '@util/shielded';
 
 const ANCHORS_PAGE = 10;
 const NOTES_PAGE = 25;

@@ -1,5 +1,7 @@
 // Helpers for the shielded (Orchard) pool page.
 
+import { bytesToHex } from '@sdk/evidence';
+
 /**
  * Encrypted notes can only be fetched from a window boundary. Drive requires
  * `startIndex` to be a multiple of its 2048-note MMR chunk, and the SDK's proof
@@ -9,9 +11,6 @@
  */
 export const SHIELDED_NOTES_WINDOW = 8192;
 
-export function bytesToHex(bytes: Uint8Array): string {
-  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-}
 
 /** Parse one 32-byte nullifier, as 64 hex characters or standard base64. */
 export function parseNullifier(input: string): { hex: string } | { error: string } {

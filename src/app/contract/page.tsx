@@ -133,7 +133,7 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       JSON Schema
                     </Heading>
-                    <SchemaNavigator schemas={contract.documentSchemas} />
+                    <SchemaNavigator key={id} schemas={contract.documentSchemas} />
                   </InfoBlock>
                 </TabPanel>
 

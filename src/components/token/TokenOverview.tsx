@@ -21,7 +21,7 @@ import { InfoLine } from '@components/data/InfoLine';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { DateBlock } from '@components/data/DateBlock';
 import { RawJsonDisclosure } from '@components/data/RawJsonDisclosure';
-import { toPlain } from '@util/contract';
+import { toRecord } from '@util/contract';
 import {
   KEEPS_HISTORY_LABELS,
   changeControlRows,
@@ -33,12 +33,6 @@ import {
   type ActionTakers,
 } from '@util/token-rules';
 
-type Json = Record<string, unknown>;
-
-function rec(value: unknown): Json | undefined {
-  const plain = toPlain(value);
-  return plain && typeof plain === 'object' && !Array.isArray(plain) ? (plain as Json) : undefined;
-}
 
 function Takers({ value }: { value: ActionTakers }) {
   if (value.identityId) return <IdentityLink id={value.identityId} dense />;
@@ -63,14 +57,14 @@ export interface TokenOverviewProps {
 
 /** The token configuration rendered as rules instead of JSON. */
 export function TokenOverview({ config, decimals, totalSupply }: TokenOverviewProps) {
-  const cfg = rec(config);
+  const cfg = toRecord(config);
   if (!cfg) return null;
-  const distribution = rec(cfg.distributionRules);
+  const distribution = toRecord(cfg.distributionRules);
   const perpetual = describePerpetualDistribution(distribution?.perpetualDistribution);
   const schedule = preProgrammedSchedule(distribution?.preProgrammedDistribution);
   const destination = distribution?.newTokensDestinationIdentity;
-  const marketplace = rec(cfg.marketplaceRules);
-  const history = rec(cfg.keepsHistory);
+  const marketplace = toRecord(cfg.marketplaceRules);
+  const history = toRecord(cfg.keepsHistory);
   const rules = changeControlRows(cfg);
   const emergency = rules.find((r) => r.key === 'emergencyActionRules');
   const now = Date.now();

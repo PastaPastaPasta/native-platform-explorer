@@ -27,22 +27,31 @@ export function readTokenPrice(info: unknown): TokenPriceSummary | null {
   return { first: String(base ?? current), last: String(current ?? base) };
 }
 
-function credits(value: string) {
+/** Credits per smallest unit, shown as DASH per whole token when the token's
+ *  decimals are known (sub-1000-credit unit prices would round to 0 DASH). */
+function Price({ value, decimals }: { value: string; decimals?: number }) {
+  const perUnit = `${formatCredits(value)} credits per smallest unit`;
+  if (decimals === undefined) return <Text as="span" fontFamily="mono">{perUnit}</Text>;
+  const perToken = (BigInt(value) * 10n ** BigInt(decimals)).toString();
   return (
-    <Tooltip label={`${formatCredits(value)} credits per smallest token unit`} hasArrow>
-      <Text as="span" fontFamily="mono">{formatDashAmount(value, 8)} DASH</Text>
+    <Tooltip label={perUnit} hasArrow>
+      <Text as="span" fontFamily="mono" tabIndex={0} aria-label={`${formatDashAmount(perToken, 8)} DASH per token (${perUnit})`}>
+        {formatDashAmount(perToken, 8)} DASH / token
+      </Text>
     </Tooltip>
   );
 }
 
-export function TokenPrice({ info }: { info: unknown }) {
+export function TokenPrice({ info, decimals }: { info: unknown; decimals?: number }) {
   const price = readTokenPrice(info);
   if (!price) return <Text as="span" color="gray.400" fontSize="xs">not for sale</Text>;
-  if (price.first === price.last) return <Text as="span" fontSize="xs" color="gray.100">{credits(price.first)}</Text>;
+  if (price.first === price.last) {
+    return <Text as="span" fontSize="xs" color="gray.100"><Price value={price.first} decimals={decimals} /></Text>;
+  }
   return (
     <Text as="span" fontSize="xs" color="gray.100">
-      {credits(price.first)} <Text as="span" color="gray.400">(smallest tier) …</Text> {credits(price.last)}{' '}
-      <Text as="span" color="gray.400">(largest tier)</Text>
+      <Price value={price.first} decimals={decimals} /> <Text as="span" color="gray.400">(smallest tier) …</Text>{' '}
+      <Price value={price.last} decimals={decimals} /> <Text as="span" color="gray.400">(largest tier)</Text>
     </Text>
   );
 }

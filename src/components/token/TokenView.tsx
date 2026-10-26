@@ -129,7 +129,7 @@ export function TokenView({ tokenId }: { tokenId: string }) {
               totalSupply={supply?.totalSupply ?? null}
               maxSupply={supply?.maxSupply ?? (tokenConfig?.maxSupply as bigint | number | string | null) ?? null}
               baseSupply={supply?.baseSupply ?? (tokenConfig?.baseSupply as bigint | number | string | null) ?? null}
-              price={price ? <TokenPrice info={priceForToken} /> : null}
+              price={price ? <TokenPrice info={priceForToken} decimals={tokenConfig?.decimals} /> : null}
               flags={tokenFlagsFromConfig(configPlain)}
               ownerContractId={ownerContractId}
               tokenContractPosition={position}
@@ -147,6 +147,8 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                 <TabPanel px={0}>
                   {contractQ.isLoading || contractInfoQ.isLoading ? (
                     <LoadingCard lines={4} />
+                  ) : contractInfoQ.isError ? (
+                    <ErrorCard error={contractInfoQ.error} onRetry={() => contractInfoQ.refetch()} />
                   ) : contractQ.isError ? (
                     <ErrorCard error={contractQ.error} onRetry={() => contractQ.refetch()} />
                   ) : tokenConfig ? (
@@ -249,7 +251,7 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                           label="Direct-purchase price"
                           value={pricesQ.isError
                             ? <ErrorCard error={pricesQ.error} onRetry={() => pricesQ.refetch()} />
-                            : pricesQ.isLoading ? <Text color="gray.400">…</Text> : <TokenPrice info={priceForToken} />}
+                            : pricesQ.isLoading ? <Text color="gray.400">…</Text> : <TokenPrice info={priceForToken} decimals={tokenConfig?.decimals} />}
                         />
                       </HStack>
                     )}

@@ -44,6 +44,9 @@ function DiffList({ entries }: { entries: DiffEntry[] }) {
   );
 }
 
+/** Drive's MAX_CONTRACT_HISTORY_FETCH_LIMIT; the scan runs newest first. */
+const HISTORY_LIMIT = 10;
+
 /** Contract versions newest first, each diffed against the version before it. */
 export function ContractHistoryTimeline({ history }: { history: unknown }) {
   const versions = useMemo(() => {
@@ -56,11 +59,22 @@ export function ContractHistoryTimeline({ history }: { history: unknown }) {
       .reverse();
   }, [history]);
 
+  // A full response may have cut off older versions, which rc.2 cannot page to
+  // (DataContractHistoryQuery has no offset and startAtMs bounds from below).
+  const truncated = versions.length >= HISTORY_LIMIT;
+
   if (versions.length === 0) {
     return <Text color="gray.400" fontSize="sm">Platform returned no stored versions for this contract.</Text>;
   }
 
   return (
+    <VStack align="stretch" spacing={3}>
+    {truncated ? (
+      <Text fontSize="xs" color="gray.400">
+        Platform returns at most the {HISTORY_LIMIT} newest versions, and the SDK cannot page further back, so
+        older versions are not shown.
+      </Text>
+    ) : null}
     <VStack as="ol" align="stretch" spacing={0} listStyleType="none" aria-label="Contract versions">
       {versions.map((v, i) => {
         const counts = v.diff ? summarizeDiff(v.diff) : null;
@@ -80,7 +94,7 @@ export function ContractHistoryTimeline({ history }: { history: unknown }) {
                     {counts.added} added · {counts.removed} removed · {counts.changed} changed
                   </Text>
                 ) : (
-                  <Text fontSize="xs" color="gray.400">initial stored version</Text>
+                  <Text fontSize="xs" color="gray.400">{truncated ? 'oldest version returned' : 'initial stored version'}</Text>
                 )}
               </HStack>
               {v.diff && v.diff.length > 0 ? <DiffList entries={v.diff} /> : null}
@@ -92,6 +106,7 @@ export function ContractHistoryTimeline({ history }: { history: unknown }) {
           </Box>
         );
       })}
+    </VStack>
     </VStack>
   );
 }

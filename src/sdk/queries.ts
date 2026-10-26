@@ -381,6 +381,7 @@ export function useContract(id: string | undefined) {
   );
 }
 
+/** The (at most 10) newest stored versions of a contract that keeps history. */
 export function useContractHistory(id: string | undefined) {
   return useSdkQuery(
     ['contracts', 'getHistory', id],

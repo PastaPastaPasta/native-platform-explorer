@@ -199,6 +199,7 @@ function Content() {
                       <ErrorCard error={contractQ.error} onRetry={() => contractQ.refetch()} />
                     ) : contract ? (
                       <DocumentHistorySection
+                        key={`${id}/${type}/${docId}`}
                         contractId={id}
                         type={type}
                         docId={docId}

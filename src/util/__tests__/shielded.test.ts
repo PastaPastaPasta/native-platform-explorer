@@ -1,15 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { bytesToHex, parseNullifier, parseNullifierList } from '../shielded';
+import { parseNullifier, parseNullifierList } from '../shielded';
 
 const hex = 'f49bc3c142cac390e7ae0c2a54ceb8a8b13750d49289c88bb4611c8b8a65c00b';
 // The same 32 bytes as the base64 the rc.2 `ShieldedEncryptedNote.toJSON()` emits.
 const base64 = '9JvDwULKw5DnrgwqVM64qLE3UNSSiciLtGEci4plwAs=';
 
 describe('shielded helpers', () => {
-  it('hex-encodes bytes', () => {
-    expect(bytesToHex(new Uint8Array([0, 15, 255]))).toBe('000fff');
-  });
-
   it('parses hex (optionally 0x-prefixed, any case) and base64 nullifiers', () => {
     expect(parseNullifier(hex)).toEqual({ hex });
     expect(parseNullifier(`0x${hex.toUpperCase()}`)).toEqual({ hex });

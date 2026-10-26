@@ -65,8 +65,8 @@ export function IdentityContractLookup({ identityId }: { identityId: string }) {
               <ErrorCard error={keysQ.error} onRetry={() => keysQ.refetch()} />
             ) : keys.length === 0 ? (
               <Text fontSize="sm" color="gray.400">
-                No keys bound to this contract. Contracts that require an encryption or decryption key
-                (see the contract&apos;s Internal tab) have identities add keys with contract bounds.
+                No contract-wide keys are bound to this contract. Keys bound to a single document type are
+                not returned by this query, and it returns at most one key per purpose.
               </Text>
             ) : (
               <PublicKeysTable keys={keys as never} />

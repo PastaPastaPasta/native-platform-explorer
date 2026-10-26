@@ -158,7 +158,7 @@ export function ContractTokensTab({
                 ) : pricesQ.isError ? (
                   <Text as="span" color="red.300" fontSize="xs">failed</Text>
                 ) : (
-                  <TokenPrice info={r.tokenId ? prices?.get(r.tokenId) : undefined} />
+                  <TokenPrice info={r.tokenId ? prices?.get(r.tokenId) : undefined} decimals={r.decimals} />
                 )}
               </Td>
               <Td borderColor="gray.750">
@@ -190,8 +190,8 @@ export function ContractTokensTab({
       </Table>
       <Text fontSize="xs" color="gray.500">
         Token IDs are derived deterministically from <code>(contractId, position)</code>.
-        Supply is shown with the token&apos;s decimals. Prices are per smallest unit (10<sup>−decimals</sup>{' '}
-        of a token), as Platform charges them.
+        Supply and prices are shown per whole token, using the token&apos;s decimals; Platform
+        stores prices per smallest unit (hover for the raw value).
       </Text>
     </VStack>
   );

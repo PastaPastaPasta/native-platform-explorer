@@ -41,7 +41,8 @@ export function toPlain(value: unknown): unknown {
   return value;
 }
 
-function toRecord(value: unknown): Record<string, unknown> | undefined {
+/** `toPlain`, keeping only plain (non-array) objects. */
+export function toRecord(value: unknown): Record<string, unknown> | undefined {
   const plain = toPlain(value);
   if (plain && typeof plain === 'object' && !Array.isArray(plain)) {
     return plain as Record<string, unknown>;

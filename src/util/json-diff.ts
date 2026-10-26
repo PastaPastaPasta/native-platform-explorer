@@ -15,7 +15,7 @@ export interface DiffEntry {
 const PLAIN_KEY = /^[A-Za-z_$][\w$]*$/;
 
 function isObject(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value);
+  return !!value && typeof value === 'object' && !Array.isArray(value) && !ArrayBuffer.isView(value);
 }
 
 function join(path: string, key: string | number): string {
@@ -26,6 +26,10 @@ function join(path: string, key: string | number): string {
 
 function same(a: unknown, b: unknown): boolean {
   if (typeof a === 'bigint' || typeof b === 'bigint') return String(a) === String(b);
+  // Byte fields (identifiers, hashes) are compared, and reported, as one value.
+  if (a instanceof Uint8Array && b instanceof Uint8Array) {
+    return a.length === b.length && a.every((x, i) => x === b[i]);
+  }
   return Object.is(a, b);
 }
 

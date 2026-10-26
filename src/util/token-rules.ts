@@ -3,20 +3,14 @@
 // externally tagged: unit variants are strings (`"NoOne"`), others are
 // single-key objects (`{ "Identity": "<base58>" }`, `{ "Group": 0 }`).
 
-import { toPlain } from './contract';
+import { toRecord } from './contract';
 import { removeTrailingZeros } from './numbers';
 
-type Json = Record<string, unknown>;
-
-function asRecord(value: unknown): Json | undefined {
-  const plain = toPlain(value);
-  return plain && typeof plain === 'object' && !Array.isArray(plain) ? (plain as Json) : undefined;
-}
 
 /** Split an externally tagged enum value into its variant name and payload. */
 export function enumVariant(value: unknown): { variant: string; payload?: unknown } | null {
   if (typeof value === 'string') return { variant: value };
-  const rec = asRecord(value);
+  const rec = toRecord(value);
   if (!rec) return null;
   const keys = Object.keys(rec).filter((k) => k !== '$formatVersion');
   if (keys.length !== 1) return null;
@@ -70,17 +64,17 @@ const RULES: Array<[path: string[], label: string]> = [
   [['marketplaceRules', 'tradeModeChangeRules'], 'Change trade mode'],
 ];
 
-function at(config: Json | undefined, path: string[]): unknown {
+function at(config: Record<string, unknown> | undefined, path: string[]): unknown {
   let cur: unknown = config;
-  for (const key of path) cur = asRecord(cur)?.[key];
+  for (const key of path) cur = toRecord(cur)?.[key];
   return cur;
 }
 
 export function changeControlRows(config: unknown): ChangeControlRow[] {
-  const cfg = asRecord(config);
+  const cfg = toRecord(config);
   const rows: ChangeControlRow[] = [];
   for (const [path, label] of RULES) {
-    const rule = asRecord(at(cfg, path));
+    const rule = toRecord(at(cfg, path));
     if (!rule) continue;
     rows.push({
       key: path.join('.'),
@@ -95,14 +89,14 @@ export function changeControlRows(config: unknown): ChangeControlRow[] {
   return rows;
 }
 
-const canAct = (config: Json | undefined, key: string) => {
-  const rule = asRecord(config?.[key]);
+const canAct = (config: Record<string, unknown> | undefined, key: string) => {
+  const rule = toRecord(config?.[key]);
   return rule ? enumVariant(rule.authorizedToMakeChange)?.variant !== 'NoOne' : false;
 };
 
 /** Capability pills: an action is "on" when someone is authorized to perform it. */
 export function tokenFlagsFromConfig(config: unknown) {
-  const cfg = asRecord(config);
+  const cfg = toRecord(config);
   return {
     mintable: canAct(cfg, 'manualMintingRules'),
     burnable: canAct(cfg, 'manualBurningRules'),
@@ -140,7 +134,7 @@ function formatDuration(ms: number): string {
 /** rs-dpp `RewardDistributionType`: when distributions happen. */
 export function describeInterval(distributionType: unknown): string | null {
   const v = enumVariant(distributionType);
-  const payload = asRecord(v?.payload);
+  const payload = toRecord(v?.payload);
   if (!v || !payload) return null;
   const interval = Number(payload.interval);
   switch (v.variant) {
@@ -159,7 +153,7 @@ function intervalUnit(variant: string | undefined): string {
   return 'intervals';
 }
 
-function bounds(p: Json): string {
+function bounds(p: Record<string, unknown>): string {
   const min = num(p.min_value);
   const max = num(p.max_value);
   if (min && max) return `, clamped to [${min}, ${max}]`;
@@ -173,7 +167,7 @@ function bounds(p: Json): string {
 export function describeDistributionFunction(fn: unknown): string {
   const v = enumVariant(fn);
   if (!v) return 'Unknown function';
-  const p = asRecord(v.payload) ?? {};
+  const p = toRecord(v.payload) ?? {};
   switch (v.variant) {
     case 'FixedAmount':
       return `Fixed: ${num(p.amount)} per interval`;
@@ -186,12 +180,13 @@ export function describeDistributionFunction(fn: unknown): string {
         `Step-decreasing: starts at ${num(p.distribution_start_amount)}`,
         `reduced by ${num(p.decrease_per_interval_numerator)}/${num(p.decrease_per_interval_denominator)} every ${num(p.step_count)} interval${p.step_count === 1 ? '' : 's'}`,
         offset ? `starting after interval ${offset}` : null,
-        maxSteps ? `for at most ${maxSteps} reductions` : null,
+        // rs-dpp DEFAULT_STEP_DECREASING_AMOUNT_MAX_CYCLES_BEFORE_TRAILING_DISTRIBUTION
+        `for at most ${maxSteps ?? '128 (default)'} reductions`,
         `then ${num(p.trailing_distribution_interval_amount)} per interval`,
       ].filter(Boolean).join(', ') + bounds(p);
     }
     case 'Stepwise': {
-      const steps = Object.entries(asRecord(v.payload) ?? {})
+      const steps = Object.entries(toRecord(v.payload) ?? {})
         .sort(([a], [b]) => Number(a) - Number(b))
         .map(([from, amount]) => `${num(amount)} from interval ${from}`);
       return `Stepwise: ${steps.join('; ')}`;
@@ -236,7 +231,7 @@ export interface PerpetualDistributionSummary {
 }
 
 export function describePerpetualDistribution(value: unknown): PerpetualDistributionSummary | null {
-  const rec = asRecord(value);
+  const rec = toRecord(value);
   if (!rec) return null;
   const type = enumVariant(rec.distributionType);
   const kind = type?.variant === 'BlockBasedDistribution' ? 'block'
@@ -247,7 +242,7 @@ export function describePerpetualDistribution(value: unknown): PerpetualDistribu
     kind,
     interval: describeInterval(rec.distributionType),
     intervalUnit: intervalUnit(type?.variant),
-    emission: describeDistributionFunction(asRecord(type?.payload)?.function),
+    emission: describeDistributionFunction(toRecord(type?.payload)?.function),
     recipient: describeRecipient(rec.distributionRecipient),
   };
 }
@@ -259,12 +254,12 @@ export interface PreProgrammedEntry {
 
 /** rs-dpp `TokenPreProgrammedDistributionV0.distributions`: time → identity → amount. */
 export function preProgrammedSchedule(value: unknown): PreProgrammedEntry[] {
-  const distributions = asRecord(asRecord(value)?.distributions);
+  const distributions = toRecord(toRecord(value)?.distributions);
   if (!distributions) return [];
   return Object.entries(distributions)
     .map(([ts, recipients]) => ({
       timestampMs: Number(ts),
-      recipients: Object.entries(asRecord(recipients) ?? {}).map(([identityId, amount]) => ({
+      recipients: Object.entries(toRecord(recipients) ?? {}).map(([identityId, amount]) => ({
         identityId,
         amount: num(amount) ?? '0',
       })),

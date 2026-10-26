@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   parseAsArrayOf,
@@ -88,6 +88,7 @@ function Content() {
   const columns = useMemo(() => heuristicColumnsForType(docSchema), [docSchema]);
 
   const [state, setState] = useQueryStates(URL_STATE, { history: 'push' });
+  const [resets, setResets] = useState(0);
   const filtersKey = JSON.stringify(state.where);
   // Value-keyed so the derived query is stable across renders.
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,7 +136,10 @@ function Content() {
   // only a valid `startAfter` within the ordering that produced it.
   const applyQuery = (next: DocumentFilter[], nextOrder: OrderBy | null) =>
     void setState({ where: next, order: serializeOrderBy(nextOrder), after: [] });
-  const resetFilters = () => void setState({ where: [], order: null, after: [] });
+  const resetFilters = () => {
+    setResets((n) => n + 1); // also discard unapplied draft rows
+    void setState({ where: [], order: null, after: [] });
+  };
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -171,7 +175,7 @@ function Content() {
         ) : (
           <>
             <DocumentsFiltersPanel
-              key={`${filtersKey}|${orderKey}`}
+              key={`${filtersKey}|${orderKey}|${resets}`}
               docSchema={docSchema}
               indices={indices}
               filters={filters}

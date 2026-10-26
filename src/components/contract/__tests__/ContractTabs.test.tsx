@@ -55,6 +55,16 @@ describe('ContractHistoryTimeline', () => {
     expect(within(items[1]!).getByText('initial stored version')).toBeVisible();
   });
 
+  it('says older versions are cut off when Platform returns its 10-version maximum', () => {
+    const history = new Map<bigint, unknown>(
+      Array.from({ length: 10 }, (_, i) => [1780000000000n + BigInt(i), { version: i + 3, documentSchemas: {} }] as const),
+    );
+    renderWithProviders(<ContractHistoryTimeline history={history} />);
+    expect(screen.getByText(/at most the 10 newest versions/)).toBeVisible();
+    expect(screen.getByText('oldest version returned')).toBeVisible();
+    expect(screen.queryByText('initial stored version')).toBeNull();
+  });
+
   it('says so when nothing is stored', () => {
     renderWithProviders(<ContractHistoryTimeline history={new Map()} />);
     expect(screen.getByText(/no stored versions/)).toBeVisible();
