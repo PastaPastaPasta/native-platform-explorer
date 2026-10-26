@@ -45,7 +45,8 @@ beforeEach(() => {
 
 describe('Query workspace execution', () => {
   it('shows a structured SDK query failure and fetches current results after Retry', async () => {
-    const query = vi.fn().mockRejectedValue({ message: 'Document endpoint unavailable', kind: 17 });
+    // WasmSdkErrorKind.Generic in 5.0.0-rc.8 (17 before ExecutionNotProved was inserted).
+    const query = vi.fn().mockRejectedValue({ message: 'Document endpoint unavailable', kind: 18 });
     renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
     runSql('SELECT * FROM domain LIMIT 1');
     await screen.findByText('Document endpoint unavailable');
