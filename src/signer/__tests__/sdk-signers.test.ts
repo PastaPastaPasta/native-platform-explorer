@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  ContractBounds,
   DataContract,
   DataContractCreateTransition,
   DataContractUpdateTransition,
@@ -400,5 +401,27 @@ describe('SDK-compatible signers', () => {
     }).catch((e: unknown) => e)) as Error;
     expect(backupError.message).toBe('identityKeys[0] does not contain a valid WIF private key.');
     expect(backupError.message).not.toContain(secret);
+  });
+
+  it('reports on-chain contract bounds so keys stay inside them', async () => {
+    const contractId = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
+    const { sdk } = fixture({
+      contractBounds: ContractBounds.SingleContractDocumentType(contractId, 'domain'),
+    });
+    const signer = await createWifSigner(sdk, wif, ID);
+    expect((await signer.availableKeys())[0]?.contractBounds).toEqual({
+      contractId,
+      documentType: 'domain',
+    });
+    await expect(
+      signer.prepareSdk!({ purpose: 'AUTHENTICATION', target: { contractId: ID } }),
+    ).rejects.toThrow(/No enabled matching on-chain key/);
+    const material = await signer.prepareSdk!({
+      purpose: 'AUTHENTICATION',
+      target: { contractId, documentType: 'domain' },
+    });
+    expect(material.keyId).toBe(4);
+    material.release!();
+    signer.destroy();
   });
 });

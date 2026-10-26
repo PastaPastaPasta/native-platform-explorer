@@ -17,6 +17,13 @@ export interface SignerKeyDescriptor {
   type?: string | number;
   securityLevel?: string | number;
   disabledAt?: bigint;
+  /** Set when the key may only be used for one contract (and optionally one document type). */
+  contractBounds?: KeyContractBounds;
+}
+
+export interface KeyContractBounds {
+  contractId: string;
+  documentType?: string;
 }
 
 export interface KeySelectionCriteria {
@@ -34,6 +41,12 @@ export interface KeySelectionCriteria {
   allowedSecurityLevels?: Array<'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM'>;
   /** Explicit key id; purpose and security requirements still apply. */
   keyId?: number;
+  /**
+   * Contract (and document type, when the transition touches only one) the
+   * transition acts on. A contract-bound key qualifies only inside its bounds,
+   * so without a target bound keys never qualify.
+   */
+  target?: KeyContractBounds;
 }
 
 export interface SdkSigningMaterial {

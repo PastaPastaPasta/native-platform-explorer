@@ -1,7 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { createMockSigner } from '@/test/signer';
 import { keyMeetsCriteria, selectSigningKey } from '@/signer/keys';
-import { operationRequirement, resolveOperationCapability } from '../capabilities';
+import {
+  documentSecurityLevels,
+  operationRequirement,
+  resolveOperationCapability,
+} from '../capabilities';
 
 const AUTH = { id: 1, purpose: 'AUTHENTICATION', securityLevel: 'HIGH' };
 
@@ -90,5 +94,32 @@ describe('operation capabilities', () => {
     expect(resolveOperationCapability(operationRequirement('identity.creditWithdrawal'), createMockSigner(), [AUTH]).reason).toMatch(
       /TRANSFER or OWNER key/,
     );
+  });
+
+  it('keeps contract-bound keys inside their contract and document type', () => {
+    const auth = { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['HIGH' as const] };
+    const boundToX = { id: 2, purpose: 'AUTHENTICATION', securityLevel: 'HIGH', contractBounds: { contractId: 'X' } };
+    const boundToNote = { ...boundToX, id: 3, contractBounds: { contractId: 'X', documentType: 'note' } };
+    expect(keyMeetsCriteria(boundToX, { ...auth, target: { contractId: 'X', documentType: 'note' } })).toBe(true);
+    expect(keyMeetsCriteria(boundToX, { ...auth, target: { contractId: 'Y', documentType: 'note' } })).toBe(false);
+    expect(keyMeetsCriteria(boundToX, auth)).toBe(false);
+    expect(keyMeetsCriteria(boundToNote, { ...auth, target: { contractId: 'X', documentType: 'note' } })).toBe(true);
+    expect(keyMeetsCriteria(boundToNote, { ...auth, target: { contractId: 'X', documentType: 'post' } })).toBe(false);
+    expect(keyMeetsCriteria(boundToNote, { ...auth, target: { contractId: 'X' } })).toBe(false);
+    expect(() => selectSigningKey([boundToX], { ...auth, target: { contractId: 'Y' } })).toThrow(
+      /may be used for contract Y/,
+    );
+    // Before the target is known, a bound key still shows the operation as possible.
+    expect(
+      resolveOperationCapability(operationRequirement('document.create'), createMockSigner(), [boundToX]).status,
+    ).toBe('available');
+  });
+
+  it('maps document signatureSecurityLevelRequirement to the levels Platform accepts', () => {
+    expect(documentSecurityLevels(undefined)).toEqual(['CRITICAL', 'HIGH']);
+    expect(documentSecurityLevels(0)).toEqual(['MASTER']);
+    expect(documentSecurityLevels(1)).toEqual(['CRITICAL']);
+    expect(documentSecurityLevels(3)).toEqual(['CRITICAL', 'HIGH', 'MEDIUM']);
+    expect(() => documentSecurityLevels(4)).toThrow(/Unsupported/);
   });
 });

@@ -16,13 +16,30 @@ export interface ImportedPrivateKey {
   keyId?: number;
 }
 
+function contractBounds(key: IdentityPublicKey): SignerKeyDescriptor['contractBounds'] {
+  const bounds = key.contractBounds;
+  if (!bounds) return undefined;
+  try {
+    const id = bounds.identifier;
+    try {
+      return { contractId: id.toBase58(), documentType: bounds.documentTypeName ?? undefined };
+    } finally {
+      id.free();
+    }
+  } finally {
+    bounds.free();
+  }
+}
+
 function descriptor(key: IdentityPublicKey): SignerKeyDescriptor {
+  const bounds = contractBounds(key);
   return {
     id: key.keyId,
     purpose: key.purpose,
     type: key.keyType,
     securityLevel: key.securityLevel,
     disabledAt: key.disabledAt,
+    ...(bounds ? { contractBounds: bounds } : {}),
   };
 }
 

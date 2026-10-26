@@ -17,7 +17,7 @@ import {
   submitOperation,
   type ReceiptEntities,
 } from './outcomes';
-import { operationRequirement } from './capabilities';
+import { DPNS_CONTRACT_ID, operationRequirement, resolveSigningCriteria } from './capabilities';
 import type { ContractRegisterOptions } from './forms/ContractRegister';
 import type { ContractUpdateOptions } from './forms/ContractUpdate';
 import type { DocumentCreateOptions } from './forms/DocumentCreate';
@@ -35,7 +35,6 @@ import {
 import type { IdentityUpdateKeysOptions, NewIdentityKey } from './forms/IdentityUpdateKeys';
 import type { IdentityTopUpOptions } from './forms/IdentityTopUp';
 import { DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
-import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import type { VotingCastVoteOptions } from './forms/VotingCastVote';
 
 export interface ContractRegisterResult {
@@ -74,7 +73,6 @@ export interface IdentityResult {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-const DPNS_CONTRACT_ID = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns')!.testnetId;
 
 // wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
 // only release on explicit `free()`. Every executor now goes through this
@@ -83,7 +81,7 @@ const DPNS_CONTRACT_ID = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns')!.te
 // adapters still have their IdentitySigner freed by the fallback here.
 async function withSigningMaterial<T>(
   signer: ExplorerSigner,
-  criteria: KeySelectionCriteria | undefined,
+  criteria: KeySelectionCriteria | undefined | (() => Promise<KeySelectionCriteria | undefined>),
   fn: (material: SdkSigningMaterial, submit: typeof submitOperation) => Promise<T>,
 ): Promise<T> {
   if (!signer.prepareSdk) {
@@ -94,7 +92,7 @@ async function withSigningMaterial<T>(
   }
   let material: SdkSigningMaterial;
   try {
-    material = await signer.prepareSdk(criteria);
+    material = await signer.prepareSdk(typeof criteria === 'function' ? await criteria() : criteria);
   } catch (error) {
     throw new OperationNotSubmittedError(error);
   }
@@ -156,7 +154,7 @@ export async function executeContractRegister(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    operationRequirement('contract.register').criteria,
+    () => resolveSigningCriteria('contract.register', sdk, options),
     async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
       const { DataContract } = await import('@dashevo/evo-sdk');
@@ -205,7 +203,7 @@ export async function executeContractUpdate(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    operationRequirement('contract.update').criteria,
+    () => resolveSigningCriteria('contract.update', sdk, options),
     async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
 
@@ -307,7 +305,7 @@ export async function executeDocumentCreate(args: {
   options: DocumentCreateOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('document.create').criteria;
+  const criteria = () => resolveSigningCriteria('document.create', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const document = await buildDocument(
       options.contractId,
@@ -348,7 +346,7 @@ export async function executeDocumentReplace(args: {
   options: DocumentReplaceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('document.replace').criteria;
+  const criteria = () => resolveSigningCriteria('document.replace', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const document = await buildDocument(
       options.contractId,
@@ -391,7 +389,7 @@ export async function executeDocumentDelete(args: {
   options: DocumentDeleteOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('document.delete').criteria;
+  const criteria = () => resolveSigningCriteria('document.delete', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     await submit(
       () =>
@@ -431,7 +429,7 @@ export async function executeDocumentTransfer(args: {
   options: DocumentTransferOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('document.transfer').criteria;
+  const criteria = () => resolveSigningCriteria('document.transfer', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
@@ -475,7 +473,7 @@ export async function executeDocumentSetPrice(args: {
   options: DocumentSetPriceOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('document.setPrice').criteria;
+  const criteria = () => resolveSigningCriteria('document.setPrice', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
@@ -517,7 +515,7 @@ export async function executeDocumentPurchase(args: {
   options: DocumentPurchaseOptions;
 }): Promise<DocumentResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('document.purchase').criteria;
+  const criteria = () => resolveSigningCriteria('document.purchase', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const existing = await fetchExistingDocument(
       sdk,
@@ -568,7 +566,7 @@ export async function executeIdentityCreditTransfer(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    operationRequirement('identity.creditTransfer').criteria,
+    () => resolveSigningCriteria('identity.creditTransfer', sdk, options),
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
       // SDK rc.2 merges facade and raw-transition declarations with this
@@ -606,11 +604,7 @@ export async function executeIdentityCreditWithdrawal(args: {
   options: IdentityCreditWithdrawalOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  // Platform rejects an address on owner-key withdrawals; they pay the payout address.
-  const criteria = {
-    ...operationRequirement('identity.creditWithdrawal').criteria,
-    purpose: options.toAddress === undefined ? 'OWNER' : 'TRANSFER',
-  };
+  const criteria = () => resolveSigningCriteria('identity.creditWithdrawal', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const amount = validateWithdrawalAmount(String(options.amountCredits));
     const fee = validateCoreFeePerByte(String(options.coreFeePerByte));
@@ -654,7 +648,7 @@ export async function executeIdentityUpdateKeys(args: {
   const { sdk, signer, options } = args;
   return withSigningMaterial(
     signer,
-    operationRequirement('identity.updateKeys').criteria,
+    () => resolveSigningCriteria('identity.updateKeys', sdk, options),
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
       const addPublicKeys = options.addKeys?.length
@@ -764,7 +758,7 @@ export async function executeDpnsRegister(args: {
   options: DpnsRegisterOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  const criteria = operationRequirement('dpns.registerName').criteria;
+  const criteria = () => resolveSigningCriteria('dpns.registerName', sdk, options);
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
     const registered = await submit(

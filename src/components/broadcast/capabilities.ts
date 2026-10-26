@@ -1,5 +1,7 @@
+import type { EvoSDK } from '@dashevo/evo-sdk';
 import { describePurpose, keyMeetsCriteria } from '@/signer/keys';
 import type { ExplorerSigner, KeySelectionCriteria, SignerKeyDescriptor } from '@/signer/types';
+import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 
 export interface OperationCapabilityRequirement {
   status: 'available' | 'external-bridge' | 'unsupported';
@@ -55,16 +57,24 @@ export function operationRequirement(id: string): OperationCapabilityRequirement
         criteria: { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['CRITICAL'] },
       };
     case 'contract.register':
+    case 'dpns.registerName':
+      return {
+        status: 'available',
+        criteria: { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['CRITICAL', 'HIGH'] },
+      };
     case 'document.create':
     case 'document.replace':
     case 'document.delete':
     case 'document.transfer':
     case 'document.setPrice':
     case 'document.purchase':
-    case 'dpns.registerName':
+      // Narrowed per document type by resolveSigningCriteria.
       return {
         status: 'available',
-        criteria: { purpose: 'AUTHENTICATION', allowedSecurityLevels: ['CRITICAL', 'HIGH'] },
+        criteria: {
+          purpose: 'AUTHENTICATION',
+          allowedSecurityLevels: ['MASTER', 'CRITICAL', 'HIGH', 'MEDIUM'],
+        },
       };
     default:
       return {
@@ -72,6 +82,69 @@ export function operationRequirement(id: string): OperationCapabilityRequirement
         reason: 'This operation has no supported signing path in this explorer.',
       };
   }
+}
+
+type SecurityLevelName = 'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM';
+const SECURITY_LEVELS: SecurityLevelName[] = ['MASTER', 'CRITICAL', 'HIGH', 'MEDIUM'];
+const DOCUMENT_OPERATIONS = new Set([
+  'document.create',
+  'document.replace',
+  'document.delete',
+  'document.transfer',
+  'document.setPrice',
+  'document.purchase',
+]);
+export const DPNS_CONTRACT_ID = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns')!.testnetId;
+
+/**
+ * Levels Platform accepts for a document batch: CRITICAL through the document
+ * type's `signatureSecurityLevelRequirement` (default HIGH), or only MASTER
+ * when the type requires MASTER.
+ */
+export function documentSecurityLevels(requirement: unknown): SecurityLevelName[] {
+  const required = typeof requirement === 'number' ? requirement : 2;
+  if (!Number.isInteger(required) || required < 0 || required > 3)
+    throw new Error(`Unsupported signatureSecurityLevelRequirement ${String(requirement)}.`);
+  return required === 0 ? ['MASTER'] : SECURITY_LEVELS.slice(1, required + 1);
+}
+
+/**
+ * Key requirements for one concrete operation: the declared requirement
+ * narrowed by its inputs (document type security level, the contract a
+ * contract-bound key may serve, withdrawal destination). Executors sign with
+ * this, and the review step shows the key it selects.
+ */
+export async function resolveSigningCriteria(
+  id: string,
+  sdk: EvoSDK,
+  options: unknown,
+): Promise<KeySelectionCriteria | undefined> {
+  const base = operationRequirement(id).criteria;
+  const input = (options ?? {}) as Record<string, unknown>;
+  if (DOCUMENT_OPERATIONS.has(id)) {
+    const contractId = String(input.contractId ?? '');
+    const documentType = String(input.documentType ?? '');
+    const contract = await sdk.contracts.fetch(contractId);
+    if (!contract) throw new Error(`Contract ${contractId} not found.`);
+    const schema = (contract.schemas as Record<string, Record<string, unknown> | undefined>)[
+      documentType
+    ];
+    if (!schema) throw new Error(`Contract ${contractId} has no "${documentType}" document type.`);
+    return {
+      ...base,
+      allowedSecurityLevels: documentSecurityLevels(schema.signatureSecurityLevelRequirement),
+      target: { contractId, documentType },
+    };
+  }
+  if (id === 'dpns.registerName') {
+    // Preorder and domain documents: keys bound to one DPNS document type cannot sign both.
+    return { ...base, target: { contractId: DPNS_CONTRACT_ID } };
+  }
+  if (id === 'identity.creditWithdrawal') {
+    // Platform rejects an address on owner-key withdrawals; they pay the payout address.
+    return { ...base, purpose: input.toAddress === undefined ? 'OWNER' : 'TRANSFER' };
+  }
+  return base;
 }
 
 export function resolveOperationCapability(
@@ -93,7 +166,12 @@ export function resolveOperationCapability(
         : 'Connect a signer on the wallet page to use this operation.',
     };
   }
-  if (!keys.some((key) => keyMeetsCriteria(key, requirement?.criteria))) {
+  // The target contract is not known before the form is filled in.
+  if (
+    !keys.some((key) =>
+      keyMeetsCriteria(key, requirement?.criteria, { ignoreContractBounds: true }),
+    )
+  ) {
     return {
       status: 'requires-another-signer',
       reason:
