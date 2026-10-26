@@ -6,7 +6,8 @@ import { Box, Button, CloseButton, Heading, HStack, Text, VStack } from '@chakra
 import { InfoBlock } from '@ui/InfoBlock';
 import { useSdk } from '@sdk/hooks';
 import { SdkSessionError, type SdkSessionFailure } from '@sdk/errors';
-import { getNetwork } from '@sdk/networks';
+import { getNetwork, isBuiltInNetwork } from '@sdk/networks';
+import { getQuorumKeySource } from '@sdk/proofs';
 import { useProtocolVersionCheck } from '@sdk/version';
 import { EVO_SDK_VERSION } from '@/version';
 
@@ -38,7 +39,11 @@ export function SdkSessionNotice() {
   if (!error) return null;
   const reason: SdkSessionFailure = error instanceof SdkSessionError ? error.reason : 'failed';
   const copy = COPY[reason];
-  const label = getNetwork(network).label || network;
+  const cfg = getNetwork(network);
+  const label = cfg.label || network;
+  // Devnets saved before sessions were always trusted may hold only DAPI
+  // addresses; they now depend on the quorum service derived from the name.
+  const derivedDevnetQuorum = (reason === 'timeout' || reason === 'unreachable') && cfg.type === 'devnet' && !cfg.quorumUrl && !isBuiltInNetwork(network);
   return (
     <InfoBlock role="alert" aria-live="assertive" borderColor="failed" mb={4}>
       <VStack align="flex-start" spacing={3}>
@@ -47,6 +52,14 @@ export function SdkSessionNotice() {
           {reason !== 'unknown-network' ? ` (${label})` : null}
         </Heading>
         <Text color="muted" fontSize="sm" maxW="70ch">{copy.body}</Text>
+        {derivedDevnetQuorum ? (
+          <Text color="muted" fontSize="sm" maxW="70ch">
+            This devnet has no quorum service URL saved, so the explorer used{' '}
+            <Text as="span" fontFamily="mono">{getQuorumKeySource(network, true)}</Text>. Every session now
+            verifies proofs with a quorum service; DAPI addresses alone cannot connect. If the devnet runs
+            its service elsewhere, remove it and add it again with that quorum service URL.
+          </Text>
+        ) : null}
         <Text fontSize="xs" fontFamily="mono" color="muted" wordBreak="break-word">{error.message}</Text>
         <HStack spacing={2} flexWrap="wrap">
           {reason !== 'unknown-network' ? (

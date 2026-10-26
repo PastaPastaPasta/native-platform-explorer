@@ -5,6 +5,7 @@ import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
 import { SdkSessionError } from '@sdk/errors';
 import { networkProtocolVersion } from '@sdk/version';
+import { createCustomDevnetConfig, removeCustomDevnet, saveCustomDevnet } from '@sdk/networks';
 import { SdkSessionNotice, SdkVersionNotice } from '../SdkNotices';
 
 const status = (current: number) => ({ toJSON: () => ({ version: { protocol: { drive: { current, latest: current } } } }) });
@@ -31,6 +32,24 @@ describe('SdkSessionNotice', () => {
     renderWithProviders(<SdkSessionNotice />, { sdk: { sdk: null, status: 'error', error: new SdkSessionError('unknown-network', 'Unknown network "x"') } });
     expect(screen.getByRole('alert')).toHaveTextContent('Unknown network');
     expect(screen.queryByRole('button', { name: 'Retry connection' })).not.toBeInTheDocument();
+  });
+
+  it('explains that an address-only saved devnet now needs its quorum service', () => {
+    saveCustomDevnet(createCustomDevnetConfig({ name: 'devnet-oldnet', dapiAddresses: ['https://10.0.0.1:1443'] }));
+    const view = renderWithProviders(<SdkSessionNotice />, { sdk: {
+      sdk: null, status: 'error', network: 'devnet-oldnet',
+      error: new SdkSessionError('unreachable', 'Failed to prefetch quorums: HTTP request error'),
+    } });
+    expect(screen.getByRole('alert')).toHaveTextContent('no quorum service URL saved, so the explorer used https://quorums.oldnet.networks.dash.org');
+    view.unmount();
+    saveCustomDevnet(createCustomDevnetConfig({ name: 'devnet-newnet', quorumUrl: 'https://quorums.example.test' }));
+    renderWithProviders(<SdkSessionNotice />, { sdk: {
+      sdk: null, status: 'error', network: 'devnet-newnet',
+      error: new SdkSessionError('unreachable', 'Failed to prefetch quorums: HTTP request error'),
+    } });
+    expect(screen.getByRole('alert')).not.toHaveTextContent('no quorum service URL saved');
+    removeCustomDevnet('devnet-oldnet');
+    removeCustomDevnet('devnet-newnet');
   });
 
   it('shows the unreachable state over a ready session whose endpoints all failed', () => {

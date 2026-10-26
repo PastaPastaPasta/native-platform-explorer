@@ -261,6 +261,15 @@ describe('configured and explicit network validation', () => {
     expect(testnetFactory).not.toHaveBeenCalled();
   });
 
+  it('loads a saved devnet with neither DAPI addresses nor a quorum URL', async () => {
+    window.localStorage.setItem('npe:customDevnets', JSON.stringify([{ type: 'devnet', name: 'devnet-bare', label: 'devnet-bare' }]));
+    vi.stubEnv('NEXT_PUBLIC_DEFAULT_NETWORK', 'devnet-bare');
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('ready'));
+    expect(factory).toHaveBeenCalledWith(expect.objectContaining({ network: 'devnet', trusted: true, devnetName: 'bare' }));
+    expect(factory.mock.calls.at(-1)?.[0]).not.toHaveProperty('quorumUrl');
+  });
+
   it('supports URL navigation to a saved custom devnet after hydration', async () => {
     window.localStorage.setItem('npe:customDevnets', JSON.stringify([CUSTOM_CONFIG]));
     const view = render(<App />);
