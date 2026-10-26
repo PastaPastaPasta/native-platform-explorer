@@ -293,3 +293,55 @@ test('the shipped generated map binds actual epoch, aggregate, signer and no-cal
   ])
     assert.ok(methods('/broadcast/').includes(method), method);
 });
+
+test('follows const aliases and destructuring of SDK facades, but not lets or look-alike objects', () => {
+  fixture({
+    'src/app/page.tsx': `import type { EvoSDK } from '@dashevo/evo-sdk';
+      declare const client: EvoSDK | null;
+      export default function Page() {
+        async function run(sdk: EvoSDK) {
+          const tokens = sdk.tokens;
+          await tokens.mint({} as never);
+          const again = tokens;
+          await again.burn({} as never);
+          const { identities } = sdk;
+          await identities.fetch('id');
+          const { documents: docs } = client!;
+          await docs.query({} as never);
+          let mutable = sdk.contracts;
+          await mutable.fetch('contract');
+          const lookalike = { fetch: (id: string) => id };
+          lookalike.fetch('id');
+          const { tokens: { totalSupply } } = { tokens: { totalSupply: () => 0 } };
+          totalSupply();
+        }
+        return <button onClick={() => void run(client!)}>Run</button>;
+      }`,
+  }, (root) => {
+    const map = generateSdkReference(root);
+    assert.deepEqual(map.pages[0].calls.map(({ method, kind }) => [kind, method]), [
+      ['facade', 'documents.query'], ['facade', 'identities.fetch'], ['facade', 'tokens.burn'], ['facade', 'tokens.mint'],
+    ]);
+    const mint = map.pages[0].calls.find((call) => call.method === 'tokens.mint');
+    assert.deepEqual(mint.sources.map((source) => source.line), [6]);
+  });
+});
+
+test('follows functions passed as shorthand properties into lazily imported executors', () => {
+  fixture({
+    'src/app/page.tsx': `import { descriptor } from '@/registry';
+      export default function Page() { return <button onClick={() => void descriptor.execute()}>Go</button>; }`,
+    'src/registry.ts': `async function execute() {
+        const { run } = await import('./executor');
+        return run();
+      }
+      export const descriptor = { execute };`,
+    'src/executor.ts': `import type { EvoSDK } from '@dashevo/evo-sdk';
+      declare const client: EvoSDK;
+      export function run() { const tokens = client.tokens; return tokens.mint({} as never); }`,
+  }, (root) => {
+    const map = generateSdkReference(root);
+    assert.deepEqual(map.pages[0].calls.map(({ method, kind }) => [kind, method]), [['facade', 'tokens.mint']]);
+    assert.equal(map.pages[0].calls[0].sources[0].file, 'src/executor.ts');
+  });
+});

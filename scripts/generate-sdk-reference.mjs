@@ -55,6 +55,51 @@ export function generateSdkReference(rootDir) {
     symbol.flags & ts.SymbolFlags.Alias ? checker.getAliasedSymbol(symbol) : symbol, symbol.getName(),
   ]));
 
+  // Instance members declared on the SDK's EvoSDK class (the facades, e.g.
+  // `tokens`), including through nullable types and Pick<EvoSDK, ...>.
+  function isEvoSdkMember(member) {
+    return !!member?.declarations?.some((d) => d.getSourceFile().fileName.includes('/@dashevo/')
+      && ts.isClassDeclaration(d.parent)
+      && d.parent.name?.getText() === 'EvoSDK'
+      && (!ts.canHaveModifiers(d)
+        || !ts.getModifiers(d)?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)));
+  }
+
+  /** The facade a local `const` stands for: `const tokens = sdk.tokens`,
+   * `const { tokens } = sdk`, `const { tokens: t } = sdk`, or a const alias
+   * of one of those. Anything else (lets, calls, other objects) is not
+   * followed. */
+  function facadeAlias(identifier, seen = new Set()) {
+    for (const declaration of resolveSymbol(identifier)?.declarations ?? []) {
+      if (seen.has(declaration) || !isLocal(declaration)) continue;
+      seen.add(declaration);
+      if (ts.isVariableDeclaration(declaration) && ts.isIdentifier(declaration.name)
+        && declaration.parent.flags & ts.NodeFlags.Const && declaration.initializer) {
+        const initializer = unwrap(declaration.initializer);
+        if (ts.isIdentifier(initializer)) {
+          const facade = facadeAlias(initializer, seen);
+          if (facade) return facade;
+        } else if (ts.isPropertyAccessExpression(initializer)) {
+          const call = sdkCall(initializer);
+          if (call?.kind === 'facade') return call.method;
+        }
+      }
+      if (ts.isBindingElement(declaration) && !declaration.dotDotDotToken
+        && ts.isObjectBindingPattern(declaration.parent)
+        && ts.isVariableDeclaration(declaration.parent.parent)
+        && declaration.parent.parent.parent.flags & ts.NodeFlags.Const
+        && declaration.parent.parent.initializer) {
+        const name = declaration.propertyName ?? declaration.name;
+        const source = checker.getTypeAtLocation(declaration.parent.parent.initializer);
+        if ((ts.isIdentifier(name) || ts.isStringLiteral(name))
+          && isEvoSdkMember(checker.getPropertyOfType(checker.getNonNullableType(source), name.text))) {
+          return name.text;
+        }
+      }
+    }
+    return null;
+  }
+
   function sdkCall(expression) {
     const parts = propertyPath(expression);
     if (!parts.length) return null;
@@ -81,13 +126,9 @@ export function generateSdkReference(rootDir) {
     // Recognize EvoSDK-owned instance members by declaration, including nullable
     // contexts and Pick<EvoSDK, ...> helpers, without requiring a variable name.
     const member = checker.getPropertyOfType(checker.getNonNullableType(checker.getTypeAtLocation(root)), parts[1]);
-    if (member?.declarations?.some((d) => d.getSourceFile().fileName.includes('/@dashevo/')
-      && ts.isClassDeclaration(d.parent)
-      && d.parent.name?.getText() === 'EvoSDK'
-      && (!ts.canHaveModifiers(d)
-        || !ts.getModifiers(d)?.some((modifier) => modifier.kind === ts.SyntaxKind.StaticKeyword)))) {
-      return { method: parts.slice(1).join('.'), kind: 'facade' };
-    }
+    if (isEvoSdkMember(member)) return { method: parts.slice(1).join('.'), kind: 'facade' };
+    const facade = facadeAlias(root);
+    if (facade) return { method: [facade, ...parts.slice(1)].join('.'), kind: 'facade' };
     for (const declaration of declarations) {
       if (ts.isVariableDeclaration(declaration)) {
         if (importsSdk(declaration.initializer)) return { method: parts.slice(1).join('.'), kind: 'utility' };
@@ -160,7 +201,10 @@ export function generateSdkReference(rootDir) {
         }
       }
       if (ts.isIdentifier(node)) {
-        for (const declaration of resolveSymbol(node)?.declarations ?? []) {
+        // `{ execute }` names a property; the value it copies is a separate symbol.
+        const shorthand = ts.isShorthandPropertyAssignment(node.parent) && node.parent.name === node
+          ? checker.getShorthandAssignmentValueSymbol(node.parent)?.declarations ?? [] : [];
+        for (const declaration of [...(resolveSymbol(node)?.declarations ?? []), ...shorthand]) {
           if (!ts.isSourceFile(declaration) && isLocal(declaration) && !visited.has(declaration)) pending.push(declaration);
         }
       }
