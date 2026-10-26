@@ -21,25 +21,37 @@ function readEvoSdkVersion() {
 }
 const evoSdkVersion = readEvoSdkVersion();
 
-// Next's default build ID is random, which was the only difference between two
-// builds of the same commit. The commit makes the export reproducible (see
-// /about and scripts/verify-integrity.mjs). NPE_BUILD_ID overrides it, e.g.
-// to simulate a deploy in tests; without git the ID stays random.
-function readGitCommit() {
-  try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: __dirname, encoding: 'utf8' }).trim();
-  } catch {
-    return '';
-  }
-}
-const gitCommit = readGitCommit();
-const buildId = process.env.NPE_BUILD_ID || gitCommit || randomBytes(12).toString('base64url');
-
 // GitHub Pages serves project sites from /<repo-name>/. The deploy workflow
 // sets NEXT_PUBLIC_BASE_PATH to the repo name (e.g. '/native-platform-explorer')
 // so internal links and Next's asset prefix resolve correctly. Local dev
 // leaves it unset and the app mounts at '/'.
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+
+// Next's default build ID is random, which was the only difference between two
+// builds of the same commit. A reproducible one (see /about and
+// scripts/verify-integrity.mjs) is the commit plus a digest of the settings
+// that change the output: the base path and NEXT_PUBLIC_* values (from the
+// environment or .env files, which Next has loaded by now). It must differ
+// whenever the output does: a page whose RSC payloads name another build ID
+// is reloaded instead of mixing two builds' chunks. Uncommitted changes, or
+// no git, get a random ID. NPE_BUILD_ID overrides it, e.g. in tests.
+function git(...args) {
+  try {
+    return execFileSync('git', args, { cwd: __dirname, encoding: 'utf8' }).trim();
+  } catch {
+    return null;
+  }
+}
+const gitCommit = git('rev-parse', 'HEAD') ?? '';
+function reproducibleBuildId() {
+  if (!gitCommit || git('status', '--porcelain', '--untracked-files=no') !== '') return null;
+  const settings = Object.entries(process.env)
+    .filter(([name]) => name.startsWith('NEXT_PUBLIC_') && name !== 'NEXT_PUBLIC_BASE_PATH')
+    .sort(([a], [b]) => a.localeCompare(b));
+  const digest = createHash('sha256').update(JSON.stringify({ basePath, settings })).digest('hex');
+  return `${gitCommit}-${digest.slice(0, 12)}`;
+}
+const buildId = process.env.NPE_BUILD_ID || reproducibleBuildId() || randomBytes(12).toString('base64url');
 
 // Webpack's default deterministic module IDs hash each module's identifier.
 // Next's client entry modules embed absolute source paths in theirs, so the
@@ -64,9 +76,9 @@ class PortableModuleIdsPlugin {
           }
         }
         pending.sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-        // Like webpack: numeric IDs in a range at least ten times the module count.
+        // Like webpack: a power-of-ten range with room for 20 IDs per module.
         let range = 1000;
-        while (range < (used.size + pending.length) * 10) range *= 10;
+        while (range < pending.length * 20 + used.size) range *= 10;
         for (const [name, module] of pending) {
           for (let salt = 0; ; salt += 1) {
             const id = Number.parseInt(createHash('sha256').update(`${name}#${salt}`).digest('hex').slice(0, 12), 16) % range;

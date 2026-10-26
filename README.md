@@ -232,7 +232,10 @@ NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
   the expected shape.
 - **`integrity.json`.** The SRI hash of every file in `out/` plus the commit,
   build ID, base path, `NEXT_PUBLIC_*` settings and toolchain. Next's build ID
-  is the git commit (override with `NPE_BUILD_ID`), and client module IDs are
+  is the git commit plus a digest of the base path and `NEXT_PUBLIC_*` settings
+  (random for a tree with uncommitted changes; override with `NPE_BUILD_ID`),
+  so it changes whenever the output does and Next reloads pages whose
+  navigation payloads come from another build. Client module IDs are
   hashed without the checkout directory (`PortableModuleIdsPlugin` in
   `next.config.mjs`), so two builds of a commit are byte-identical wherever
   they run. `pnpm verify:integrity <site URL>` compares a local
@@ -265,8 +268,8 @@ build has no `sw.js`, and a failed update check leaves installed workers in
 place, so copy `scripts/sw/unregister.js` to `public/sw.js` in the rollback.
 
 The worker's scope is the base path. Do not deploy at the root of a shared
-origin such as `<user>.github.io`: there it would also cache sibling
-project sites' pages.
+origin such as `<user>.github.io`: there it would also handle sibling
+project sites' navigations, and serve this site's offline page for them.
 
 ## Build plan (original)
 
