@@ -36,6 +36,20 @@ describe('ConnectionSettingsForm', () => {
     expect(screen.getByText('Required.')).toBeInTheDocument();
   });
 
+  it('labels only accepted build-time quorum URLs as the build default', () => {
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('NEXT_PUBLIC_QUORUM_URL_MAINNET', 'http://quorums.example.test');
+    vi.stubEnv('NEXT_PUBLIC_QUORUM_URL_TESTNET', 'https://quorums.build.test');
+    renderWithProviders(<ConnectionSettingsForm />);
+    const mainnet = screen.getByLabelText('Mainnet quorum service URL');
+    const testnet = screen.getByLabelText('Testnet quorum service URL');
+    expect(mainnet).toHaveAttribute('placeholder', 'https://quorums.mainnet.networks.dash.org');
+    expect(testnet).toHaveAttribute('placeholder', 'https://quorums.build.test');
+    expect(screen.getAllByText(/Build default shown/)).toHaveLength(1);
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
   it('resets to defaults', () => {
     const setConnectionSettings = vi.fn();
     renderWithProviders(<ConnectionSettingsForm />, { sdk: { setConnectionSettings, connectionSettings: { ...defaultConnectionSettings(), retries: 4 } } });

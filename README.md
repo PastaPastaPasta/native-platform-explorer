@@ -48,7 +48,9 @@ Settings → Connection (stored in the browser) controls the startup timeout,
 the SDK's DAPI connect timeout, request timeout, retries, `banFailedAddress`
 and log level, and can point Mainnet or Testnet at another quorum service.
 Operators can set build defaults with `NEXT_PUBLIC_QUORUM_URL_MAINNET` and
-`NEXT_PUBLIC_QUORUM_URL_TESTNET`. Explicit DAPI addresses (the PRD's
+`NEXT_PUBLIC_QUORUM_URL_TESTNET`; like the settings form, they must use
+`https://` (`http://` only for localhost), and other values are ignored with a
+console warning. Explicit DAPI addresses (the PRD's
 `NEXT_PUBLIC_DAPI_ADDRESSES_*`) are not supported for these networks: the
 SDK's trusted context replaces configured addresses with the quorum
 service's list. Custom devnets keep their DAPI addresses, which the SDK uses

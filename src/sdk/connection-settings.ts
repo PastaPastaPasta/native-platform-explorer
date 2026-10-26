@@ -1,5 +1,5 @@
 import type { EvoSDKOptions } from '@dashevo/evo-sdk';
-import { getConfig } from '@/config';
+import { getConfig, quorumUrlError } from '@/config';
 import { devnetShortName, getNetwork, type Network, type NetworkConfig } from './networks';
 
 /** Levels accepted by the SDK's `logs` option (an EnvFilter string). The
@@ -51,15 +51,7 @@ export function defaultConnectionSettings(): ConnectionSettings {
   };
 }
 
-/** A quorum service URL must be absolute HTTPS (HTTP only for loopback). */
-export function quorumUrlError(raw: string): string | null {
-  let url: URL;
-  try { url = new URL(raw); } catch { return 'Enter an absolute URL, e.g. https://quorums.example.org'; }
-  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
-  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) return 'Use https:// (http:// is allowed only for localhost).';
-  if (url.search || url.hash) return 'Remove the query string and fragment.';
-  return null;
-}
+export { quorumUrlError };
 
 function intIn(value: unknown, { min, max }: { min: number; max: number }): number | null {
   return typeof value === 'number' && Number.isInteger(value) && value >= min && value <= max ? value : null;
@@ -95,8 +87,7 @@ export function sameConnectionSettings(a: ConnectionSettings, b: ConnectionSetti
 export function resolveQuorumUrl(network: Network, settings: ConnectionSettings): string | null {
   const cfg = getNetwork(network);
   if (cfg.type === 'devnet') return cfg.quorumUrl ?? null;
-  const env = getConfig().quorumUrls[cfg.type];
-  return settings.quorumUrls[cfg.type] ?? (env && !quorumUrlError(env) ? env : null);
+  return settings.quorumUrls[cfg.type] ?? getConfig().quorumUrls[cfg.type];
 }
 
 /** Devnet arguments for the trusted SDK. Exported so tests can pin them. */

@@ -17,15 +17,30 @@ function parseBool(raw: string | undefined, fallback: boolean): boolean {
   return raw.toLowerCase() === 'true';
 }
 
-function parseUrl(raw: string | undefined): string | null {
+/** A quorum service URL must be absolute HTTPS (HTTP only for loopback). */
+export function quorumUrlError(raw: string): string | null {
+  let url: URL;
+  try { url = new URL(raw); } catch { return 'Enter an absolute URL, e.g. https://quorums.example.org'; }
+  const loopback = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '[::1]';
+  if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) return 'Use https:// (http:// is allowed only for localhost).';
+  if (url.search || url.hash) return 'Remove the query string and fragment.';
+  return null;
+}
+
+const warnedQuorumEnv = new Set<string>();
+
+/** Build-time quorum URLs follow the same rule as the settings form. A
+ *  rejected value falls back to the SDK default, with one console warning. */
+function parseQuorumUrl(name: string, raw: string | undefined): string | null {
   const value = raw?.trim();
   if (!value) return null;
-  try {
-    const url = new URL(value);
-    return url.protocol === 'https:' || url.protocol === 'http:' ? value.replace(/\/+$/, '') : null;
-  } catch {
-    return null;
+  const error = quorumUrlError(value);
+  if (!error) return value.replace(/\/+$/, '');
+  if (!warnedQuorumEnv.has(`${name}=${value}`)) {
+    warnedQuorumEnv.add(`${name}=${value}`);
+    console.warn(`${name} ignored, using the default quorum service: ${error}`);
   }
+  return null;
 }
 
 // Coinbase is the default: KuCoin's API sends no CORS headers, so browsers
@@ -44,8 +59,8 @@ export function getConfig(): AppConfig {
   return {
     defaultNetwork,
     quorumUrls: {
-      mainnet: parseUrl(process.env.NEXT_PUBLIC_QUORUM_URL_MAINNET),
-      testnet: parseUrl(process.env.NEXT_PUBLIC_QUORUM_URL_TESTNET),
+      mainnet: parseQuorumUrl('NEXT_PUBLIC_QUORUM_URL_MAINNET', process.env.NEXT_PUBLIC_QUORUM_URL_MAINNET),
+      testnet: parseQuorumUrl('NEXT_PUBLIC_QUORUM_URL_TESTNET', process.env.NEXT_PUBLIC_QUORUM_URL_TESTNET),
     },
     disableWriteMode: parseBool(process.env.NEXT_PUBLIC_DISABLE_WRITE_MODE, false),
     rateProvider: parseRateProvider(process.env.NEXT_PUBLIC_RATE_PROVIDER),

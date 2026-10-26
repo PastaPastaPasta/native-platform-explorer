@@ -56,6 +56,17 @@ describe('getConfig', () => {
     expect(config.quorumUrls).toEqual({ mainnet: null, testnet: null });
   });
 
+  it('applies the settings-form rule to build-time quorum URLs and warns once', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    vi.stubEnv('NEXT_PUBLIC_QUORUM_URL_MAINNET', 'http://quorums.example.test');
+    vi.stubEnv('NEXT_PUBLIC_QUORUM_URL_TESTNET', 'http://127.0.0.1:22444/');
+    expect(getConfig().quorumUrls).toEqual({ mainnet: null, testnet: 'http://127.0.0.1:22444' });
+    getConfig();
+    expect(warn).toHaveBeenCalledOnce();
+    expect(warn.mock.calls[0]?.[0]).toMatch(/NEXT_PUBLIC_QUORUM_URL_MAINNET ignored.*https:\/\//);
+    warn.mockRestore();
+  });
+
   it('falls back to coinbase (CORS-enabled) for unknown rate providers', () => {
     vi.stubEnv('NEXT_PUBLIC_RATE_PROVIDER', 'not-a-provider');
     expect(getConfig().rateProvider).toBe('coinbase');
