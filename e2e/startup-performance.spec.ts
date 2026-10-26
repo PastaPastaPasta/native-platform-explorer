@@ -1,9 +1,10 @@
 import { readFileSync } from 'node:fs';
 import { test, expect, type Page } from '@playwright/test';
+import { fulfillQuorumService } from './quorum-fixtures';
 
 // Delay the real SDK chunks from this build, without replacing the SDK or its
-// cryptography. Non-trusted startup initializes real WASM locally; endpoint
-// requests are aborted so external availability cannot determine this check.
+// cryptography. Trusted startup reads recorded quorum-service fixtures; other
+// endpoint requests are aborted so external availability cannot determine this check.
 const loadableManifest: Record<string, { files: string[] }> = JSON.parse(
   readFileSync('.next/react-loadable-manifest.json', 'utf8'),
 );
@@ -11,7 +12,6 @@ const sdkFiles = loadableManifest['sdk/SdkProvider.tsx -> @dashevo/evo-sdk']?.fi
 if (!sdkFiles.length) throw new Error('SDK dynamic import is absent from the build manifest');
 
 async function deferSdk(page: Page) {
-  await page.addInitScript(() => localStorage.setItem('npe:trusted', 'false'));
   let release!: () => void;
   const pending = new Promise<void>((resolve) => { release = resolve; });
   let heldRequests = 0;
@@ -28,7 +28,7 @@ async function deferSdk(page: Page) {
   await page.route(/^https?:\/\//, async (route) => {
     const url = new URL(route.request().url());
     if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') {
-      await route.abort('failed');
+      if (!(await fulfillQuorumService(route))) await route.abort('failed');
     } else {
       if (sdkFiles.some((file) => url.pathname.endsWith(`/_next/${file}`))) {
         heldRequests++;

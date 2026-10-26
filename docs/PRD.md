@@ -213,7 +213,7 @@ All "detail pages" in Section 8 are powered by these:
 
 The app defaults to **trusted mode** (`sdk.testnetTrusted()` / `sdk.mainnetTrusted()`): queries return cryptographic proofs that the WASM SDK verifies in-browser against quorum public keys prefetched at `connect()`. Proof state is rendered visibly in the UI (see §9.7).
 
-Untrusted mode is exposed via an advanced toggle for debugging / speed-first diagnostics, clearly marked as such.
+~~Untrusted mode is exposed via an advanced toggle~~ — removed: the pinned WASM SDK cannot run proof-bearing queries without a trusted context, so every session is trusted (see `docs/design/query-session-lifecycle.md`).
 
 ---
 
@@ -731,8 +731,8 @@ Fetched directly from the browser (no backend) from one of: **Kucoin** public ti
 
 - **SDK timeouts**: reported via a toast + inline "Retry" button.
 - **Not found** (e.g. identity undefined): empty-state card with suggested actions ("Try reverse lookup by pk hash").
-- **Proof failures**: a dedicated `ProofFailureBanner` appears at the top of the affected card, with the option to "View unverified data" (switches this query to untrusted mode for the session only — never globally).
-- **Version mismatches**: if `sdk.version() !== expected`, show a small warning; the app still works.
+- **Proof failures**: a dedicated `ProofFailureBanner` appears at the top of the affected card. (The planned "View unverified data" action is not offered: the pinned SDK has no untrusted query mode.)
+- **Version mismatches**: `sdk.version()` is the Platform protocol version the SDK speaks; if it differs from the protocol version the network reports, show a small warning; the app still works.
 - **Network partitioning**: if all configured DAPI addresses fail, a full-page error with a "Try alternate DAPI endpoints" action that opens `/settings`.
 
 ### 11.8 Accessibility
@@ -975,9 +975,10 @@ Fully static; deployable to any static host.
 | Var | Purpose | Default |
 |---|---|---|
 | `NEXT_PUBLIC_DEFAULT_NETWORK` | `mainnet` or `testnet` | `testnet` |
-| `NEXT_PUBLIC_TRUSTED_MODE` | `'true'` / `'false'` | `'true'` |
-| `NEXT_PUBLIC_DAPI_ADDRESSES_TESTNET` | comma-separated custom DAPI URLs | (SDK default list) |
-| `NEXT_PUBLIC_DAPI_ADDRESSES_MAINNET` | idem | (SDK default list) |
+| `NEXT_PUBLIC_QUORUM_URL_TESTNET` | trusted quorum service (quorum keys + DAPI masternode list) | `https://quorums.testnet.networks.dash.org` |
+| `NEXT_PUBLIC_QUORUM_URL_MAINNET` | idem | `https://quorums.mainnet.networks.dash.org` |
+
+`NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported: untrusted sessions cannot query, and the SDK's trusted context replaces explicit addresses with the quorum service's list.
 | `NEXT_PUBLIC_DISABLE_WRITE_MODE` | hide `/broadcast` and `/wallet` | `'false'` |
 | `NEXT_PUBLIC_RATE_PROVIDER` | `kucoin` / `coinbase` / `none` | `kucoin` |
 | `NEXT_PUBLIC_WELL_KNOWN_URL` | optional override of `well-known.ts` (JSON at a URL) | — |

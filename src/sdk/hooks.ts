@@ -13,6 +13,10 @@ import {
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import { SdkContext, type SdkContextValue } from './SdkProvider';
 import type { Network } from './networks';
+import { isAllEndpointsFailure } from './errors';
+import { getSdkQueryKey } from './session-keys';
+
+export { getSdkQueryKey, isRetiredSessionKey } from './session-keys';
 
 export function useSdk(): SdkContextValue {
   const ctx = useContext(SdkContext);
@@ -35,13 +39,6 @@ export function useReadyEvoSdk(): EvoSDK {
   return sdk;
 }
 
-export function getSdkQueryKey(
-  { network, trusted, sessionId }: Pick<SdkContextValue, 'network' | 'trusted' | 'sessionId'>,
-  key: QueryKey,
-): QueryKey {
-  return ['npe', network, trusted, sessionId, ...key];
-}
-
 /** Confirmed writes can affect balances, nonces, schemas, and list queries.
  * Invalidate every SDK session/trust variant on the submitted network. */
 export function invalidateNetworkQueries(client: QueryClient, network: Network) {
@@ -55,19 +52,43 @@ export interface SdkQueryExecution {
   assertActive: () => void;
 }
 
+/**
+ * Return `result` with some fields replaced, without copying it. React Query
+ * returns a tracking proxy that records which fields a render reads, so a
+ * component only re-renders when those change; spreading or mutating it would
+ * read (and track) every field.
+ */
+export function overlayQueryResult<T extends object, O extends object>(result: T, overrides: O): T & O {
+  const own = (key: string | symbol) => Object.prototype.hasOwnProperty.call(overrides, key);
+  return new Proxy(result, {
+    get: (target, key) => (own(key) ? (overrides as Record<string | symbol, unknown>)[key] : Reflect.get(target, key)),
+    has: (target, key) => own(key) || Reflect.has(target, key),
+    ownKeys: (target) => [...new Set([...Reflect.ownKeys(target), ...Reflect.ownKeys(overrides)])],
+    getOwnPropertyDescriptor: (target, key) => (own(key)
+      ? { configurable: true, enumerable: true, writable: false, value: (overrides as Record<string | symbol, unknown>)[key] }
+      : Reflect.getOwnPropertyDescriptor(target, key)),
+  }) as T & O;
+}
+
 /** One readiness/session boundary shared by ordinary and proof-aware queries.
- * Caller options may restrict execution but cannot override SDK readiness. */
+ * Caller options may restrict execution but cannot override SDK readiness.
+ *
+ * While the session is not ready, `refetch()` is a no-op (React Query v5's
+ * refetch ignores `enabled`, and running the query would cache a bogus "not
+ * ready" error under this session's key). When the session itself has failed,
+ * caller-enabled queries without data report that failure as their error, and
+ * `refetch()` reconnects, so cards show an error instead of spinning. */
 export function useSdkQuery<TData>(
   key: QueryKey,
   fn: (sdk: EvoSDK, execution: SdkQueryExecution) => Promise<TData>,
   opts?: Omit<UseQueryOptions<TData, Error>, 'queryKey' | 'queryFn'>,
 ): UseQueryResult<TData, Error> {
   const context = useSdk();
-  const { sdk, status, sessionSignal } = context;
+  const { sdk, status, sessionSignal, sessionId, reportUnreachable, reconnect } = context;
   const client = useQueryClient();
   const fullKey = getSdkQueryKey(context, key);
   const ready = status === 'ready' && !!sdk && !sessionSignal?.aborted;
-  return useQuery<TData, Error>({
+  const q = useQuery<TData, Error>({
     ...opts,
     queryKey: fullKey,
     queryFn: async ({ signal }) => {
@@ -86,7 +107,12 @@ export function useSdkQuery<TData>(
       try {
         const result = await fn(sdk!, { signal, queryKey: fullKey, assertActive });
         assertActive();
+        // Cheap when already clear: the provider keeps the same state.
+        reportUnreachable(sessionId, null);
         return result;
+      } catch (error) {
+        if (isAllEndpointsFailure(error)) reportUnreachable(sessionId, error);
+        throw error;
       } finally {
         sessionSignal?.removeEventListener('abort', cancel);
       }
@@ -95,4 +121,22 @@ export function useSdkQuery<TData>(
       typeof opts?.enabled === 'function' ? opts.enabled(query) : (opts?.enabled ?? true)
     ),
   });
+  if (ready) return q;
+  const idle = () => Promise.resolve(q);
+  const refetch = status === 'error' ? () => { reconnect(); return idle(); } : idle;
+  const userEnabled = typeof opts?.enabled === 'boolean' ? opts.enabled : true;
+  const reportsSessionFailure = status === 'error' && context.error && userEnabled && q.data === undefined;
+  const overrides = reportsSessionFailure
+    ? {
+      status: 'error',
+      error: context.error,
+      isError: true,
+      isPending: false,
+      isLoading: false,
+      isLoadingError: true,
+      isSuccess: false,
+      refetch,
+    }
+    : { refetch };
+  return overlayQueryResult(q, overrides) as unknown as UseQueryResult<TData, Error>;
 }

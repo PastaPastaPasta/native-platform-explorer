@@ -34,6 +34,26 @@ and edit. The most important one is `NEXT_PUBLIC_DISABLE_WRITE_MODE=true`
 for kiosk / read-only deployments: it hides `/wallet` and `/broadcast`
 while keeping the rest of the explorer identical.
 
+## Connection and proofs
+
+Every session is trusted: the SDK fetches quorum public keys and the DAPI
+masternode list from a quorum service when it connects, then verifies
+proof-capable responses in the browser. There is no untrusted mode. With the
+pinned `@dashevo/evo-sdk` 4.0.0-rc.2, an untrusted SDK fails every
+proof-capable query ("Non-trusted mode is not supported in WASM") and
+`proofs: false` aborts the WASM module, so `NEXT_PUBLIC_TRUSTED_MODE` was
+removed and a saved `npe:trusted` preference is discarded.
+
+Settings → Connection (stored in the browser) controls the startup timeout,
+the SDK's DAPI connect timeout, request timeout, retries, `banFailedAddress`
+and log level, and can point Mainnet or Testnet at another quorum service.
+Operators can set build defaults with `NEXT_PUBLIC_QUORUM_URL_MAINNET` and
+`NEXT_PUBLIC_QUORUM_URL_TESTNET`. Explicit DAPI addresses (the PRD's
+`NEXT_PUBLIC_DAPI_ADDRESSES_*`) are not supported for these networks: the
+SDK's trusted context replaces configured addresses with the quorum
+service's list. Custom devnets keep their DAPI addresses, which the SDK uses
+only when the devnet's quorum service publishes no masternodes.
+
 The bridge browser tests use the shipped URL as a fixed fixture. Before running
 `pnpm e2e`, build with `NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build`,
 as CI does. This overrides custom or empty values in `.env.local` for that build.

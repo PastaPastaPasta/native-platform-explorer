@@ -1,23 +1,25 @@
 import React, { useEffect } from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SdkProvider, type SdkContextValue } from '../SdkProvider';
 import { useSdk } from '../hooks';
 import { createMockSdk } from '@/test/sdk';
 import { installStorageMock } from '@/test/storage';
 import { removeCustomDevnet } from '../networks';
+import { SdkSessionError } from '../errors';
 
 const { factory, mainnetFactory, testnetFactory } = vi.hoisted(() => ({
   factory: vi.fn(), mainnetFactory: vi.fn(), testnetFactory: vi.fn(),
 }));
-vi.mock('@dashevo/evo-sdk', () => ({ EvoSDK: {
-  mainnet: (...args: unknown[]) => mainnetFactory(...args),
-  mainnetTrusted: (...args: unknown[]) => mainnetFactory(...args),
-  testnet: (...args: unknown[]) => testnetFactory(...args),
-  testnetTrusted: (...args: unknown[]) => testnetFactory(...args),
-  devnet: (...args: unknown[]) => factory(...args),
-  devnetTrusted: (...args: unknown[]) => factory(...args),
-} }));
+// The provider builds every session with `new EvoSDK(options)`; route by network.
+vi.mock('@dashevo/evo-sdk', () => ({
+  EvoSDK: vi.fn(function EvoSDK(options: { network: string }) {
+    if (options.network === 'mainnet') return mainnetFactory(options);
+    if (options.network === 'testnet') return testnetFactory(options);
+    return factory(options);
+  }),
+}));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams(window.location.search) }));
 
 let context: SdkContextValue;
@@ -37,8 +39,8 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/');
   vi.clearAllMocks();
   factory.mockImplementation(() => createMockSdk());
-  mainnetFactory.mockImplementation(() => factory());
-  testnetFactory.mockImplementation(() => factory());
+  mainnetFactory.mockImplementation((options) => factory(options));
+  testnetFactory.mockImplementation((options) => factory(options));
 });
 
 const CUSTOM_NETWORK = 'devnet-data-followup';
@@ -73,9 +75,10 @@ describe('SDK provider connection lifecycle', () => {
     factory.mockReturnValueOnce(createMockSdk({ connect: vi.fn().mockRejectedValue(failure) }));
     render(<App />);
     await waitFor(() => expect(context.status).toBe('error'));
-    expect(screen.getByRole('alert')).toHaveTextContent(failure.message);
-    expect(screen.getByRole('alert')).not.toHaveTextContent('[object Object]');
-    expect(context.error).toBeInstanceOf(Error);
+    expect(context.error?.message).toContain(failure.message);
+    expect(context.error?.message).not.toContain('[object Object]');
+    expect(context.error).toBeInstanceOf(SdkSessionError);
+    expect((context.error as SdkSessionError).reason).toBe('unreachable');
     expect(context.error?.cause).toBe(failure);
   });
 
@@ -115,16 +118,18 @@ describe('SDK provider connection lifecycle', () => {
     expect(context.sdk).toBe(nextSdk);
   });
 
-  it('aborts the active session on trust changes and on unmount', async () => {
+  it('aborts the active session on connection-setting changes and on unmount', async () => {
     const view = render(<App />);
     await waitFor(() => expect(context.status).toBe('ready'));
     const oldId = context.sessionId;
     const oldSignal = context.sessionSignal!;
-    act(() => context.setTrusted(false));
+    act(() => context.setConnectionSettings({ ...context.connectionSettings, retries: 2 }));
     expect(oldSignal.aborted).toBe(true);
     await waitFor(() => expect(context.status).toBe('ready'));
-    expect(context.trusted).toBe(false);
+    expect(context.trusted).toBe(true);
     expect(context.sessionId).not.toBe(oldId);
+    expect(factory).toHaveBeenLastCalledWith(expect.objectContaining({ trusted: true, settings: { retries: 2 } }));
+    expect(JSON.parse(window.localStorage.getItem('npe:connectionSettings')!)).toMatchObject({ retries: 2 });
     const activeSignal = context.sessionSignal!;
     view.unmount();
     expect(activeSignal.aborted).toBe(true);
@@ -152,21 +157,22 @@ describe('network-aware links', () => {
     expect(mainnetFactory).toHaveBeenCalledOnce();
   });
 
-  it('visibly rejects unknown initial networks, preserves that error on trust changes, and recovers via network selection', async () => {
+  it('visibly rejects unknown initial networks, preserves that error on setting changes, and recovers via network selection', async () => {
     window.history.replaceState(null, '', '/?network=unknown-network');
     render(<App />);
     await waitFor(() => expect(context.status).toBe('error'));
-    expect(screen.getByRole('alert')).toHaveTextContent('Unknown network "unknown-network"');
+    expect(context.error?.message).toContain('Unknown network "unknown-network"');
+    expect((context.error as SdkSessionError).reason).toBe('unknown-network');
     expect(factory).not.toHaveBeenCalled();
-    act(() => context.setTrusted(false));
+    act(() => context.setConnectionSettings({ ...context.connectionSettings, retries: 1 }));
     expect(context.status).toBe('error');
     expect(context.error?.message).toContain('unknown-network');
     expect(factory).not.toHaveBeenCalled();
     act(() => context.setNetwork('testnet'));
     await waitFor(() => expect(context.status).toBe('ready'));
     expect(new URL(window.location.href).searchParams.get('network')).toBe('testnet');
-    expect(context.trusted).toBe(false);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(factory).toHaveBeenCalledWith(expect.objectContaining({ settings: { retries: 1 } }));
+    expect(context.error).toBeNull();
   });
 
   it('aborts a ready session and visibly rejects an unknown network during navigation', async () => {
@@ -178,7 +184,7 @@ describe('network-aware links', () => {
     await waitFor(() => expect(context.status).toBe('error'));
     expect(previousSignal.aborted).toBe(true);
     expect(context.sdk).toBeNull();
-    expect(screen.getByRole('alert')).toHaveTextContent('Unknown network "unknown-network"');
+    expect(context.error?.message).toContain('Unknown network "unknown-network"');
     expect(factory).toHaveBeenCalledOnce();
   });
 });
@@ -189,9 +195,9 @@ describe('configured and explicit network validation', () => {
     render(<App />);
     await waitFor(() => expect(context.status).toBe('error'));
     expect(context.sdk).toBeNull();
-    expect(screen.getByRole('alert')).toHaveTextContent('Unknown configured default network "unknown-default"');
+    expect(context.error?.message).toContain('Unknown configured default network "unknown-default"');
     expect(factory).not.toHaveBeenCalled();
-    act(() => { context.setTrusted(false); context.reconnect(); });
+    act(() => context.reconnect());
     expect(context.status).toBe('error');
     expect(factory).not.toHaveBeenCalled();
     act(() => context.setNetwork('mainnet'));
@@ -221,7 +227,7 @@ describe('configured and explicit network validation', () => {
     expect(context.status).toBe('error');
     expect(context.sdk).toBeNull();
     expect(oldSignal.aborted).toBe(true);
-    expect(screen.getByRole('alert')).toHaveTextContent('Unknown network "unknown-selection"');
+    expect(context.error?.message).toContain('Unknown network "unknown-selection"');
     expect(window.localStorage.getItem('npe:network')).toBe('mainnet');
     act(() => context.reconnect());
     expect(factory).toHaveBeenCalledOnce();
@@ -230,7 +236,7 @@ describe('configured and explicit network validation', () => {
     await waitFor(() => expect(context.status).toBe('ready'));
     expect(context.network).toBe('mainnet');
     expect(mainnetFactory).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(context.error).toBeNull();
   });
 
   it('restores the invalid-default error when an unknown URL network is removed', async () => {
@@ -241,7 +247,7 @@ describe('configured and explicit network validation', () => {
     expect(context.error?.message).toContain('unknown-link');
     window.history.replaceState(null, '', '/');
     view.rerender(<App />);
-    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Unknown configured default network "unknown-default"'));
+    await waitFor(() => expect(context.error?.message).toContain('Unknown configured default network "unknown-default"'));
     expect(factory).not.toHaveBeenCalled();
   });
 
@@ -251,7 +257,7 @@ describe('configured and explicit network validation', () => {
     render(<App />);
     await waitFor(() => expect(context.status).toBe('ready'));
     expect(context.network).toBe(CUSTOM_NETWORK);
-    expect(factory).toHaveBeenCalledWith('data-followup', { quorumUrl: 'https://quorums.example.test' });
+    expect(factory).toHaveBeenCalledWith(expect.objectContaining({ network: 'devnet', trusted: true, devnetName: 'data-followup', quorumUrl: 'https://quorums.example.test' }));
     expect(testnetFactory).not.toHaveBeenCalled();
   });
 
@@ -263,7 +269,7 @@ describe('configured and explicit network validation', () => {
     view.rerender(<App />);
     await waitFor(() => expect(context.network).toBe(CUSTOM_NETWORK));
     await waitFor(() => expect(context.status).toBe('ready'));
-    expect(factory).toHaveBeenCalledWith('data-followup', { quorumUrl: 'https://quorums.example.test' });
+    expect(factory).toHaveBeenCalledWith(expect.objectContaining({ network: 'devnet', devnetName: 'data-followup', quorumUrl: 'https://quorums.example.test' }));
   });
 });
 
@@ -280,7 +286,6 @@ describe('optional browser preference storage', () => {
 
   it('uses configured defaults when localStorage access itself is blocked', async () => {
     vi.stubEnv('NEXT_PUBLIC_DEFAULT_NETWORK', 'mainnet');
-    vi.stubEnv('NEXT_PUBLIC_TRUSTED_MODE', 'false');
     Object.defineProperty(window, 'localStorage', {
       configurable: true,
       get() { throw new DOMException('Storage blocked', 'SecurityError'); },
@@ -288,18 +293,17 @@ describe('optional browser preference storage', () => {
     render(<App />);
     await waitFor(() => expect(context.status).toBe('ready'));
     expect(context.network).toBe('mainnet');
-    expect(context.trusted).toBe(false);
     expect(mainnetFactory).toHaveBeenCalledOnce();
     expect(testnetFactory).not.toHaveBeenCalled();
     act(() => context.setNetwork('testnet'));
     await waitFor(() => expect(context.status).toBe('ready'));
     expect(context.network).toBe('testnet');
-    act(() => context.setTrusted(true));
+    act(() => context.setConnectionSettings({ ...context.connectionSettings, logLevel: 'error' }));
     await waitFor(() => expect(context.status).toBe('ready'));
-    expect(context.trusted).toBe(true);
+    expect(testnetFactory).toHaveBeenLastCalledWith(expect.objectContaining({ logs: 'error' }));
   });
 
-  it('keeps a URL-selected network and trust changes usable when reads and writes throw', async () => {
+  it('keeps a URL-selected network and setting changes usable when reads and writes throw', async () => {
     vi.spyOn(window.localStorage, 'getItem').mockImplementation(() => { throw new DOMException('Read blocked', 'SecurityError'); });
     vi.spyOn(window.localStorage, 'setItem').mockImplementation(() => { throw new DOMException('Quota exceeded', 'QuotaExceededError'); });
     window.history.replaceState(null, '', '/?network=mainnet');
@@ -311,9 +315,9 @@ describe('optional browser preference storage', () => {
     await waitFor(() => expect(context.status).toBe('ready'));
     expect(context.network).toBe('testnet');
     expect(new URL(window.location.href).searchParams.get('network')).toBe('testnet');
-    act(() => context.setTrusted(false));
+    act(() => context.setConnectionSettings({ ...context.connectionSettings, retries: 3 }));
     await waitFor(() => expect(context.status).toBe('ready'));
-    expect(context.trusted).toBe(false);
+    expect(context.connectionSettings.retries).toBe(3);
   });
 
   it('keeps an invalid configured default blocked when storage is unavailable', async () => {
@@ -323,5 +327,124 @@ describe('optional browser preference storage', () => {
     await waitFor(() => expect(context.status).toBe('error'));
     expect(context.error?.message).toContain('unknown-default');
     expect(factory).not.toHaveBeenCalled();
+  });
+});
+
+describe('session resilience', () => {
+  it('discards the removed trusted-mode preference and still connects trusted', async () => {
+    window.localStorage.setItem('npe:trusted', 'false');
+    vi.stubEnv('NEXT_PUBLIC_TRUSTED_MODE', 'false');
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('ready'));
+    expect(context.trusted).toBe(true);
+    expect(window.localStorage.getItem('npe:trusted')).toBeNull();
+    expect(testnetFactory).toHaveBeenCalledWith(expect.objectContaining({ network: 'testnet', trusted: true }));
+  });
+
+  it('restores stored connection settings before the first connect', async () => {
+    window.localStorage.setItem('npe:connectionSettings', JSON.stringify({ requestTimeoutMs: 4000, quorumUrls: { testnet: 'https://quorums.example.test' } }));
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('ready'));
+    expect(testnetFactory).toHaveBeenCalledOnce();
+    expect(testnetFactory).toHaveBeenCalledWith(expect.objectContaining({ quorumUrl: 'https://quorums.example.test', settings: { timeoutMs: 4000 } }));
+    expect(context.quorumUrl).toBe('https://quorums.example.test');
+  });
+
+  it('fails a hung connect after the startup timeout and frees the instance if it completes later', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const hung = deferred();
+      const free = vi.fn();
+      const late = createMockSdk({ connect: vi.fn().mockReturnValue(hung.promise), isConnected: true, wasm: { free } });
+      factory.mockReturnValueOnce(late);
+      window.localStorage.setItem('npe:connectionSettings', JSON.stringify({ startupTimeoutMs: 2000 }));
+      render(<App />);
+      await waitFor(() => expect(late.connect).toHaveBeenCalledOnce());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2001); });
+      await waitFor(() => expect(context.status).toBe('error'));
+      expect((context.error as SdkSessionError).reason).toBe('timeout');
+      expect(context.error?.message).toMatch(/Timed out after 2 s connecting to Dash Platform/);
+      expect(context.sdk).toBeNull();
+      expect(free).not.toHaveBeenCalled();
+      await act(async () => { hung.resolve(); await hung.promise; });
+      await waitFor(() => expect(free).toHaveBeenCalledOnce());
+      expect(context.sdk).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('frees a superseded instance that was never published', async () => {
+    const connection = deferred();
+    const free = vi.fn();
+    const superseded = createMockSdk({ connect: vi.fn().mockReturnValue(connection.promise), isConnected: true, wasm: { free } });
+    const current = createMockSdk();
+    factory.mockReturnValueOnce(superseded).mockReturnValueOnce(current);
+    render(<App />);
+    await waitFor(() => expect(superseded.connect).toHaveBeenCalledOnce());
+    act(() => context.setNetwork('mainnet'));
+    await waitFor(() => expect(context.sdk).toBe(current));
+    await act(async () => { connection.resolve(); await connection.promise; });
+    await waitFor(() => expect(free).toHaveBeenCalledOnce());
+  });
+
+  it('flags the current session unreachable when every endpoint failed, without discarding it', async () => {
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('ready'));
+    act(() => context.reportUnreachable(context.sessionId - 1, new Error('no available addresses to retry')));
+    expect(context.unreachable).toBeNull();
+    const signal = context.sessionSignal!;
+    act(() => context.reportUnreachable(context.sessionId, new Error('no available addresses to retry, last error: fetch failed')));
+    expect(context.status).toBe('ready');
+    expect(signal.aborted).toBe(false);
+    expect((context.unreachable as SdkSessionError).reason).toBe('unreachable');
+    expect(context.unreachable?.message).toMatch(/No DAPI endpoint answered/);
+    act(() => context.reportUnreachable(context.sessionId, null));
+    expect(context.unreachable).toBeNull();
+    act(() => context.reportUnreachable(context.sessionId, new Error('no available addresses to retry')));
+    act(() => context.reconnect());
+    expect(context.unreachable).toBeNull();
+    await waitFor(() => expect(context.status).toBe('ready'));
+  });
+
+  it('keeps the session when a setting does not change the SDK it would build', async () => {
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('ready'));
+    const id = context.sessionId;
+    act(() => context.setConnectionSettings({ ...context.connectionSettings, quorumUrls: { mainnet: 'https://quorums.example.test', testnet: null } }));
+    act(() => context.setConnectionSettings({ ...context.connectionSettings, startupTimeoutMs: 45_000 }));
+    expect(context.status).toBe('ready');
+    expect(context.sessionId).toBe(id);
+    expect(testnetFactory).toHaveBeenCalledOnce();
+    expect(context.connectionSettings.startupTimeoutMs).toBe(45_000);
+  });
+
+  it('coalesces reconnect requests while a connection is in flight', async () => {
+    const connection = deferred();
+    factory.mockReturnValueOnce(createMockSdk({ connect: vi.fn().mockRejectedValue(new Error('Failed to prefetch quorums')) }))
+      .mockReturnValueOnce(createMockSdk({ connect: vi.fn().mockReturnValue(connection.promise) }));
+    render(<App />);
+    await waitFor(() => expect(context.status).toBe('error'));
+    act(() => { context.reconnect(); context.reconnect(); context.reconnect(); });
+    await waitFor(() => expect(factory).toHaveBeenCalledTimes(2));
+    act(() => context.reconnect());
+    expect(factory).toHaveBeenCalledTimes(2);
+    await act(async () => { connection.resolve(); await connection.promise; });
+    await waitFor(() => expect(context.status).toBe('ready'));
+  });
+
+  it('removes cache entries of retired sessions but keeps network-scoped ones', async () => {
+    const client = new QueryClient();
+    render(<QueryClientProvider client={client}><App /></QueryClientProvider>);
+    await waitFor(() => expect(context.status).toBe('ready'));
+    const first = context.sessionId;
+    client.setQueryData(['npe', 'testnet', true, first, 'identities', 'fetch', 'x'], 'old');
+    client.setQueryData(['npe', 'testnet', 'core-status'], 'core');
+    act(() => context.reconnect());
+    await waitFor(() => expect(context.status).toBe('ready'));
+    expect(context.sessionId).not.toBe(first);
+    expect(client.getQueryData(['npe', 'testnet', true, first, 'identities', 'fetch', 'x'])).toBeUndefined();
+    expect(client.getQueryData(['npe', 'testnet', 'core-status'])).toBe('core');
+    client.clear();
   });
 });

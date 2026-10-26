@@ -34,8 +34,8 @@ export default function Page() {
             </Badge>
             . There is no API server, no database, and no indexer behind this site —
             network data is fetched from a masternode&apos;s DAPI endpoint by the WASM
-            SDK running in your browser. With trusted mode on, proof-capable
-            responses are verified against prefetched quorum public keys.
+            SDK running in your browser. Proof-capable responses are always
+            verified against prefetched quorum public keys.
           </Text>
           <Text color="gray.250" mb={3}>
             It is a deliberate, reduced-scope sibling of{' '}
@@ -52,8 +52,8 @@ export default function Page() {
             Proofs
           </Heading>
           <Text color="gray.250" mb={3}>
-            Your browser connects directly to DAPI and asks for data. In trusted
-            mode the SDK also asks DAPI for a GroveDB Merkle proof; the WASM
+            Your browser connects directly to DAPI and asks for data. The SDK
+            also asks DAPI for a GroveDB Merkle proof; the WASM
             engine then verifies that proof locally against quorum public keys
             fetched when the SDK connected. The browser trusts that service for
             those keys and does not independently validate Dash Core consensus.

@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { fulfillQuorumService } from './quorum-fixtures';
 
 const INSPECTOR_OPEN_NAME = /^\d+ quer(?:y|ies) — Open Query Inspector$/;
 
@@ -10,7 +11,6 @@ test.beforeEach(async ({ page, baseURL }) => {
   // Leave capture preferences untouched so the reload test checks persistence.
   await page.addInitScript(() => {
     localStorage.setItem('npe:network', 'testnet');
-    localStorage.setItem('npe:trusted', 'true');
   });
   const localOrigin = new URL(baseURL!).origin;
   await page.route('**/*', (route) => {
@@ -156,9 +156,9 @@ test('inspector name includes its visible zero, singular, and plural query count
   await expect(open).toHaveText('0 queries');
   await expect(open).toHaveAccessibleName('0 queries — Open Query Inspector');
 
-  // Ordinary mode constructs the real SDK without the failed quorum prefetch.
-  // Fail one actual SDK request path first, then the others. No successful
-  // responses or cryptographic outcomes are supplied by this test.
+  // Reconnect with recorded quorum-service fixtures so the real SDK becomes
+  // ready, then fail one actual SDK request path first, then the others. No
+  // DAPI responses or cryptographic outcomes are supplied by this test.
   await page.unroute('**/*');
   const localOrigin = new URL(baseURL!).origin;
   let firstPath: string | undefined;
@@ -170,6 +170,7 @@ test('inspector name includes its visible zero, singular, and plural query count
   await page.route('**/*', async (route) => {
     const url = new URL(route.request().url());
     if (url.origin === localOrigin) return route.continue();
+    if (await fulfillQuorumService(route)) return;
     if (!url.pathname.includes('/org.dash.platform.dapi.v0.Platform/')) return route.abort('failed');
     firstPath ??= url.pathname;
     if (url.pathname !== firstPath) await othersReleased;
@@ -177,10 +178,7 @@ test('inspector name includes its visible zero, singular, and plural query count
     await route.abort('failed');
   });
   try {
-    page.once('dialog', (dialog) => { void dialog.accept(); });
-    await page.getByRole('heading', { name: 'Trusted mode', exact: true })
-      .locator('..').getByRole('checkbox').focus();
-    await page.keyboard.press('Space');
+    await page.getByRole('button', { name: 'Reconnect', exact: true }).click();
     await expect(page.getByText('SDK status: ready', { exact: true })).toBeVisible();
     await expect(open).toHaveText('1 query', { timeout: 15_000 });
     await expect(open).toHaveAccessibleName('1 query — Open Query Inspector');

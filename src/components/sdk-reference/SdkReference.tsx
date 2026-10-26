@@ -44,10 +44,10 @@ export function SdkReference() {
         <InfoBlock>
           <Heading as="h2" size="sm" mb={2}>Proof paths</Heading>
           <Text fontSize="sm" color="gray.250">
-            Most query hooks select a <Code>WithProof</Code> call when trusted mode and the
-            Query Inspector are enabled. Ordinary trusted calls can verify internally without
-            returning proof bytes. Current epoch reads use <Code>epoch.epochsInfoWithProof</Code>{' '}
-            whenever trusted mode is on, deriving explicit epoch bounds from proved genesis and
+            Most query hooks select a <Code>WithProof</Code> call when the Query Inspector is
+            enabled. Ordinary trusted calls can verify internally without returning proof
+            bytes. Current epoch reads use <Code>epoch.epochsInfoWithProof</Code>{' '}
+            in every session, deriving explicit epoch bounds from proved genesis and
             the response&apos;s signed time. That does not establish newest signed-root freshness.
             Direct WASM document aggregates have no proof capture variant in this app.
           </Text>

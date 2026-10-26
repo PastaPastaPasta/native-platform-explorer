@@ -25,6 +25,10 @@ import {
   removeCustomDevnet,
 } from '@sdk/networks';
 import { CustomDevnetModal } from '@components/layout/CustomDevnetModal';
+import { ConnectionSettingsForm } from '@components/settings/ConnectionSettingsForm';
+import { getQuorumKeySource } from '@sdk/proofs';
+import { useProtocolVersionCheck } from '@sdk/version';
+import { EVO_SDK_VERSION } from '@/version';
 import { useViewedIdentities } from '@hooks/useViewedIdentities';
 
 const DIAG_KEY = 'npe:diagnosticsEnabled';
@@ -51,7 +55,8 @@ function useLocalStorageBool(key: string, fallback: boolean) {
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Settings' }]);
-  const { network, trusted, setNetwork, setTrusted, reconnect, status } = useSdk();
+  const { network, setNetwork, reconnect, status, error, quorumUrl } = useSdk();
+  const protocol = useProtocolVersionCheck();
   const { enabled: inspectorEnabled, setEnabled: setInspectorEnabled } = useQueryProofStore();
   const [diagEnabled, setDiagEnabled] = useLocalStorageBool(DIAG_KEY, true);
   const viewed = useViewedIdentities();
@@ -105,6 +110,26 @@ export default function Page() {
                 SDK status: {status}
               </Text>
             </HStack>
+            {status === 'error' && error ? (
+              <Text fontSize="xs" color="failed" fontFamily="mono" wordBreak="break-word">
+                {error.message}
+              </Text>
+            ) : null}
+          </VStack>
+        </InfoBlock>
+
+        <InfoBlock id="connection" scrollMarginTop="96px">
+          <VStack align="stretch" spacing={3}>
+            <Heading size="sm" color="gray.100">
+              Connection
+            </Heading>
+            <Text fontSize="sm" color="gray.250">
+              The SDK first fetches quorum public keys and the masternode list from a
+              trusted quorum service, then sends each query to DAPI nodes from that list.
+              If Platform is unreachable from this browser, try another quorum service or
+              longer timeouts.
+            </Text>
+            <ConnectionSettingsForm />
           </VStack>
         </InfoBlock>
 
@@ -115,10 +140,10 @@ export default function Page() {
             </Heading>
             <Text fontSize="sm" color="gray.250">
               Devnets you&apos;ve added are stored in this browser only. They share testnet
-              derivation paths. Non-trusted mode uses the DAPI addresses you provide;
-              trusted mode requires a reachable quorums service URL (default:
-              <code> https://quorums.&lt;name&gt;.networks.dash.org</code>) for proof
-              verification.
+              derivation paths. Each devnet needs a reachable quorums service (default:
+              <code> https://quorums.&lt;name&gt;.networks.dash.org</code>) for quorum keys
+              and its masternode list; saved DAPI addresses are used only when that service
+              publishes no masternodes.
             </Text>
             {customDevnets.length === 0 ? (
               <Text fontSize="sm" color="gray.400">
@@ -164,37 +189,15 @@ export default function Page() {
         <InfoBlock>
           <VStack align="stretch" spacing={3}>
             <Heading size="sm" color="gray.100">
-              Trusted mode
+              Proof verification
             </Heading>
             <Text fontSize="sm" color="gray.250">
-              When on, every query requests a cryptographic proof and the WASM SDK
-              verifies it in your browser. When off, responses are returned without
-              verification — faster, but the explorer cannot tell you they weren&apos;t
-              tampered with.
+              Always on. Proof-capable queries are verified by the WASM SDK in your browser
+              against quorum keys from the trusted quorum service. Earlier builds offered an
+              untrusted mode; the bundled SDK cannot run queries without these keys (every
+              proof-capable query failed with &ldquo;Non-trusted mode is not supported in
+              WASM&rdquo;), so it was removed.
             </Text>
-            <HStack>
-              <Switch
-                aria-label="Trusted mode"
-                isChecked={trusted}
-                onChange={(e) => {
-                  const next = e.target.checked;
-                  if (!next) {
-                    if (
-                      !window.confirm(
-                        'Disable trusted mode? Responses will no longer be proof-verified until you re-enable it.',
-                      )
-                    ) {
-                      return;
-                    }
-                  }
-                  setTrusted(next);
-                }}
-                colorScheme="blue"
-              />
-              <Text fontSize="sm" color={trusted ? 'success' : 'warning'}>
-                {trusted ? 'On (proofs verified)' : 'Off (unverified)'}
-              </Text>
-            </HStack>
           </VStack>
         </InfoBlock>
 
@@ -277,9 +280,18 @@ export default function Page() {
               Build info
             </Heading>
             <InfoLine label="Network" value={<Text fontFamily="mono">{network}</Text>} />
+            <InfoLine label="SDK package" value={<Text fontFamily="mono">@dashevo/evo-sdk {EVO_SDK_VERSION}</Text>} />
             <InfoLine
-              label="Trusted mode"
-              value={<Text fontFamily="mono">{String(trusted)}</Text>}
+              label="Protocol version"
+              value={
+                <Text fontFamily="mono" color={protocol.mismatch ? 'warning' : undefined}>
+                  SDK v{protocol.sdkVersion ?? '—'} · network v{protocol.networkVersion ?? '—'}
+                </Text>
+              }
+            />
+            <InfoLine
+              label="Quorum keys from"
+              value={<Text fontFamily="mono" wordBreak="break-all">{getQuorumKeySource(network, true, quorumUrl)}</Text>}
             />
           </VStack>
         </InfoBlock>

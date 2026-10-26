@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { routeOffline } from './quorum-fixtures';
 
 test('mobile navigation drawer supports focus restoration and client navigation', async ({ page }) => {
   const errors: Error[] = [];
@@ -50,15 +51,9 @@ test('settings modal retains controlled input and restores focus on close', asyn
 test('query editor preserves URL state through a client update and reload', async ({ page }) => {
   const errors: Error[] = [];
   page.on('pageerror', (error) => errors.push(error));
-  // Real non-trusted SDK initialization, with an explicit endpoint outage.
+  // Real trusted SDK initialization from quorum fixtures, with a DAPI outage.
   // This checks URL state without depending on a successful network query.
-  await page.addInitScript(() => localStorage.setItem('npe:trusted', 'false'));
-  await page.route(/^https?:\/\//, (route) => {
-    const { hostname } = new URL(route.request().url());
-    return hostname === '127.0.0.1' || hostname === 'localhost'
-      ? route.continue()
-      : route.abort('failed');
-  });
+  await routeOffline(page);
   const initialSql = 'not valid SQL';
   await page.goto(`query/?network=testnet&q=${encodeURIComponent(initialSql)}`);
 

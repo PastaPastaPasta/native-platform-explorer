@@ -4,7 +4,9 @@ export type RateProvider = 'kucoin' | 'coinbase' | 'none';
 
 export interface AppConfig {
   defaultNetwork: Network;
-  trustedMode: boolean;
+  /** Build-time trusted quorum service overrides for the built-in networks
+   *  (`NEXT_PUBLIC_QUORUM_URL_MAINNET` / `_TESTNET`). */
+  quorumUrls: { mainnet: string | null; testnet: string | null };
   disableWriteMode: boolean;
   rateProvider: RateProvider;
   wellKnownUrl: string | null;
@@ -13,6 +15,17 @@ export interface AppConfig {
 function parseBool(raw: string | undefined, fallback: boolean): boolean {
   if (raw === undefined) return fallback;
   return raw.toLowerCase() === 'true';
+}
+
+function parseUrl(raw: string | undefined): string | null {
+  const value = raw?.trim();
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? value.replace(/\/+$/, '') : null;
+  } catch {
+    return null;
+  }
 }
 
 // Coinbase is the default: KuCoin's API sends no CORS headers, so browsers
@@ -30,7 +43,10 @@ export function getConfig(): AppConfig {
 
   return {
     defaultNetwork,
-    trustedMode: parseBool(process.env.NEXT_PUBLIC_TRUSTED_MODE, true),
+    quorumUrls: {
+      mainnet: parseUrl(process.env.NEXT_PUBLIC_QUORUM_URL_MAINNET),
+      testnet: parseUrl(process.env.NEXT_PUBLIC_QUORUM_URL_TESTNET),
+    },
     disableWriteMode: parseBool(process.env.NEXT_PUBLIC_DISABLE_WRITE_MODE, false),
     rateProvider: parseRateProvider(process.env.NEXT_PUBLIC_RATE_PROVIDER),
     wellKnownUrl: process.env.NEXT_PUBLIC_WELL_KNOWN_URL || null,

@@ -173,11 +173,11 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
                 _focus={{ borderColor: 'brand.normal' }}
               />
               <FormHelperText fontSize="xs" color="gray.400">
-                HP masternode endpoints, one per line (or comma-separated). Required for
-                non-trusted mode; optional when a quorum URL is provided (the SDK&apos;s
-                trusted context discovers masternodes from there). If they use self-signed
-                certs you may need to visit each URL in a separate tab once to accept the
-                certificate.
+                HP masternode endpoints, one per line (or comma-separated). Required when
+                no quorum URL is provided. The SDK uses them only if the quorums service
+                does not publish a masternode list; a published list replaces them. If they
+                use self-signed certs you may need to visit each URL in a separate tab once
+                to accept the certificate.
               </FormHelperText>
               {errors.dapi ? (
                 <FormErrorMessage fontSize="xs">{errors.dapi}</FormErrorMessage>
@@ -197,8 +197,8 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
                 _focus={{ borderColor: 'brand.normal' }}
               />
               <FormHelperText fontSize="xs" color="gray.400">
-                Trusted-context quorums service. When set, enables proof verification and
-                lets the SDK discover masternodes. Defaults to
+                Trusted-context quorums service: supplies the quorum keys used to verify
+                proofs and the masternode list. Defaults to
                 <code> https://quorums.&lt;name&gt;.networks.dash.org</code> if the devnet
                 name follows that convention.
               </FormHelperText>
