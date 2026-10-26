@@ -11,6 +11,10 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import reference from '@/data/sdk-reference.json';
 import { filterReference } from './reference';
+import { writeModeEnabled } from '@/config';
+
+// Listed for reference, but not linked when the build disables write mode.
+const WRITE_ROUTES = new Set(['/broadcast/', '/wallet/']);
 
 const KIND_LABELS: Record<string, string> = {
   facade: 'EvoSDK',
@@ -78,12 +82,14 @@ export function SdkReference() {
         ) : pages.map((page) => (
           <InfoBlock as="section" aria-label={page.route} key={page.route}>
             <Heading as="h2" size="md" mb={2}>
-              <Link as={NextLink} href={page.route} color="brand.light">{page.route}</Link>
+              {writeModeEnabled() || !WRITE_ROUTES.has(page.route) ? (
+                <Link as={NextLink} href={page.route} color="brand.light">{page.route}</Link>
+              ) : page.route}
             </Heading>
             {page.route === '/broadcast/' ? (
               <Text fontSize="sm" color="gray.400" mb={3}>
-                Write calls require an available operation, eligible signer, review and confirmation.
-                Identity top-up opens the external bridge; voting and raw byte submission are unavailable.
+                Write calls require an eligible signer (or keys entered in the form), review and
+                confirmation. Raw broadcast submits a transition signed elsewhere.
               </Text>
             ) : page.route === '/query/' ? (
               <Text fontSize="sm" color="gray.400" mb={3}>

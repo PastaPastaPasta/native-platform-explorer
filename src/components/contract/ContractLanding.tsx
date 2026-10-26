@@ -18,6 +18,7 @@ import { LookupInput } from '@ui/LookupInput';
 import { Identifier } from '@components/data/Identifier';
 import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 import { isBase58Identifier } from '@util/identifier';
+import { writeModeEnabled } from '@/config';
 
 export function ContractLanding() {
   const wellKnownContracts = useWellKnownEntries('contract');
@@ -54,17 +55,19 @@ export function ContractLanding() {
               }
               buildHref={(v) => `/contract/?id=${encodeURIComponent(v)}`}
             />
-            <HStack>
-              <Button
-                as={NextLink}
-                href="/broadcast/?op=contract.register"
-                size="sm"
-                colorScheme="blue"
-                variant="outline"
-              >
-                Register a new contract →
-              </Button>
-            </HStack>
+            {writeModeEnabled() ? (
+              <HStack>
+                <Button
+                  as={NextLink}
+                  href="/broadcast/?op=contract.register"
+                  size="sm"
+                  colorScheme="blue"
+                  variant="outline"
+                >
+                  Register a new contract →
+                </Button>
+              </HStack>
+            ) : null}
           </VStack>
         </InfoBlock>
 

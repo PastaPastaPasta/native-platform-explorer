@@ -7,6 +7,7 @@ import { tokenModelFromContract } from '@components/broadcast/tokens/model';
 import { tokenOperationId, type TokenOperationKind } from '@components/broadcast/tokens/options';
 import { useSigner } from '@/signer/SignerProvider';
 import { useTokenIdentityBalances } from '@sdk/queries';
+import { writeModeEnabled } from '@/config';
 
 const LABELS: Record<TokenOperationKind, string> = {
   mint: 'Mint',
@@ -27,19 +28,26 @@ const LABELS: Record<TokenOperationKind, string> = {
  * read pages keep), limited to what its rules plausibly allow. The console
  * checks everything again before review and before signing.
  */
-export function TokenWriteActions({
-  tokenId,
-  contractId,
-  position,
-  contract,
-  forSale,
-}: {
+export function TokenWriteActions(props: TokenWriteActionsProps) {
+  // Skips the balance read too when the build has no write mode.
+  return writeModeEnabled() ? <EnabledTokenWriteActions {...props} /> : null;
+}
+
+interface TokenWriteActionsProps {
   tokenId: string;
   contractId: string;
   position: number;
   contract: unknown;
   forSale: boolean;
-}) {
+}
+
+function EnabledTokenWriteActions({
+  tokenId,
+  contractId,
+  position,
+  contract,
+  forSale,
+}: TokenWriteActionsProps) {
   const { signer, stash } = useSigner();
   const identityId = signer?.identityId ?? stash?.identityId;
   const balancesQ = useTokenIdentityBalances(identityId, identityId ? [tokenId] : undefined);

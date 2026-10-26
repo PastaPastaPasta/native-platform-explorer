@@ -3,6 +3,7 @@
 import NextLink from 'next/link';
 import { Button, HStack, Text } from '@chakra-ui/react';
 import { useSigner } from '@/signer/SignerProvider';
+import { writeModeEnabled } from '@/config';
 
 interface OpLink {
   op: string;
@@ -31,8 +32,13 @@ function buildHref(op: string, params?: Record<string, string>): string {
  *  that deep-link into the broadcast console. Hides ownsTo-gated actions unless
  *  the target belongs to the connected identity. Signers are cleared outside
  *  /wallet and /broadcast, so the public reconnect hint stands in for them on
- *  read pages; the console still requires a live signer to sign. */
-export function WriteActions({ links, title, size = 'sm' }: WriteActionsProps) {
+ *  read pages; the console still requires a live signer to sign. Renders
+ *  nothing in a build with write mode disabled. */
+export function WriteActions(props: WriteActionsProps) {
+  return writeModeEnabled() ? <EnabledWriteActions {...props} /> : null;
+}
+
+function EnabledWriteActions({ links, title, size = 'sm' }: WriteActionsProps) {
   const { signer, stash } = useSigner();
   const identityId = signer?.identityId ?? stash?.identityId;
   const visible = links.filter((l) => !l.ownsTo || identityId === l.ownsTo);
