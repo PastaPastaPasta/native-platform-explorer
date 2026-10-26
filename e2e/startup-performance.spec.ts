@@ -111,11 +111,11 @@ test('broadcast operation controls respond before the actual SDK module finishes
   const sdk = await deferSdk(page);
   try {
     await page.goto('broadcast/?network=testnet', { waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: /^Top up an identity/ }).click();
+    await page.getByText('Top up an identity', { exact: true }).click();
     const identity = page.getByRole('textbox', { name: 'Identity', exact: true });
     await identity.fill('public-identity-draft');
     await expect(identity).toHaveValue('public-identity-draft');
-    await expect(page.getByText('External bridge', { exact: true })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Open bridge →', exact: true })).toBeVisible();
     await sdk.expectShellReady();
     await sdk.expectSdkReady();
     await expect(page.getByRole('button', { name: 'Sign + broadcast', exact: true })).toHaveCount(0);
