@@ -141,6 +141,27 @@ describe('parseProofTree on a real testnet sum-tree proof', () => {
   });
 });
 
+describe('parseProofTree on a real testnet AVG proof', () => {
+  const AVG = proofText('testnet-grades-semester-avg');
+
+  it('reconstructs every layer and keeps each per-semester count-sum tree as a result', () => {
+    const root = parseProofTree(AVG)!;
+    const layers = flattenLayers(root);
+    for (const layer of layers) {
+      expect(buildLayerTree(layer).issues, `layer ${layer.layerIndex}`).toEqual([]);
+    }
+    expect(layers.reduce((n, l) => n + l.ops.length, 0)).toBe(printedOps(AVG, /^\d+: /));
+    const semesters = layerByKey(root, 'semester');
+    const results = semesters.ops.filter((op) => op.kind === 'kvValueHash');
+    expect(results.map((op) => op.treeValue?.match(/^ProvableCountProvableSumTree\(00, (\d+), (\d+)/)?.slice(1))).toEqual([
+      ['9', '698'], ['2', '110'], ['5', '418'], ['7', '556'], ['8', '649'], ['3', '173'],
+    ]);
+    // The per-semester trees are not descended into: they are the proven aggregates.
+    expect(results.every((op) => !semesters.children.has(op.key!))).toBe(true);
+    expect(summarizeProof(root).totals.issues).toBe(0);
+  });
+});
+
 describe('parseProofTree op variants and layouts', () => {
   it('parses the V0 merk_proof layout', () => {
     // Synthetic: GroveDBProofV0 Display layout with hand-written ops.

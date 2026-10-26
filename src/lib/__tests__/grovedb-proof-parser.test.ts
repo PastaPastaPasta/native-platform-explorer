@@ -50,6 +50,21 @@ describe('parseGrovedbProof', () => {
     expect(text).not.toContain('Error decoding op');
   });
 
+  it('parses a real testnet AVG proof over a count-sum index', async () => {
+    const { parseGrovedbProof } = await freshParser();
+    const text = await parseGrovedbProof(proofBytes('testnet-grades-semester-avg'));
+    expect(text.trim()).toBe(proofText('testnet-grades-semester-avg').trim());
+    expect(text.match(/ProvableCountProvableSumTree\(00, \d+, \d+/g)).toEqual([
+      'ProvableCountProvableSumTree(00, 9, 698',
+      'ProvableCountProvableSumTree(00, 2, 110',
+      'ProvableCountProvableSumTree(00, 5, 418',
+      'ProvableCountProvableSumTree(00, 7, 556',
+      'ProvableCountProvableSumTree(00, 8, 649',
+      'ProvableCountProvableSumTree(00, 3, 173',
+    ]);
+    expect(text).not.toContain('Error decoding op');
+  });
+
   it('normalizes parser failures to friendly errors', async () => {
     const { parseGrovedbProof, ProofParseError } = await freshParser();
     await expect(parseGrovedbProof(new Uint8Array())).rejects.toThrow('No proof bytes to parse.');

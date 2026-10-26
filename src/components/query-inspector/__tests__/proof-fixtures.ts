@@ -13,8 +13,18 @@ const DIR = join(process.cwd(), 'src/components/query-inspector/__tests__/fixtur
  *    `delta` over the rangeSummable `perTag` index where
  *    repoId == 4Gi9cEwBkN1iGUBGqKcewJhj2TfKy94TTTkLLbM4cc1R and
  *    tagName > 'a' (result 2). Its last layer is a ProvableSumTree with
- *    KVDigestSum and HashWithSum nodes. */
-export type ProofFixture = 'testnet-dpns-domain-asc' | 'testnet-dpns-domain-desc' | 'testnet-release-range-sum';
+ *    KVDigestSum and HashWithSum nodes.
+ *  - `testnet-grades-semester-avg`: SDK 4.0.0-rc.2 documents.averageWithProof
+ *    on testnet (protocol 14), contract
+ *    7DiE1W5YYgUXx7s68YTMGEM9UssZ5TFg7dXdGaDj8cet, type `grade`, AVG(score)
+ *    where class == 'CS101' and semester between 20241 and 20262, GROUP BY
+ *    semester. It ends in six ProvableCountProvableSumTree results (one per
+ *    semester: 9/698, 2/110, 5/418, 7/556, 8/649, 3/173). */
+export type ProofFixture =
+  | 'testnet-dpns-domain-asc'
+  | 'testnet-dpns-domain-desc'
+  | 'testnet-release-range-sum'
+  | 'testnet-grades-semester-avg';
 
 export function proofText(name: ProofFixture): string {
   return readFileSync(join(DIR, `${name}.txt`), 'utf8');
