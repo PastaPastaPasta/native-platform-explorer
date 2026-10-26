@@ -36,10 +36,14 @@ export async function createMnemonicSigner(
   if (!(await wallet.validateMnemonic(mnemonic))) {
     throw new SignerUnavailableError('That BIP-39 mnemonic is not valid.');
   }
-  if (!Number.isSafeInteger(identityIndex) || identityIndex < 0 || identityIndex >= 2 ** 31) {
+  const explicitPath = path?.trim();
+  // An explicit path imports exactly that key; the identity index is unused.
+  if (
+    !explicitPath &&
+    (!Number.isSafeInteger(identityIndex) || identityIndex < 0 || identityIndex >= 2 ** 31)
+  ) {
     throw new SignerUnavailableError('Enter an identity index from 0 to 2147483647.');
   }
-  const explicitPath = path?.trim();
   const paths = explicitPath
     ? [explicitPath]
     : Array.from({ length: IDENTITY_KEY_SCAN_DEPTH }, (_, keyIndex) =>

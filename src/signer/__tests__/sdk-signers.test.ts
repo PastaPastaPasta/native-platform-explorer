@@ -119,7 +119,8 @@ describe('SDK-compatible signers', () => {
     );
     derived.free();
     const { sdk } = fixture({ data: mnemonicData });
-    const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet', 0, "m/9'/1'/13'/0'");
+    // The identity index is irrelevant (and may be blank/invalid) with an explicit path.
+    const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet', NaN, "m/9'/1'/13'/0'");
     const material = await signer.prepareSdk!({ purpose: 'AUTHENTICATION' });
     expect(material.identitySigner.keyCount).toBe(1);
     material.release!();
