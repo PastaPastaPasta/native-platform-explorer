@@ -43,16 +43,6 @@ export function redactIdentityUpdateKeys(options: IdentityUpdateKeysOptions) {
   };
 }
 
-/** The options with the new keys' private keys removed, kept after execution. */
-export function stripIdentityUpdateKeySecrets(
-  options: IdentityUpdateKeysOptions,
-): IdentityUpdateKeysOptions {
-  return {
-    ...options,
-    addKeys: options.addKeys?.map((key) => ({ ...key, privateKeyWif: '' })),
-  };
-}
-
 function parseDisableIds(text: string): { ids?: number[]; error?: string } {
   const trimmed = text.trim();
   if (!trimmed) return {};

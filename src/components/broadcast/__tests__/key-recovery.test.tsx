@@ -45,6 +45,7 @@ function setup(availableKeys: ReturnType<typeof vi.fn>) {
         description: 'Exercises capability recovery without submitting a transaction.',
         FormComponent: TestForm,
         summarise: ({ id }) => id,
+        secrets: 'none',
         execute,
         capability: { status: 'available', criteria: { purpose: 'TRANSFER' } },
       }}

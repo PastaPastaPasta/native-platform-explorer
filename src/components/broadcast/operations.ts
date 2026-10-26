@@ -21,7 +21,6 @@ import {
 import {
   IdentityUpdateKeysForm,
   redactIdentityUpdateKeys,
-  stripIdentityUpdateKeySecrets,
   type IdentityUpdateKeysOptions,
 } from './forms/IdentityUpdateKeys';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
@@ -106,6 +105,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Publish a new data contract. The schemas you define here will determine ' +
         'what documents can be created on this contract later.',
+      secrets: 'none',
       FormComponent: ContractRegisterForm,
       summarise: (o) =>
         `Register a contract with ${Object.keys(o.documentSchemas ?? {}).length} ` +
@@ -123,6 +123,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Replaces the document schemas and schema definitions of a contract you own and ' +
         'publishes it as the next version. Groups, tokens, and config are not changed.',
+      secrets: 'none',
       FormComponent: ContractUpdateForm,
       summarise: (o) =>
         o.baseVersion === undefined
@@ -144,6 +145,7 @@ export const OPERATIONS: OperationEntry[] = [
       title: 'Create a document',
       description:
         'Pick a contract and a document type, fill in the fields, sign, and ' + 'broadcast.',
+      secrets: 'none',
       FormComponent: DocumentCreateForm,
       summarise: (o) => `Create a "${o.documentType}" document on contract ${o.contractId}.`,
       execute: executeDocumentCreate,
@@ -159,6 +161,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Loads the current document and lets you change its fields. The revision ' +
         'is bumped automatically.',
+      secrets: 'none',
       FormComponent: DocumentReplaceForm,
       summarise: (o) => `Replace document ${o.documentId} on contract ${o.contractId}.`,
       execute: executeDocumentReplace,
@@ -173,6 +176,7 @@ export const OPERATIONS: OperationEntry[] = [
       title: 'Delete a document',
       description: 'Removes a document. This is permanent.',
       destructive: true,
+      secrets: 'none',
       FormComponent: DocumentDeleteForm,
       summarise: (o) => `Delete document ${o.documentId} on contract ${o.contractId}.`,
       execute: executeDocumentDelete,
@@ -188,6 +192,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Changes the owner of a document to another identity. The recipient ' +
         'becomes responsible for the document going forward.',
+      secrets: 'none',
       FormComponent: DocumentTransferForm,
       summarise: (o) => `Transfer document ${o.documentId} to ${o.recipientId}.`,
       execute: executeDocumentTransfer,
@@ -203,6 +208,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Marks a document as for-sale at a given credit price. Set the price to 0 ' +
         'to remove the listing.',
+      secrets: 'none',
       FormComponent: DocumentSetPriceForm,
       summarise: (o) => `Set price on document ${o.documentId} to ${o.priceCredits} credits.`,
       execute: executeDocumentSetPrice,
@@ -218,6 +224,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Buys a document that has been listed for sale. The credits leave your ' +
         'identity and ownership transfers to you.',
+      secrets: 'none',
       FormComponent: DocumentPurchaseForm,
       summarise: (o) => `Purchase document ${o.documentId} for ${o.priceCredits} credits.`,
       execute: executeDocumentPurchase,
@@ -238,6 +245,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Top-up requires an asset-lock proof built from a Dash Core transaction. ' +
         'For now we hand off to the bridge — return to the explorer when the ' +
         'top-up completes, then refresh the identity page to check the balance.',
+      secrets: 'none',
       FormComponent: IdentityTopUpForm,
       summarise: (o) => `Top up ${o.identityId} by ${o.amountDash} DASH (via bridge).`,
       execute: executeIdentityTopUp,
@@ -253,6 +261,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Sends credits from your identity to another. The recipient must already ' +
         'exist on Platform.',
+      secrets: 'none',
       FormComponent: IdentityCreditTransferForm,
       summarise: (o) => `Transfer ${o.amountCredits} credits to ${o.recipientId}.`,
       execute: executeIdentityCreditTransfer,
@@ -268,6 +277,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Withdraws credits to a Dash Core address, or a masternode owner identity to its ' +
         'payout address. The withdrawal is queued on Platform and settles as a Core transaction.',
+      secrets: 'none',
       FormComponent: IdentityCreditWithdrawalForm,
       summarise: (o) =>
         `Withdraw ${o.amountCredits} credits to ${o.toAddress ?? 'the masternode payout address'} ` +
@@ -292,8 +302,8 @@ export const OPERATIONS: OperationEntry[] = [
         const disables = o.disableKeyIds?.length ? `disable ${o.disableKeyIds.length} key(s)` : '';
         return [adds, disables].filter(Boolean).join(', ') || 'no-op';
       },
-      reviewData: redactIdentityUpdateKeys,
-      redactSecrets: stripIdentityUpdateKeySecrets,
+      // The new keys' private keys sign their proofs of possession.
+      secrets: { reviewData: redactIdentityUpdateKeys },
       execute: executeIdentityUpdateKeys,
     },
   ),
@@ -312,6 +322,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Registers a .dash name for the connected identity (a preorder followed by the ' +
         'domain document). Short names made of letters, 0, 1, and hyphens are contested and ' +
         'are decided by a masternode vote.',
+      secrets: 'none',
       FormComponent: DpnsRegisterForm,
       summarise: (o) =>
         o.contested
@@ -334,6 +345,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Casts a masternode vote on a contested resource (e.g. a contested DPNS ' +
         'name). Only operating masternodes have a voting key.',
+      secrets: 'none',
       FormComponent: VotingCastVoteForm,
       summarise: (o) => `Vote ${o.choice}${o.targetIdentityId ? ` → ${o.targetIdentityId}` : ''}.`,
       execute: executeVotingCastVote,
@@ -353,6 +365,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Paste a hex-encoded state transition. Use only if you have a hex blob ' +
         'from another tool — most users want the named operations above instead.',
+      secrets: 'none',
       FormComponent: StateTransitionBroadcastForm,
       summarise: (o) => `Broadcast ${o.stHex.length / 2} bytes of raw state transition.`,
       execute: async () => previewOnly('stateTransitions.broadcastStateTransition'),

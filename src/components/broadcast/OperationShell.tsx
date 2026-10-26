@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import NextLink from 'next/link';
 import {
   Badge,
@@ -32,6 +32,7 @@ import {
   BroadcastOutcomeUnknownError,
   OperationNotSubmittedError,
   receiptEntities,
+  type ReceiptEntities,
 } from './outcomes';
 import { useSigner } from '@/signer/SignerProvider';
 import { invalidateNetworkQueries, useSdk } from '@sdk/hooks';
@@ -52,6 +53,19 @@ export interface OperationFormProps<TOptions> {
   onOptionsChange: (options: TOptions | null) => void;
 }
 
+/**
+ * Private key material in an operation's inputs. Every operation declares it,
+ * as `'none'` or with a review view that leaves the secrets out.
+ */
+export type SecretInputs<TOptions> =
+  | 'none'
+  | {
+      /** What the review step shows instead of the inputs. It must omit every secret. */
+      reviewData: (options: TOptions) => unknown;
+      /** Byte arrays holding secrets, zeroed once the operation settles. */
+      secretBytes?: (options: TOptions) => Uint8Array[];
+    };
+
 export interface OperationDescriptor<TOptions, TResult> {
   operationId?: string;
   capability?: OperationCapabilityRequirement;
@@ -60,13 +74,8 @@ export interface OperationDescriptor<TOptions, TResult> {
   destructive?: boolean;
   FormComponent: React.ComponentType<OperationFormProps<TOptions>>;
   summarise: (options: TOptions) => string;
-  /** What the review step shows for the inputs; use it to hide secrets. Defaults to the options. */
-  reviewData?: (options: TOptions) => unknown;
-  /**
-   * Copy of the inputs without private key material. Once execution settles,
-   * or the signer is cleared, the shell keeps only this copy for the receipt.
-   */
-  redactSecrets?: (options: TOptions) => TOptions;
+  /** The shell never shows these inputs, and keeps only receipt identifiers once it settles. */
+  secrets: SecretInputs<TOptions>;
   /** Key requirements for these inputs; the review step shows the key they select. */
   signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
   execute: (args: ExecuteArgs<TOptions>) => Promise<TResult>;
@@ -90,12 +99,17 @@ function fingerprint(value: unknown): string {
   return JSON.stringify(encode(value));
 }
 
-/** Zero byte arrays in inputs the shell is discarding (strings cannot be wiped). */
-function wipeBytes(value: unknown, seen = new Set<object>()): void {
-  if (!value || typeof value !== 'object' || seen.has(value)) return;
-  seen.add(value);
-  if (value instanceof Uint8Array) value.fill(0);
-  else Object.values(value).forEach((item) => wipeBytes(item, seen));
+/** Zero the declared secret bytes of inputs nothing uses any more (strings cannot be wiped). */
+function wipeSecretBytes<TOptions>(secrets: SecretInputs<TOptions>, inputs: (TOptions | null)[]) {
+  if (secrets === 'none' || !secrets.secretBytes) return;
+  for (const input of inputs) {
+    if (input === null) continue;
+    try {
+      secrets.secretBytes(input).forEach((bytes) => bytes.fill(0));
+    } catch {
+      /* best-effort: the inputs are already out of React state */
+    }
+  }
 }
 
 function describeKey(key: SignerKeyDescriptor): string {
@@ -114,6 +128,9 @@ interface Review<TOptions, TResult> {
   contextBinding: object;
   options: TOptions;
   fingerprint: string;
+  summary: string;
+  /** What the review step shows; never the inputs of an operation with secrets. */
+  view: unknown;
   sdk: EvoSDK;
   signer: ExplorerSigner;
   identityId: string;
@@ -122,16 +139,11 @@ interface Review<TOptions, TResult> {
   sessionSignal: AbortSignal | null;
 }
 
-type Submission<TOptions, TResult> = Review<TOptions, TResult> & { submittedAt: string };
-
-function withoutSecrets<TOptions, TResult>(
-  snapshot: Submission<TOptions, TResult>,
-): Submission<TOptions, TResult> {
-  const redact = snapshot.descriptor.redactSecrets;
-  if (!redact) return snapshot;
-  const options = structuredClone(redact(snapshot.options));
-  return { ...snapshot, options, fingerprint: fingerprint(options) };
-}
+/** What the shell keeps for the receipt: never the inputs themselves. */
+type Submission<TOptions, TResult> = Pick<
+  Review<TOptions, TResult>,
+  'descriptor' | 'identityId' | 'network' | 'trusted'
+> & { submittedAt: string; entities: ReceiptEntities };
 
 export function OperationShell<TOptions, TResult>({
   descriptor,
@@ -154,6 +166,8 @@ export function OperationShell<TOptions, TResult>({
   const [result, setResult] = useState<TResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [keyRefresh, setKeyRefresh] = useState(0);
+  const [purges, setPurges] = useState(0);
+  const [, setFlushedPurges] = useState(0);
   const [keyState, setKeyState] = useState<{
     binding: object;
     keys: SignerKeyDescriptor[];
@@ -283,13 +297,19 @@ export function OperationShell<TOptions, TResult>({
   const reviewSigningKey = reviewKey?.review === review ? reviewKey : null;
   const signingKeyReady = !review?.descriptor.signingCriteria || !!reviewSigningKey?.key;
 
-  // Keep only the redacted receipt once the inputs can no longer be submitted.
+  // Drop the inputs once they can no longer be submitted; the receipt never held them.
   const purgeSecrets = useCallback(() => {
     setOptions(null);
     setReview(null);
     setReviewKey(null);
-    setSubmission((snapshot) => snapshot && withoutSecrets<TOptions, TResult>(snapshot));
+    setPurges((count) => count + 1);
   }, []);
+  // React keeps the previous render in the alternate fiber. Render once more
+  // after a purge or reset so that copy no longer holds the dropped inputs. A
+  // layout effect re-renders synchronously, before anything else can run.
+  useLayoutEffect(() => {
+    if (purges) setFlushedPurges(purges);
+  }, [purges]);
 
   const reset = useCallback(() => {
     setReview(null);
@@ -303,6 +323,7 @@ export function OperationShell<TOptions, TResult>({
     setResult(null);
     setActiveStep(0);
     setFormRevision((revision) => revision + 1);
+    setPurges((count) => count + 1);
   }, []);
 
   // Input edits invalidate review; context changes reset even a partially
@@ -330,11 +351,25 @@ export function OperationShell<TOptions, TResult>({
       options === null
     )
       return;
+    const reviewed = structuredClone(options);
+    let summary: string;
+    let view: unknown;
+    try {
+      summary = descriptor.summarise(reviewed);
+      view = structuredClone(
+        descriptor.secrets === 'none' ? reviewed : descriptor.secrets.reviewData(reviewed),
+      );
+    } catch {
+      setNotice('Could not prepare the review of these inputs. Check them and try again.');
+      return;
+    }
     setReview({
       descriptor,
       contextBinding,
-      options: structuredClone(options),
+      options: reviewed,
       fingerprint: optionsFingerprint,
+      summary,
+      view,
       sdk,
       signer,
       identityId: signer.identityId,
@@ -358,10 +393,18 @@ export function OperationShell<TOptions, TResult>({
     !busy;
   const onExecute = async () => {
     if (!review || !canProceed || !isCurrent(review) || inFlight.current) return;
-    const submitted = { ...review, submittedAt: new Date().toISOString() };
+    // Only this closure holds the inputs while the SDK call runs.
+    const submitted = review;
     const sourceOptions = options;
     inFlight.current = true;
-    setSubmission(submitted);
+    setSubmission({
+      descriptor: submitted.descriptor,
+      identityId: submitted.identityId,
+      network: submitted.network,
+      trusted: submitted.trusted,
+      submittedAt: new Date().toISOString(),
+      entities: receiptEntities(submitted.options, submitted.identityId),
+    });
     setActiveStep(2);
     setBusy(true);
     setError(null);
@@ -392,10 +435,7 @@ export function OperationShell<TOptions, TResult>({
         setBusy(false);
         purgeSecrets();
       }
-      if (submitted.descriptor.redactSecrets) {
-        wipeBytes(submitted.options);
-        wipeBytes(sourceOptions);
-      }
+      wipeSecretBytes(submitted.descriptor.secrets, [submitted.options, sourceOptions]);
     }
   };
 
@@ -449,7 +489,7 @@ export function OperationShell<TOptions, TResult>({
   const origin = submission ?? review;
   const entities = submission
     ? {
-        ...receiptEntities(submission.options, submission.identityId),
+        ...submission.entities,
         ...receiptEntities(result, submission.identityId),
         ...(error instanceof BroadcastOutcomeUnknownError ? error.entities : {}),
       }
@@ -549,14 +589,12 @@ export function OperationShell<TOptions, TResult>({
             <Heading size="sm" color="gray.100">
               Review
             </Heading>
-            <Text color="gray.250">{review.descriptor.summarise(review.options)}</Text>
+            <Text color="gray.250">{review.summary}</Text>
             <Text fontSize="sm" color="gray.250">
               Identity: {review.identityId} · Network: {review.network} ·{' '}
               {review.trusted ? 'trusted quorum source' : 'proof verification'}
             </Text>
-            <CodeBlock
-              value={review.descriptor.reviewData?.(review.options) ?? review.options}
-            />
+            <CodeBlock value={review.view} />
             {review.descriptor.signingCriteria ? (
               <Text
                 fontSize="sm"

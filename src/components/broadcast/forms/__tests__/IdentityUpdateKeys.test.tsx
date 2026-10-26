@@ -4,7 +4,6 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { wallet } from '@dashevo/evo-sdk';
 import { renderWithProviders } from '@/test/render';
 import { createMockSigner } from '@/test/signer';
-import { findOperationById } from '../../operations';
 import { IdentityUpdateKeysForm, redactIdentityUpdateKeys } from '../IdentityUpdateKeys';
 
 let testnetWif: string;
@@ -93,22 +92,5 @@ describe('IdentityUpdateKeysForm', () => {
     });
     expect(JSON.stringify(review)).not.toContain('secret-wif');
     expect(review.addKeys?.[0]).toMatchObject({ purpose: 'AUTHENTICATION', privateKey: 'provided (hidden)' });
-  });
-
-  it('has the shell drop the new private keys once the update settles', () => {
-    const options = {
-      network: 'testnet' as const,
-      addKeys: [
-        { purpose: 'TRANSFER', securityLevel: 'CRITICAL', keyType: 'ECDSA_HASH160', privateKeyWif: 'secret-wif' },
-      ] as const,
-      disableKeyIds: [3],
-    };
-    const kept = findOperationById('identity.updateKeys')!.descriptor.redactSecrets!(options);
-    expect(JSON.stringify(kept)).not.toContain('secret-wif');
-    expect(kept).toEqual({
-      network: 'testnet',
-      addKeys: [{ purpose: 'TRANSFER', securityLevel: 'CRITICAL', keyType: 'ECDSA_HASH160', privateKeyWif: '' }],
-      disableKeyIds: [3],
-    });
   });
 });

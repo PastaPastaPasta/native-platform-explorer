@@ -34,6 +34,7 @@ interface TestOptions {
   amount?: bigint;
   secret?: string;
   secretBytes?: Uint8Array;
+  publicBytes?: Uint8Array;
 }
 let changeOptions: OperationFormProps<TestOptions>['onOptionsChange'];
 let initialOptions: TestOptions;
@@ -52,6 +53,7 @@ function setup(overrides: Partial<OperationDescriptor<TestOptions, unknown>> = {
     description: 'Exercises the shell.',
     FormComponent: TestForm,
     summarise: (options) => `Will run ${options.id}`,
+    secrets: 'none',
     execute,
     ...overrides,
   };
@@ -424,7 +426,12 @@ describe('OperationShell', () => {
   describe('review details', () => {
     const transferKeys = [
       { id: 2, purpose: 'TRANSFER', securityLevel: 'CRITICAL' },
-      { id: 7, purpose: 'AUTHENTICATION', securityLevel: 'HIGH', contractBounds: { contractId: 'C' } },
+      {
+        id: 7,
+        purpose: 'AUTHENTICATION',
+        securityLevel: 'HIGH',
+        contractBounds: { contractId: 'C' },
+      },
     ];
     beforeEach(() => {
       useSignerMock.mockReturnValue({
@@ -484,7 +491,7 @@ describe('OperationShell', () => {
 
     it('shows review data instead of raw options when the descriptor redacts them', () => {
       initialOptions = { id: 'secret-value' };
-      setup({ reviewData: () => ({ id: 'hidden' }) });
+      setup({ secrets: { reviewData: () => ({ id: 'hidden' }) } });
       review();
       expect(screen.queryByText(/"secret-value"/)).not.toBeInTheDocument();
       expect(screen.getByText(/"hidden"/)).toBeInTheDocument();
@@ -493,15 +500,31 @@ describe('OperationShell', () => {
 
   describe('private keys in the inputs', () => {
     const WIF = 'cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy';
-    const redactSecrets = ({ secret: _secret, secretBytes: _bytes, ...rest }: TestOptions) => rest;
+    const secrets = {
+      reviewData: ({ secret: _secret, secretBytes: _bytes, ...rest }: TestOptions) => rest,
+      secretBytes: (options: TestOptions) => (options.secretBytes ? [options.secretBytes] : []),
+    };
     beforeEach(() => {
-      initialOptions = { id: 'add-key', secret: WIF, secretBytes: new Uint8Array([7, 7, 7]) };
+      initialOptions = {
+        id: 'add-key',
+        secret: WIF,
+        secretBytes: new Uint8Array([7, 7, 7]),
+        publicBytes: new Uint8Array([1, 2, 3]),
+      };
     });
 
-    /** Paths in the mounted tree's hook state, refs, props and effect deps that hold the secret. */
+    /**
+     * Paths in the mounted tree's hook state, refs, props and effect deps that
+     * hold the secret, in both the current and the alternate (previous) fibers.
+     */
     function secretsHeldByReact(container: HTMLElement): string[] {
       const rootKey = Object.keys(container).find((key) => key.startsWith('__reactContainer$'))!;
-      type Fiber = Record<string, unknown> & { child?: Fiber; sibling?: Fiber; elementType?: unknown };
+      type Fiber = Record<string, unknown> & {
+        child?: Fiber;
+        sibling?: Fiber;
+        alternate?: Fiber | null;
+        elementType?: unknown;
+      };
       const rootFiber = (container as unknown as Record<string, { stateNode: { current: Fiber } }>)[
         rootKey
       ]!.stateNode.current;
@@ -526,10 +549,18 @@ describe('OperationShell', () => {
       const visit = (fiber: Fiber | undefined, depth: number): void => {
         for (let node = fiber; node; node = node.sibling) {
           const name =
-            typeof node.elementType === 'function' ? node.elementType.name : String(node.elementType);
-          search(node.memoizedState, `${name}.state`);
-          search(node.memoizedProps, `${name}.props`);
-          search(node.updateQueue, `${name}.effects`);
+            typeof node.elementType === 'function'
+              ? node.elementType.name
+              : String(node.elementType);
+          for (const [label, copy] of [
+            ['', node],
+            ['(alternate) ', node.alternate],
+          ] as const) {
+            if (!copy) continue;
+            search(copy.memoizedState, `${label}${name}.state`);
+            search(copy.memoizedProps, `${label}${name}.props`);
+            search(copy.updateQueue, `${label}${name}.effects`);
+          }
           visit(node.child, depth + 1);
         }
       };
@@ -549,12 +580,12 @@ describe('OperationShell', () => {
         () => Promise.reject(new BroadcastOutcomeUnknownError(new Error('timeout'))),
         'Outcome unknown.',
       ],
-    ])('keeps only redacted inputs once execution settles (%s)', async (_, outcome, settled) => {
+    ])('keeps no inputs once execution settles (%s)', async (_, outcome, settled) => {
       const execute = vi.fn((args: { options: TestOptions }) => {
         expect(args.options.secret).toBe(WIF);
         return outcome();
       });
-      const { container, descriptor, rerender } = setup({ execute, redactSecrets });
+      const { container, descriptor, rerender } = setup({ execute, secrets });
       const original = initialOptions.secretBytes!;
       review();
       // The walk does see the secret while the inputs are still needed.
@@ -565,6 +596,8 @@ describe('OperationShell', () => {
       expect(execute).toHaveBeenCalledOnce();
       expect(secretsHeldByReact(container)).toEqual([]);
       expect(Array.from(original)).toEqual([0, 0, 0]);
+      // Only declared secret bytes are wiped.
+      expect(Array.from(initialOptions.publicBytes!)).toEqual([1, 2, 3]);
       expect(container.innerHTML).not.toContain(WIF);
 
       // Clearing the signer afterwards leaves the receipt and nothing secret.
@@ -576,7 +609,7 @@ describe('OperationShell', () => {
 
     it('drops secrets when the signer is cleared during review', async () => {
       const { container, descriptor, rerender } = setup({
-        redactSecrets,
+        secrets,
         capability: { status: 'available' },
         signingCriteria: vi.fn().mockResolvedValue({}),
       });
@@ -597,7 +630,7 @@ describe('OperationShell', () => {
             finish = resolve;
           }),
       );
-      const { container, descriptor, rerender } = setup({ execute, redactSecrets });
+      const { container, descriptor, rerender } = setup({ execute, secrets });
       review();
       broadcast();
       expect(execute).toHaveBeenCalledOnce();
@@ -611,6 +644,43 @@ describe('OperationShell', () => {
       await act(async () => finish({ ok: true }));
       expect(secretsHeldByReact(container)).toEqual([]);
       expect(Array.from(initialOptions.secretBytes!)).toEqual([0, 0, 0]);
+    });
+
+    it.each([
+      [
+        'throws',
+        () => {
+          throw new Error(`cannot redact ${WIF}`);
+        },
+      ],
+      ['returns something the shell cannot copy', () => ({ redact: () => WIF })],
+    ])('refuses to review when the review view %s', (_, reviewData) => {
+      setup({ secrets: { reviewData } });
+      review();
+      expect(screen.getByText(/Could not prepare the review/)).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Sign + broadcast' })).not.toBeInTheDocument();
+      expect(document.body.innerHTML).not.toContain(WIF);
+    });
+
+    it('keeps the outcome-unknown warning and receipt when wiping secret bytes throws', async () => {
+      const execute = vi.fn(() =>
+        Promise.reject(new BroadcastOutcomeUnknownError(new Error('timeout'))),
+      );
+      const { container } = setup({
+        execute,
+        secrets: {
+          reviewData: secrets.reviewData,
+          secretBytes: () => {
+            throw new Error('not cloneable');
+          },
+        },
+      });
+      review();
+      broadcast();
+      expect(await screen.findByText('Outcome unknown.')).toBeInTheDocument();
+      expect(screen.getByText(/This operation may have reached Platform/)).toBeInTheDocument();
+      expect(screen.getByText(/Started:/)).toBeInTheDocument();
+      expect(secretsHeldByReact(container)).toEqual([]);
     });
   });
 
@@ -628,7 +698,6 @@ describe('OperationShell', () => {
         'href',
         `/state-transition/?hash=${'ab'.repeat(32)}&network=testnet`,
       );
-    else
-      expect(screen.getByText(/does not return the state-transition hash/)).toBeInTheDocument();
+    else expect(screen.getByText(/does not return the state-transition hash/)).toBeInTheDocument();
   });
 });
