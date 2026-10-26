@@ -1,12 +1,83 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import NextLink from 'next/link';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
-import { Badge, Box, Heading, Link, Text } from '@chakra-ui/react';
-import { EVO_SDK_VERSION } from '@/version';
+import { Badge, Box, Code, Heading, Link, ListItem, OrderedList, Text } from '@chakra-ui/react';
+import { EVO_SDK_VERSION, GIT_COMMIT } from '@/version';
 import { usePageTitle } from '@hooks/usePageTitle';
+
+const REPOSITORY = 'https://github.com/PastaPastaPasta/native-platform-explorer';
+const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/+$/, '');
+
+/** How to rebuild this deployment and compare it with what the server sends. */
+function VerifyBuild() {
+  // The deployment URL is only known in the browser; render a placeholder in
+  // the static HTML so hydration matches.
+  const [site, setSite] = useState('<this site>/');
+  useEffect(() => setSite(`${window.location.origin}${basePath}/`), []);
+  const commit = GIT_COMMIT || '<commit>';
+  return (
+    <>
+      <Heading as="h2" size="md" color="gray.100" mt={6} mb={2} id="verify">
+        Verify this build
+      </Heading>
+      <Text color="gray.250" mb={3}>
+        This site was built from commit{' '}
+        {GIT_COMMIT ? (
+          <Link href={`${REPOSITORY}/commit/${GIT_COMMIT}`} isExternal color="brand.light" fontFamily="mono">
+            {GIT_COMMIT.slice(0, 12)}
+          </Link>
+        ) : <code>unknown</code>}
+        . Every deployment publishes{' '}
+        <Link href={`${basePath}/integrity.json`} isExternal color="brand.light">
+          <code>integrity.json</code>
+        </Link>
+        : the SHA-256 of every file it serves, plus the commit, build settings and toolchain. Builds
+        are reproducible, so anyone can rebuild that commit and check that the server sends exactly
+        the files the public source produces:
+      </Text>
+      <Code display="block" whiteSpace="pre" overflowX="auto" p={4} mb={3} borderRadius="md" fontSize="xs">
+        {[
+          `git clone ${REPOSITORY}`,
+          'cd native-platform-explorer',
+          `git checkout ${commit}`,
+          'pnpm install --frozen-lockfile',
+          'NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build',
+          `pnpm verify:integrity ${site}`,
+        ].join('\n')}
+      </Code>
+      <OrderedList color="gray.250" mb={3} spacing={2}>
+        <ListItem>
+          Build with the <code>NEXT_PUBLIC_*</code> values the deployed <code>integrity.json</code> lists
+          under <code>env</code> (the command above matches this site&apos;s production build), on Linux
+          with Node 22 and the pnpm version pinned in <code>package.json</code>.
+        </ListItem>
+        <ListItem>
+          <code>verify:integrity</code> compares your <code>out/integrity.json</code> with the deployed
+          one, then downloads every file from the site and hashes what the server actually returns.
+          It explains likely causes of a difference, such as another commit or base path.
+        </ListItem>
+      </OrderedList>
+      <Text color="gray.250" mb={3}>
+        Each page pins everything it runs: its Content Security Policy lists the SHA-256 of each inline
+        script, every script and stylesheet tag carries a Subresource Integrity hash, and the script
+        loader carries the hash of every chunk it loads later, including the SDK and its WASM. The
+        browser refuses a file that does not match. So once a page&apos;s HTML matches the source, so
+        does the code it executes. The check covers what the server returned to you when you ran it;
+        it does not prove what other visitors receive. Platform data is a separate question, answered
+        by the proofs described above.
+      </Text>
+      <Text color="gray.250" mb={3}>
+        After a first visit, a service worker keeps the explorer&apos;s files so it opens offline. It
+        only stores files whose hash matches this build, always fetches pages from the network first,
+        and offers a reload when a new version is deployed.
+      </Text>
+    </>
+  );
+}
 
 // Static copy, rendered directly without a markdown dependency. Keep it in
 // step with docs/PRD.md (proof model, enumeration limits, write mode, privacy).
@@ -182,6 +253,8 @@ export default function Page() {
             </Link>
             .
           </Text>
+
+          <VerifyBuild />
 
           <Heading as="h2" size="md" color="gray.100" mt={6} mb={2}>
             Credits
