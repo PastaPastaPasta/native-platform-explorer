@@ -42,7 +42,10 @@ vi.mock('@dashevo/evo-sdk', () => {
   }
 
   return {
-    DataContract: class DataContract {},
+    DataContract: class DataContract {
+      id = 'placeholder-contract-id';
+      constructor(readonly args: unknown) {}
+    },
     Document,
     IdentityPublicKeyInCreation: class IdentityPublicKeyInCreation {},
   };
@@ -302,5 +305,99 @@ describe('broadcast executors', () => {
       options: { recipientId: 'recipient-1', amountCredits: 100n },
     });
     expect(result.newBalance).toBe('0');
+  });
+
+  it('does not predict a contract ID for an unknown publish outcome', async () => {
+    const nonce = vi.fn();
+    const error = await executeContractRegister({
+      sdk: {
+        version: vi.fn().mockResolvedValue(1),
+        identities: { nonce },
+        contracts: { publish: vi.fn().mockRejectedValue(new Error('request timed out')) },
+      } as never,
+      signer: createMockSigner(),
+      options: { ownerId: 'identity-1', documentSchemas: { note: { type: 'object' } } },
+    }).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
+    expect((error as BroadcastOutcomeUnknownError).entities).toEqual({ identityId: 'identity-1' });
+    expect(nonce).not.toHaveBeenCalled();
+  });
+
+  it('reports the contract ID the SDK actually published', async () => {
+    const publish = vi.fn().mockResolvedValue({
+      id: 'published-id',
+      ownerId: 'identity-1',
+      version: 1,
+      schemas: { note: {} },
+    });
+    const result = await executeContractRegister({
+      sdk: { version: vi.fn().mockResolvedValue(1), contracts: { publish } } as never,
+      signer: createMockSigner(),
+      options: {
+        ownerId: 'identity-1',
+        documentSchemas: { note: { type: 'object' } },
+        definitions: { title: { type: 'string' } },
+      },
+    });
+    expect(result.contractId).toBe('published-id');
+    expect(publish.mock.calls[0]![0].dataContract.args).toMatchObject({
+      definitions: { title: { type: 'string' } },
+    });
+  });
+
+  describe('contract updates', () => {
+    function contract(version = 3) {
+      return {
+        ownerId: 'identity-1',
+        version,
+        setSchemas: vi.fn(),
+        toJSON: vi.fn(() => ({ schemaDefs: { title: { type: 'string' } } })),
+      };
+    }
+    const run = (current: ReturnType<typeof contract>, options: object) => {
+      const update = vi.fn().mockResolvedValue(undefined);
+      const execution = executeContractUpdate({
+        sdk: {
+          version: vi.fn().mockResolvedValue(9),
+          contracts: { fetch: vi.fn().mockResolvedValue(current), update },
+        } as never,
+        signer: createMockSigner(),
+        options: { contractId: 'contract-1', documentSchemas: { note: {} }, ...options },
+      });
+      return { execution, update };
+    };
+
+    it('increments the version and keeps on-chain definitions by default', async () => {
+      const current = contract();
+      const { execution, update } = run(current, { baseVersion: 3 });
+      await expect(execution).resolves.toEqual({
+        kind: 'contractUpdate',
+        contractId: 'contract-1',
+        newVersion: 4,
+      });
+      expect(current.setSchemas).toHaveBeenCalledWith(
+        { note: {} },
+        { title: { type: 'string' } },
+        true,
+        9,
+      );
+      expect(update.mock.calls[0]![0].dataContract.version).toBe(4);
+    });
+
+    it.each([
+      ['replaces', { defs: {} }, { defs: {} }],
+      ['removes', null, null],
+    ])('%s definitions when the form says so', async (_, definitions, expected) => {
+      const current = contract();
+      await run(current, { definitions }).execution;
+      expect(current.setSchemas).toHaveBeenCalledWith({ note: {} }, expected, true, 9);
+    });
+
+    it('refuses to publish edits made against an older version', async () => {
+      const { execution, update } = run(contract(5), { baseVersion: 3 });
+      await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(execution).rejects.toThrow(/version 3 → 5/);
+      expect(update).not.toHaveBeenCalled();
+    });
   });
 });

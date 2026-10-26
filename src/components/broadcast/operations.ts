@@ -111,13 +111,17 @@ export const OPERATIONS: OperationEntry[] = [
     'contract',
     'contract.update',
     'Update a data contract',
-    'Change schemas, groups, or tokens on a contract you own.',
+    'Edit the document schemas and definitions of a contract you own.',
     {
       title: 'Update a data contract',
       description:
-        'Mutates an existing contract. The new contract version is computed ' + 'automatically.',
+        'Replaces the document schemas and schema definitions of a contract you own and ' +
+        'publishes it as the next version. Groups, tokens, and config are not changed.',
       FormComponent: ContractUpdateForm,
-      summarise: (o) => `Update contract ${o.contractId}.`,
+      summarise: (o) =>
+        o.baseVersion === undefined
+          ? `Update contract ${o.contractId}.`
+          : `Update contract ${o.contractId} from version ${o.baseVersion} to ${o.baseVersion + 1}.`,
       execute: executeContractUpdate,
     },
   ),

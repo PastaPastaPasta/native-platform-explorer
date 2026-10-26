@@ -2,7 +2,13 @@
 // only collect input; the executors take EvoSDK + ExplorerSigner + form options
 // and return a result the OperationShell renders.
 
-import type { Document, EvoSDK, Identity, IdentityPublicKeyInCreation } from '@dashevo/evo-sdk';
+import type {
+  DataContract,
+  Document,
+  EvoSDK,
+  Identity,
+  IdentityPublicKeyInCreation,
+} from '@dashevo/evo-sdk';
 import type { ExplorerSigner, KeySelectionCriteria, SdkSigningMaterial } from '@/signer/types';
 import {
   BroadcastOutcomeUnknownError,
@@ -37,7 +43,7 @@ export interface ContractRegisterResult {
 export interface ContractUpdateResult {
   kind: 'contractUpdate';
   contractId: string;
-  newVersion?: number;
+  newVersion: number;
 }
 
 export interface DocumentResult {
@@ -116,6 +122,17 @@ async function getPlatformVersion(sdk: EvoSDK): Promise<number> {
   return sdk.version();
 }
 
+/** The contract's `$defs`, serialised by the SDK as `schemaDefs`. */
+function contractDefinitions(
+  contract: DataContract,
+  platformVersion: number,
+): Record<string, object> | undefined {
+  const defs = contract.toJSON(platformVersion).schemaDefs;
+  return defs && typeof defs === 'object' && Object.keys(defs).length > 0
+    ? (defs as Record<string, object>)
+    : undefined;
+}
+
 // ─── contracts ───────────────────────────────────────────────────────────
 
 export async function executeContractRegister(args: {
@@ -130,12 +147,13 @@ export async function executeContractRegister(args: {
     operationRequirement('contract.register').criteria,
     async (material, submit) => {
       const platformVersion = await getPlatformVersion(sdk);
-      const identityNonce = (await sdk.identities.nonce(material.identityId)) ?? 0n;
-
       const { DataContract } = await import('@dashevo/evo-sdk');
+      // The SDK fetches its own identity nonce and derives the published ID
+      // from it, so the constructor nonce and ID here are placeholders. Do not
+      // report this ID before the SDK returns the published contract.
       const dataContract = new DataContract({
         ownerId: material.identityId,
-        identityNonce: identityNonce + 1n,
+        identityNonce: 0n,
         schemas: options.documentSchemas as Record<string, object>,
         definitions: options.definitions ?? undefined,
         fullValidation: true,
@@ -149,7 +167,7 @@ export async function executeContractRegister(args: {
             identityKey: material.identityKey,
             signer: material.identitySigner,
           }),
-        { identityId: material.identityId, contractId: String(dataContract.id) },
+        { identityId: material.identityId },
         args.assertCurrent,
       );
 
@@ -189,12 +207,28 @@ export async function executeContractUpdate(args: {
         );
       }
 
+      if (options.baseVersion !== undefined && current.version !== options.baseVersion) {
+        throw new Error(
+          `Contract ${options.contractId} changed on Platform (version ${options.baseVersion} → ` +
+            `${current.version}) after you loaded it. Reload the contract and review again.`,
+        );
+      }
+
+      // Definitions are replaced together with schemas; omitting them would
+      // delete the contract's existing $defs.
+      const definitions =
+        options.definitions === undefined
+          ? contractDefinitions(current, platformVersion)
+          : (options.definitions ?? undefined);
       current.setSchemas(
         options.documentSchemas as Record<string, object>,
-        options.definitions ?? null,
+        definitions ?? null,
         true,
         platformVersion,
       );
+      // Platform only accepts an update whose version is exactly current + 1.
+      const newVersion = current.version + 1;
+      current.version = newVersion;
 
       await submit(
         () =>
@@ -210,7 +244,7 @@ export async function executeContractUpdate(args: {
       return {
         kind: 'contractUpdate' as const,
         contractId: options.contractId,
-        newVersion: current.version,
+        newVersion,
       };
     },
   );

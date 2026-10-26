@@ -62,6 +62,7 @@ describe('JSON operation forms', () => {
     expect(options.onOptionsChange).toHaveBeenLastCalledWith({
       contractId: contractB,
       documentSchemas: { second: { type: 'object' } },
+      definitions: null,
     });
   });
 
@@ -108,7 +109,50 @@ describe('JSON operation forms', () => {
     expect(options.onOptionsChange).toHaveBeenLastCalledWith({
       contractId: contractA,
       documentSchemas: draft,
+      definitions: null,
     });
+  });
+
+  it('loads on-chain definitions and the base version into contract updates', () => {
+    const defs = { title: { type: 'string', maxLength: 63 } };
+    contracts.set(contractA, {
+      version: 4,
+      documentSchemas: { first: { type: 'object' } },
+      toJSON: () => ({ schemaDefs: defs }),
+    });
+    const options = props();
+    renderWithProviders(<ContractUpdateForm {...options} />);
+    const definitions = screen.getByRole('textbox', { name: /Schema definitions/ });
+    expect(definitions).toHaveValue(JSON.stringify(defs, null, 2));
+    expect(screen.getByText(/Publishes version 5 \(on-chain version 4\)/)).toBeInTheDocument();
+    expect(options.onOptionsChange).toHaveBeenLastCalledWith({
+      contractId: contractA,
+      baseVersion: 4,
+      documentSchemas: { first: { type: 'object' } },
+      definitions: defs,
+    });
+
+    fireEvent.change(definitions, { target: { value: '[]' } });
+    expect(screen.getByText('Definitions must be a JSON object.')).toBeInTheDocument();
+    expect(options.onOptionsChange).toHaveBeenLastCalledWith(null);
+
+    fireEvent.change(definitions, { target: { value: '' } });
+    expect(options.onOptionsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ definitions: null }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Reset to on-chain' }));
+    expect(definitions).toHaveValue(JSON.stringify(defs, null, 2));
+  });
+
+  it('registers contracts with optional definitions', () => {
+    const options = props();
+    renderWithProviders(<ContractRegisterForm {...options} />);
+    fireEvent.change(screen.getByRole('textbox', { name: /Schema definitions/ }), {
+      target: { value: '{"title":{"type":"string"}}' },
+    });
+    expect(options.onOptionsChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ definitions: { title: { type: 'string' } } }),
+    );
   });
 
   it('clears key-add errors when valid JSON replaces invalid JSON', () => {
