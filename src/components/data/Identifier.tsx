@@ -77,16 +77,19 @@ export function Identifier({
       sx={{ fontVariantNumeric: 'tabular-nums' }}
     >
       {svgDataUrl ? (
+        // An <img>, not `backgroundImage`: Chakra parses that prop as a
+        // gradient and drops a data URL containing parentheses (hsl() fill).
         <Box
-          as="span"
+          as="img"
+          src={svgDataUrl}
+          alt=""
           width={dense ? '16px' : '20px'}
           height={dense ? '16px' : '20px'}
           borderRadius="badge"
           bg="raised"
           border="1px solid"
           borderColor="hairline"
-          backgroundImage={`url("${svgDataUrl}")`}
-          backgroundSize="cover"
+          objectFit="cover"
           flexShrink={0}
           aria-hidden
         />

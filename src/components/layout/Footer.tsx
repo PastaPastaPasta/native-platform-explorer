@@ -1,7 +1,6 @@
 'use client';
 
 import { Box, Button, HStack, Text } from '@chakra-ui/react';
-import NextLink from 'next/link';
 import { useEffect, useState } from 'react';
 import { useSdk } from '@sdk/hooks';
 import { useQueryProofStore } from '@/contexts/QueryProofStore';
@@ -52,8 +51,10 @@ export function Footer() {
             sdk {EVO_SDK_VERSION}
           </Text>
           <Text
-            as={NextLink}
-            href="https://github.com/"
+            as="a"
+            href="https://github.com/PastaPastaPasta/native-platform-explorer"
+            target="_blank"
+            rel="noreferrer"
             fontFamily="mono"
             fontSize="xs"
             color="muted"

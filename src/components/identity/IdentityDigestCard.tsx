@@ -118,7 +118,7 @@ export function IdentityDigestCard({
             />
             {otherAliases.length > 0 ? (
               <DigestRow
-                label="Identities names"
+                label="DPNS names"
                 align="flex-start"
                 value={
                   <VStack align="flex-end" spacing={1}>
@@ -132,7 +132,12 @@ export function IdentityDigestCard({
           </VStack>
         </VStack>
 
+        {/* An <img>, not `backgroundImage`: Chakra parses that prop as a
+            gradient and drops a data URL containing parentheses (hsl() fill). */}
         <Box
+          as="img"
+          src={svgDataUrl}
+          alt=""
           flexShrink={0}
           width={{ base: '56px', md: '96px' }}
           height={{ base: '56px', md: '96px' }}
@@ -140,9 +145,7 @@ export function IdentityDigestCard({
           bg="gray.750"
           border="1px solid"
           borderColor="gray.700"
-          backgroundImage={`url("${svgDataUrl}")`}
-          backgroundSize="cover"
-          backgroundPosition="center"
+          objectFit="cover"
           aria-hidden
         />
       </Flex>
