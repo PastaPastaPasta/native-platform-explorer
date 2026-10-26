@@ -120,7 +120,7 @@ export function describeProofState(s: ProofState): string {
         case 'transport':
           return `Could not reach a Platform node; nothing was verified. Retry may succeed: ${s.error}`;
         case 'missing-quorum':
-          return `The quorum that signed this response is not in the trusted quorum list, so its proof could not be checked (this is not a failed proof). Reconnecting refreshes quorum keys: ${s.error}`;
+          return `This response names a quorum that is not in the trusted quorum list, so its proof could not be checked. The list may predate a quorum rotation; Reconnect fetches a fresh one: ${s.error}`;
         case 'not-found':
           return `Platform reported no matching record: ${s.error}`;
         default:

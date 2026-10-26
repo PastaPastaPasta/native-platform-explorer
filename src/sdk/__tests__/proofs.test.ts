@@ -223,7 +223,8 @@ describe('SDK error kinds', () => {
     expect(isRetryableSdkError(error)).toBe(false);
     const state = unavailable(error);
     expect(state).toMatchObject({ kind: 'unavailable', reason: 'missing-quorum' });
-    expect(describeProofState(state)).toMatch(/not a failed proof/);
+    expect(describeProofState(state)).toMatch(/Reconnect fetches a fresh one/);
+    expect(describeProofState(state)).not.toMatch(/not a failed proof/);
   });
 
   it('keeps cryptographic mismatches as verification failures and never retries them', () => {

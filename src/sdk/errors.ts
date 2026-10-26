@@ -178,7 +178,8 @@ export function isAllEndpointsFailure(error: unknown): boolean {
 
 /** Retry only outcomes another attempt can change. Definite answers (absent
  * records, failed verification, rejected requests) and missing quorum keys,
- * which the same session cannot acquire, are reported immediately. */
+ * which only a new session can acquire (ErrorCard offers Reconnect), are
+ * reported immediately. */
 export function isRetryableSdkError(error: unknown): boolean {
   const kind = classifySdkError(error);
   return kind === 'timeout' || kind === 'transport' || kind === 'unknown';
