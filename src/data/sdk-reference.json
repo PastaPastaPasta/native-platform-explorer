@@ -270,7 +270,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/capabilities.ts",
-              "line": 146,
+              "line": 165,
               "owner": "resolveSigningCriteria"
             },
             {
@@ -292,6 +292,11 @@
               "file": "src/components/broadcast/forms/DocumentReplace.tsx",
               "line": 62,
               "owner": "DocumentReplaceForm"
+            },
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 131,
+              "owner": "loadTokenSnapshot"
             }
           ]
         },
@@ -466,6 +471,66 @@
           ]
         },
         {
+          "method": "group.actionSigners",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 119,
+              "owner": "loadPendingAction"
+            }
+          ]
+        },
+        {
+          "method": "group.actions",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 112,
+              "owner": "loadPendingAction"
+            },
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 1114,
+              "owner": "useGroupActions"
+            }
+          ]
+        },
+        {
+          "method": "group.actionsWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 1115,
+              "owner": "useGroupActions"
+            }
+          ]
+        },
+        {
+          "method": "identities.balance",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 136,
+              "owner": "loadTokenSnapshot"
+            }
+          ]
+        },
+        {
+          "method": "identities.balances",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 91,
+              "owner": "loadHolders"
+            }
+          ]
+        },
+        {
           "method": "identities.byPublicKeyHash",
           "kind": "facade",
           "sources": [
@@ -609,6 +674,83 @@
               "file": "src/sdk/protocol-version.ts",
               "line": 66,
               "owner": "assertWritableProtocolVersion"
+            }
+          ]
+        },
+        {
+          "method": "tokens.balances",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 92,
+              "owner": "loadHolders"
+            }
+          ]
+        },
+        {
+          "method": "tokens.calculateId",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 40,
+              "owner": "resolveTokenTarget"
+            }
+          ]
+        },
+        {
+          "method": "tokens.contractInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 48,
+              "owner": "resolveTokenTarget"
+            }
+          ]
+        },
+        {
+          "method": "tokens.directPurchasePrices",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 134,
+              "owner": "loadTokenSnapshot"
+            }
+          ]
+        },
+        {
+          "method": "tokens.identitiesTokenInfos",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 93,
+              "owner": "loadHolders"
+            }
+          ]
+        },
+        {
+          "method": "tokens.statuses",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 132,
+              "owner": "loadTokenSnapshot"
+            }
+          ]
+        },
+        {
+          "method": "tokens.totalSupplyWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/tokens/state.ts",
+              "line": 133,
+              "owner": "loadTokenSnapshot"
             }
           ]
         },

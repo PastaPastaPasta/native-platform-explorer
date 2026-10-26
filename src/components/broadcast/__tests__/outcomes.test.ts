@@ -100,6 +100,19 @@ describe('transaction outcome messages', () => {
     // broadcastStateTransition. The raw broadcast waits (waitForResponse,
     // waitForAffectedState) run after the executor's own broadcast, so the
     // executor reports every wait failure as "outcome unknown" whatever its kind.
+    //
+    // Token writes (state_transitions/token.rs, re-audited for the token
+    // operations): tokenMint, tokenBurn, tokenTransfer, tokenFreeze,
+    // tokenUnfreeze, tokenDestroyFrozen, tokenEmergencyAction, tokenSetPrice,
+    // tokenDirectPurchase, tokenClaim and tokenConfigUpdate each parse their
+    // options (try_from_options / deserialize_*_options / groupInfo), raise
+    // their explicit invalid_argument checks (self-transfer, unknown emergency
+    // action or distribution type, setPrice's price/priceTiers exclusivity and
+    // build_price_tiers) and await get_or_fetch_contract before the one
+    // submitting call, inner_sdk().token_*(builder, key, signer). Its error is
+    // wrapped by with_context (kind kept), and the *ResultWasm::from_result
+    // converters after it are infallible. A failed contract fetch is a network
+    // kind, so it stays "outcome unknown" although nothing was submitted.
     // pnpm installs evo-sdk's wasm-sdk dependency next to it.
     const evo = realpathSync('node_modules/@dashevo/evo-sdk');
     const wasm = `${evo}/../wasm-sdk/package.json`;

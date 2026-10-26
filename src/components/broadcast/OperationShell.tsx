@@ -56,6 +56,7 @@ import type {
   SignerKeyDescriptor,
 } from '@/signer/types';
 import { selectSigningKey } from '@/signer/keys';
+import { fingerprint } from './fingerprint';
 import type { ExecuteArgs } from './executors';
 
 export interface OperationFormProps<TOptions> {
@@ -83,7 +84,8 @@ export interface OperationDescriptor<TOptions, TResult> {
   capability?: OperationCapabilityRequirement;
   title: string;
   description: string;
-  destructive?: boolean;
+  /** Destructive for every input, or only for some (e.g. a change that gives up control). */
+  destructive?: boolean | ((options: TOptions) => boolean);
   FormComponent: React.ComponentType<OperationFormProps<TOptions>>;
   summarise: (options: TOptions) => string;
   /** Who pays the fee, shown at review. Defaults to the signing identity's balance. */
@@ -93,24 +95,6 @@ export interface OperationDescriptor<TOptions, TResult> {
   /** Key requirements for these inputs; the review step shows the key they select. */
   signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
   execute: (args: ExecuteArgs<TOptions>) => Promise<TResult>;
-}
-
-// Tag every primitive so bigint credits cannot collide with a string or JSON
-// object supplied by a form. Sorting keys makes equivalent JSON edits stable.
-function fingerprint(value: unknown): string {
-  function encode(input: unknown): unknown {
-    if (input === null) return ['null'];
-    if (typeof input !== 'object') return [typeof input, String(input)];
-    if (input instanceof Uint8Array) return ['bytes', Array.from(input)];
-    if (Array.isArray(input)) return ['array', input.map(encode)];
-    return [
-      'object',
-      Object.entries(input)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, encode(item)]),
-    ];
-  }
-  return JSON.stringify(encode(value));
 }
 
 /** Zero the declared secret bytes of inputs nothing uses any more (strings cannot be wiped). */
@@ -126,6 +110,21 @@ function wipeSecretBytes<TOptions>(
     } catch {
       /* best-effort: the inputs are already out of React state */
     }
+  }
+}
+
+/** Whether these inputs need the destructive acknowledgement; fails closed. */
+function destructiveFor<TOptions, TResult>(
+  descriptor: OperationDescriptor<TOptions, TResult>,
+  options: TOptions | null,
+): boolean {
+  const { destructive } = descriptor;
+  if (typeof destructive !== 'function') return destructive === true;
+  if (options === null) return false;
+  try {
+    return destructive(options);
+  } catch {
+    return true;
   }
 }
 
@@ -161,7 +160,7 @@ interface Review<TOptions, TResult> {
 type Submission<TOptions, TResult> = Pick<
   Review<TOptions, TResult>,
   'descriptor' | 'identityId' | 'network' | 'trusted'
-> & { submittedAt: string; entities: ReceiptEntities };
+> & { submittedAt: string; entities: ReceiptEntities; destructive: boolean };
 
 export function OperationShell<TOptions, TResult>({
   descriptor,
@@ -415,11 +414,12 @@ export function OperationShell<TOptions, TResult>({
     setActiveStep(1);
   };
   const mainnetConfirmed = network !== 'mainnet' || (mainnetAck && mainnetTyped === 'MAINNET');
+  const reviewDestructive = review ? destructiveFor(review.descriptor, review.options) : false;
   const canProceed =
     reviewIsCurrent &&
     capabilityAvailable &&
     signingKeyReady &&
-    (!descriptor.destructive || destructiveAck) &&
+    (!reviewDestructive || destructiveAck) &&
     mainnetConfirmed &&
     !busy;
   const onExecute = async () => {
@@ -435,6 +435,7 @@ export function OperationShell<TOptions, TResult>({
       trusted: submitted.trusted,
       submittedAt: new Date().toISOString(),
       entities: receiptEntities(submitted.options, submitted.identityId),
+      destructive: reviewDestructive,
     });
     setActiveStep(2);
     setBusy(true);
@@ -534,7 +535,13 @@ export function OperationShell<TOptions, TResult>({
             <Badge colorScheme="blue" variant="subtle">
               {origin?.network ?? network}
             </Badge>
-            {(origin?.descriptor.destructive ?? descriptor.destructive) ? (
+            {(
+              submission
+                ? submission.destructive
+                : review
+                  ? reviewDestructive
+                  : destructiveFor(descriptor, options)
+            ) ? (
               <Badge colorScheme="red" variant="subtle">
                 destructive
               </Badge>
@@ -661,7 +668,7 @@ export function OperationShell<TOptions, TResult>({
               The SDK does not provide an estimate in advance, so the exact fee is only known
               afterwards.
             </Text>
-            {descriptor.destructive ? (
+            {reviewDestructive ? (
               <InfoBlock>
                 <VStack align="stretch" spacing={2}>
                   <Text color="danger" fontSize="sm" fontWeight={600}>

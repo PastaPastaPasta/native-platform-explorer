@@ -21,6 +21,7 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { TokenDigestCard } from './TokenDigestCard';
 import { TokenOverview } from './TokenOverview';
 import { TokenBalanceLookup } from './TokenBalanceLookup';
+import { TokenWriteActions } from './TokenWriteActions';
 import { TokenPausedBadge, TokenPrice, readTokenPrice } from './TokenPrice';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { InfoLine } from '@components/data/InfoLine';
@@ -134,6 +135,16 @@ export function TokenView({ tokenId }: { tokenId: string }) {
               ownerContractId={ownerContractId}
               tokenContractPosition={position}
             />
+
+            {contractQ.data && ownerContractId && position !== null && tokenConfig ? (
+              <TokenWriteActions
+                tokenId={tokenId}
+                contractId={ownerContractId}
+                position={position}
+                contract={contractQ.data}
+                forSale={!!price}
+              />
+            ) : null}
 
             <Tabs variant="soft-rounded" colorScheme="blue" isLazy index={tabs.index} onChange={tabs.onChange}>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">

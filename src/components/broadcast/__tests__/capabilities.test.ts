@@ -6,7 +6,10 @@ import {
   operationRequirement,
   resolveOperationCapability,
   signsInForm,
+  resolveSigningCriteria,
+  tokenKeyCriteria,
 } from '../capabilities';
+import { TOKEN_OPERATION_KINDS, tokenOperationId } from '../tokens/options';
 
 const AUTH = { id: 1, purpose: 'AUTHENTICATION', securityLevel: 'HIGH' };
 
@@ -138,5 +141,48 @@ describe('operation capabilities', () => {
     expect(() => documentSecurityLevels(0n)).toThrow(/requires MASTER keys/);
     expect(() => documentSecurityLevels(4n)).toThrow(/Unsupported/);
     expect(() => documentSecurityLevels('2')).toThrow(/Unsupported/);
+  });
+
+  describe('token transitions (Platform v5.0.0-rc.8 batch rules)', () => {
+    const key = (purpose: string, securityLevel: string, extra = {}) => ({ id: 1, purpose, securityLevel, ...extra });
+
+    it.each(TOKEN_OPERATION_KINDS.map((kind) => [kind]))('%s accepts only CRITICAL keys', (kind) => {
+      const criteria = operationRequirement(tokenOperationId(kind)).criteria;
+      expect(operationRequirement(tokenOperationId(kind)).status).toBe('available');
+      expect(keyMeetsCriteria(key('AUTHENTICATION', 'CRITICAL'), criteria)).toBe(true);
+      // Token actions raise a batch's requirement to CRITICAL: HIGH, MEDIUM and MASTER fail.
+      for (const level of ['MASTER', 'HIGH', 'MEDIUM'])
+        expect(keyMeetsCriteria(key('AUTHENTICATION', level), criteria)).toBe(false);
+      for (const purpose of ['ENCRYPTION', 'DECRYPTION', 'VOTING', 'OWNER', 'SYSTEM'])
+        expect(keyMeetsCriteria(key(purpose, 'CRITICAL'), criteria)).toBe(false);
+    });
+
+    it('accepts a TRANSFER key only for a single transfer or claim', () => {
+      const transferKey = key('TRANSFER', 'CRITICAL');
+      expect(tokenKeyCriteria('token.transfer')?.purpose).toEqual(['AUTHENTICATION', 'TRANSFER']);
+      expect(tokenKeyCriteria('token.claim')?.purpose).toEqual(['AUTHENTICATION', 'TRANSFER']);
+      for (const kind of TOKEN_OPERATION_KINDS)
+        expect(keyMeetsCriteria(transferKey, tokenKeyCriteria(tokenOperationId(kind)))).toBe(
+          kind === 'transfer' || kind === 'claim',
+        );
+      expect(tokenKeyCriteria('document.create')).toBeUndefined();
+    });
+
+    it('targets the token contract, so only keys bound to that contract qualify', async () => {
+      const criteria = await resolveSigningCriteria('token.mint', {} as never, { contractId: 'X' });
+      expect(criteria).toEqual({ purpose: 'AUTHENTICATION', allowedSecurityLevels: ['CRITICAL'], target: { contractId: 'X' } });
+      expect(keyMeetsCriteria(key('AUTHENTICATION', 'CRITICAL', { contractBounds: { contractId: 'X' } }), criteria)).toBe(true);
+      expect(keyMeetsCriteria(key('AUTHENTICATION', 'CRITICAL', { contractBounds: { contractId: 'Y' } }), criteria)).toBe(false);
+      // Keys bound to a document type never sign token transitions.
+      expect(
+        keyMeetsCriteria(key('AUTHENTICATION', 'CRITICAL', { contractBounds: { contractId: 'X', documentType: 'note' } }), criteria),
+      ).toBe(false);
+    });
+
+    it('reports what token operations need from the signer', () => {
+      expect(resolveOperationCapability(operationRequirement('token.mint'), createMockSigner(), [AUTH]).reason).toMatch(
+        /AUTHENTICATION key with CRITICAL security/,
+      );
+    });
   });
 });

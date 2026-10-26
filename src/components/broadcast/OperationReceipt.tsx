@@ -32,6 +32,13 @@ export function OperationReceipt({
   const details = result && typeof result === 'object' ? (result as Record<string, unknown>) : null;
   const stateTransitionHash =
     typeof details?.stateTransitionHash === 'string' ? details.stateTransitionHash : undefined;
+  const tokenBalances =
+    details?.kind === 'token' && Array.isArray(details.balances)
+      ? (details.balances as Array<{ identityId?: unknown; display?: unknown }>).filter(
+          (b): b is { identityId: string; display: string } =>
+            typeof b.identityId === 'string' && typeof b.display === 'string',
+        )
+      : [];
   const documentTypes =
     details?.kind === 'contractRegister' && Array.isArray(details.documentTypes)
       ? details.documentTypes.filter((type): type is string => typeof type === 'string')
@@ -50,7 +57,31 @@ export function OperationReceipt({
       <Text fontSize="xs" color="gray.400">
         Started: {submittedAt}
       </Text>
+      {details?.kind === 'token' && typeof details.message === 'string' ? (
+        <Text fontSize="sm" color="gray.250">
+          {details.message}
+        </Text>
+      ) : null}
       {result !== undefined ? <CodeBlock value={result} /> : null}
+      {tokenBalances.length > 0 ? (
+        <VStack align="stretch" spacing={1} role="status" aria-label="Token balance change">
+          <Text fontSize="sm" color="gray.100">
+            Token balances{typeof details?.balancesProvedAtHeight === 'string'
+              ? ` (proved at block ${details.balancesProvedAtHeight})`
+              : ''}
+          </Text>
+          {tokenBalances.map((b) => (
+            <Text key={b.identityId} fontSize="sm" color="gray.250" wordBreak="break-all">
+              {b.identityId}: {b.display}
+            </Text>
+          ))}
+          {typeof details?.balancesError === 'string' ? (
+            <Text fontSize="xs" color="warning">
+              {details.balancesError}
+            </Text>
+          ) : null}
+        </VStack>
+      ) : null}
       {stateTransitionHash ? (
         <Text fontSize="sm" color="gray.250" wordBreak="break-all">
           State transition: {stateTransitionHash}
@@ -101,6 +132,21 @@ export function OperationReceipt({
             variant="outline"
           >
             Open recipient
+          </Button>
+        ) : null}
+        {entities.targetIdentityId ? (
+          <Button
+            as="a"
+            href={link('/identity/', { id: entities.targetIdentityId })}
+            size="sm"
+            variant="outline"
+          >
+            Open affected identity
+          </Button>
+        ) : null}
+        {entities.tokenId ? (
+          <Button as="a" href={link('/token/', { id: entities.tokenId })} size="sm" variant="outline">
+            Open token
           </Button>
         ) : null}
         {entities.contractId ? (

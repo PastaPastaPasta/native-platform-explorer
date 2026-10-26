@@ -16,6 +16,9 @@ export interface ReceiptEntities {
   contractId?: string;
   documentType?: string;
   documentId?: string;
+  tokenId?: string;
+  /** An identity a token operation acts on (frozen, unfrozen, destroyed). */
+  targetIdentityId?: string;
 }
 
 /** The SDK does not expose a reliable broadcast boundary or rejection type.
@@ -86,6 +89,8 @@ export function receiptEntities(value: unknown, signerIdentityId: string | null)
     documentType: string('documentType'),
     documentId: string('documentId'),
     addresses: addresses.length ? addresses : undefined,
+    tokenId: string('tokenId'),
+    targetIdentityId: string('targetIdentityId'),
   };
   return Object.fromEntries(Object.entries(entities).filter(([, value]) => value !== undefined));
 }

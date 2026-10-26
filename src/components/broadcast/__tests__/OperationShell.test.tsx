@@ -237,6 +237,32 @@ describe('OperationShell', () => {
     },
   );
 
+  it.each([
+    ['operation-1', false],
+    ['give-up-control', true],
+  ])('asks for the destructive acknowledgement only when %s is destructive', async (id, destructive) => {
+    initialOptions = { id };
+    const { execute } = setup({ destructive: (options) => options.id === 'give-up-control' });
+    review();
+    const ack = screen.queryByRole('checkbox', { name: 'I understand this is not reversible.' });
+    expect(!!ack).toBe(destructive);
+    expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toHaveProperty('disabled', destructive);
+    if (ack) fireEvent.click(ack);
+    await act(async () => broadcast());
+    expect(execute).toHaveBeenCalledOnce();
+  });
+
+  it('treats a failing destructive check as destructive', () => {
+    setup({
+      destructive: () => {
+        throw new Error('cannot tell');
+      },
+    });
+    review();
+    expect(screen.getByRole('checkbox', { name: 'I understand this is not reversible.' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeDisabled();
+  });
+
   it('invalidates review for changed inputs including mutation of the original options', () => {
     const { descriptor, execute, rerender } = setup();
     review();

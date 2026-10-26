@@ -59,6 +59,7 @@ import {
   redactVotingKey,
 } from './forms/redact';
 import { RawBroadcastForm, type RawBroadcastOptions } from './forms/raw/RawBroadcast';
+import { TOKEN_OPERATION_SPECS } from './tokens/registry';
 import {
   executeContractRegister,
   executeContractUpdate,
@@ -95,6 +96,7 @@ export type OperationGroup =
   | 'addresses'
   | 'contract'
   | 'document'
+  | 'token'
   | 'dpns'
   | 'voting'
   | 'advanced';
@@ -278,6 +280,13 @@ export const OPERATIONS: OperationEntry[] = [
       summarise: (o) => `Purchase document ${o.documentId} for ${o.priceCredits} credits.`,
       execute: executeDocumentPurchase,
     },
+  ),
+
+  // ────────────────────────────────────────────────────────────────────────
+  // Tokens
+  // ────────────────────────────────────────────────────────────────────────
+  ...TOKEN_OPERATION_SPECS.map((spec) =>
+    makeEntry('token', spec.id, spec.label, spec.blurb, spec.descriptor),
   ),
 
   // ────────────────────────────────────────────────────────────────────────
@@ -568,6 +577,11 @@ export const GROUPS: { id: OperationGroup; label: string; blurb: string }[] = [
     id: 'document',
     label: 'Documents',
     blurb: 'Create, edit, transfer, sell, and buy documents.',
+  },
+  {
+    id: 'token',
+    label: 'Tokens',
+    blurb: 'Mint, burn, transfer, freeze, price, buy, claim, and configure tokens.',
   },
   {
     id: 'identity',
