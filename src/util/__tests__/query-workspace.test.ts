@@ -181,7 +181,7 @@ describe('serializeQueryCsv', () => {
     );
   });
 
-  it.each(['=1+1', '+SUM(A1)', '-1+2', '@SUM(A1)', ' =1+1', '\t=1+1', '\r=1+1'])(
+  it.each(['=1+1', '+SUM(A1)', '-1+2', '@SUM(A1)', ' =1+1', '\t=1+1', '\r=1+1', '＝1+1', '＋SUM(A1)', '－1+2', '＠SUM(A1)', '\u3000＝1+1'])(
     'neutralizes a spreadsheet formula %j',
     (text) => {
       const csv = serializeQueryCsv([{ text }]);

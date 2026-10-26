@@ -46,13 +46,16 @@ export function QueryPage() {
   const [parseError, setParseError] = useState<{ message: string; position: number } | null>(null);
   const [notice, setNotice] = useState('');
   const initialQueryPending = useRef(!!params.get('q'));
+  // Links record the sender's trust setting so a recipient can tell whether
+  // the results they see were produced the same way.
+  const sharedTrusted = params.get('trusted');
 
   const queryPath = useCallback(
     (sql: string, contractId: string) => {
-      const qp = new URLSearchParams({ q: sql, contract: contractId, network });
+      const qp = new URLSearchParams({ q: sql, contract: contractId, network, trusted: trusted ? '1' : '0' });
       return `/query/?${qp.toString()}`;
     },
-    [network],
+    [network, trusted],
   );
 
   const startRun = useCallback(
@@ -172,6 +175,15 @@ export function QueryPage() {
                 );
               }}
             />
+            {(sharedTrusted === '1' || sharedTrusted === '0') && (sharedTrusted === '1') !== trusted && (
+              <Text fontSize="xs" color="orange.300">
+                This link was shared from {sharedTrusted === '1' ? 'trusted' : 'untrusted'} mode, but trusted mode
+                is {trusted ? 'on' : 'off'} here.{' '}
+                {trusted
+                  ? 'Your results are proof-verified; the sender\'s were not.'
+                  : 'The sender\'s results were proof-verified; yours are not. Turn on trusted mode in Settings to verify them.'}
+              </Text>
+            )}
             <HStack spacing={3} flexWrap="wrap">
               <Text fontSize="xs" color="gray.400" role="status" aria-live="polite">
                 {isRunning

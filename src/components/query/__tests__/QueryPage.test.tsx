@@ -67,9 +67,22 @@ describe('Query workspace execution', () => {
     await screen.findByText('updated');
     expect(query).toHaveBeenCalledTimes(2);
     expect(navigation.replace).toHaveBeenLastCalledWith(
-      expect.stringContaining('network=testnet'),
+      expect.stringContaining('network=testnet&trusted=1'),
       { scroll: false },
     );
+  });
+
+  it('tells a recipient when a shared link came from a different trust mode', () => {
+    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '0' });
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    const { unmount } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    expect(screen.getByText(/This link was shared from untrusted mode, but trusted mode\s+is on here/)).toHaveTextContent(
+      "Your results are proof-verified; the sender's were not.",
+    );
+    unmount();
+    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '1' });
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    expect(screen.queryByText(/This link was shared from/)).not.toBeInTheDocument();
   });
 
   it('bounds statement execution and cancels queued and late results', async () => {

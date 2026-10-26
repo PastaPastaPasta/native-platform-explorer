@@ -139,10 +139,11 @@ function csvCell(value: JsonValue | undefined): string {
         ? JSON.stringify(value)
         : String(value);
   // Exact negative decimal strings are numeric literals. All other text that
-  // could become a spreadsheet formula gets an apostrophe before CSV escaping.
+  // could become a spreadsheet formula gets an apostrophe before CSV escaping,
+  // including the full-width ＝＋－＠ forms some spreadsheets normalize.
   if (
     typeof value === 'string' &&
-    (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@]/.test(text)) &&
+    (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@\uff1d\uff0b\uff0d\uff20]/.test(text)) &&
     !/^-\d+(?:\.\d+)?$/.test(text)
   ) {
     text = `'${text}`;
