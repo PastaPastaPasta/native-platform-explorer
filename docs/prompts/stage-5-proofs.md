@@ -4,6 +4,11 @@
 > **Previous stages:** Stages 1–4 cover the shell, detail pages, browse surfaces + home, and governance/groups/network.
 > **This stage delivers:** the explorer's single biggest differentiator from `platform-explorer` — proof-state UX threaded through every page, plus a diagnostics drawer and clear opt-outs.
 
+> **Historical note:** this is the original stage prompt. Untrusted mode was
+> later removed (the pinned `@dashevo/evo-sdk` cannot query without a trusted
+> context), so the trusted-mode toggle, untrusted indicators and the
+> `unverified-trusted-off` state described below no longer exist.
+
 ## Mission
 
 Stages 1–4 use the SDK's `…WithProof()` variants under the hood (trusted mode is the default). What they lack is any **visible, honest signal** to the user about whether the data they're looking at came with a verified proof, didn't, or failed. This stage makes proof-state a first-class UI citizen.

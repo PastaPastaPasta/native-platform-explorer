@@ -12,7 +12,7 @@ vi.mock('@dashevo/evo-sdk', () => { throw new Error('SDK reference loaded the SD
 
 describe('SDK reference', () => {
   it('matches page names, methods and hooks without mutating generated data', () => {
-    expect(filterReference(reference.pages, ' /NETWORK/STATUS/ ', '')[0]?.calls.length).toBe(2);
+    expect(filterReference(reference.pages, ' /NETWORK/STATUS/ ', '')[0]?.calls.length).toBe(3);
     const calls = filterReference(reference.pages, 'epochsInfoWithProof', '/epoch/')[0]?.calls;
     expect(calls?.map((call) => call.method)).toEqual(['epoch.epochsInfoWithProof']);
     expect(filterReference(reference.pages, 'useIdentityBalanceAndRevision', '/identity/')[0]?.calls.length).toBe(2);

@@ -10,22 +10,14 @@ import { Breadcrumbs } from '@components/breadcrumbs/Breadcrumbs';
 import { DiagnosticsDrawer } from '@components/diagnostics/DiagnosticsDrawer';
 import { QueryInspectorDrawer } from '@components/query-inspector/QueryInspectorDrawer';
 import { ProofInspector } from '@components/proof/ProofInspector';
-import { useSdk } from '@sdk/hooks';
 import { recordShellReady } from '@sdk/timing';
+import { SdkSessionNotice } from './SdkNotices';
 
 export function RootComponent({ children }: { children: ReactNode }) {
-  const { trusted } = useSdk();
-
   useEffect(recordShellReady, []);
 
   return (
-    <Box
-      minH="100vh"
-      bg="bg"
-      color="ink"
-      borderLeft={trusted ? undefined : '3px solid'}
-      borderColor={trusted ? undefined : 'warning'}
-    >
+    <Box minH="100vh" bg="bg" color="ink">
       <BrandRow />
       <MeterBar />
       <Grid
@@ -41,6 +33,7 @@ export function RootComponent({ children }: { children: ReactNode }) {
             <Breadcrumbs />
           </Box>
           <Box px={{ base: 4, md: 6, xl: 8 }} pb={{ base: 10, md: 16 }}>
+            <SdkSessionNotice />
             {children}
           </Box>
           <Footer />

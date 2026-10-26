@@ -1,18 +1,16 @@
 import { test, expect, type Page, type Route } from '@playwright/test';
+import { routeOffline } from './quorum-fixtures';
 
 const DPNS = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
 const DASHPAY = 'Bwr4WHCPz5rFVAD87RqTs3izo4zpzwsEdKPWUT1NS1C7';
 const SQL = 'SELECT * FROM domain LIMIT 1';
 
 // Exercise the production SDK and editor against an explicit HTTP outage.
-// Untrusted SDK construction loads real WASM without a quorum-service fetch.
+// The trusted SDK starts from recorded quorum-service fixtures; DAPI fails.
 // No SDK module replacement or fabricated successful query response is used.
 async function openOfflineWorkspace(page: Page, holdDapi?: (route: Route) => Promise<void>) {
-  await page.addInitScript(() => localStorage.setItem('npe:trusted', 'false'));
-  await page.route(/^https?:\/\//, async (route) => {
-    const url = new URL(route.request().url());
-    if (url.hostname === '127.0.0.1' || url.hostname === 'localhost') await route.continue();
-    else if (url.port === '1443' && holdDapi) await holdDapi(route);
+  await routeOffline(page, async (route) => {
+    if (new URL(route.request().url()).port === '1443' && holdDapi) await holdDapi(route);
     else await route.abort('failed');
   });
   await page.goto('query/?network=testnet');

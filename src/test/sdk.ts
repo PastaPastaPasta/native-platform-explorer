@@ -2,6 +2,7 @@ import { vi } from 'vitest';
 import type { EvoSDK } from '@dashevo/evo-sdk';
 import type { SdkContextValue } from '@sdk/SdkProvider';
 import type { Network } from '@sdk/networks';
+import { defaultConnectionSettings } from '@sdk/connection-settings';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
@@ -10,7 +11,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function createMockSdk(overrides: Record<string, unknown> = {}): EvoSDK {
   const defaults = {
     connect: vi.fn().mockResolvedValue(undefined),
-    version: vi.fn().mockResolvedValue(1),
+    version: vi.fn().mockReturnValue(12),
     system: {
       status: vi.fn().mockResolvedValue({ chain: { latestBlockHeight: 1 } }),
       totalCreditsInPlatform: vi.fn().mockResolvedValue(100n),
@@ -74,12 +75,16 @@ export function createSdkContextValue(
     status: 'ready',
     network: 'testnet' as Network,
     trusted: true,
+    quorumUrl: null,
+    connectionSettings: defaultConnectionSettings(),
     sessionId: 1,
     sessionSignal: null,
     error: null,
     setNetwork: vi.fn(),
-    setTrusted: vi.fn(),
+    setConnectionSettings: vi.fn(),
     reconnect: vi.fn(),
+    unreachable: null,
+    reportUnreachable: vi.fn(),
     ...overrides,
   };
 }

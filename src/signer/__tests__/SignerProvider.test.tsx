@@ -5,6 +5,7 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import { useSdk } from '@sdk/hooks';
 import { installStorageMock } from '@/test/storage';
 import { createMockSigner } from '@/test/signer';
+import { createSdkContextValue } from '@/test/sdk';
 import { SignerProvider, useSigner } from '../SignerProvider';
 
 vi.mock('@sdk/hooks', () => ({
@@ -41,19 +42,7 @@ describe('SignerProvider', () => {
     firstDestroy = vi.fn();
     secondDestroy = vi.fn();
     installStorageMock('sessionStorage');
-    useSdkMock.mockReturnValue({
-      ...{ sessionId: 1, sessionSignal: null },
-      sdk: null,
-      status: 'connecting',
-      network: 'testnet',
-      trusted: true,
-      sessionId: 1,
-      sessionSignal: null,
-      error: null,
-      setNetwork: vi.fn(),
-      setTrusted: vi.fn(),
-      reconnect: vi.fn(),
-    });
+    useSdkMock.mockReturnValue(createSdkContextValue({ sdk: null, status: 'connecting' }));
   });
 
   afterEach(() => {

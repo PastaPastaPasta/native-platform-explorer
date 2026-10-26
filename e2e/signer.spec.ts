@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import { routeOffline } from './quorum-fixtures';
 import { Buffer } from 'node:buffer';
 
 const identityId = '8eTDkBhpQjHeqgbVeriRqeycjb9vCKvCa4WhdcRmkpKr';
@@ -9,11 +10,11 @@ const backup = {
 };
 
 test.beforeEach(async ({ page }) => {
-  // Non-trusted mode initializes the actual WASM SDK locally. Every import
+  // The actual trusted SDK starts from recorded quorum fixtures. Every import
   // below fails on deliberately invalid credentials before an identity query.
+  await routeOffline(page);
   await page.addInitScript(() => {
     window.localStorage.setItem('npe:network', 'testnet');
-    window.localStorage.setItem('npe:trusted', 'false');
   });
 });
 

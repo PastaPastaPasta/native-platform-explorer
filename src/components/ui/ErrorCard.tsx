@@ -1,7 +1,10 @@
 'use client';
 
+import { useContext } from 'react';
 import { Button, Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from './InfoBlock';
+import { SdkContext } from '@sdk/SdkProvider';
+import { classifySdkError } from '@sdk/errors';
 
 export function ErrorCard({
   title = 'Something went wrong',
@@ -12,6 +15,11 @@ export function ErrorCard({
   error: Error | null | undefined;
   onRetry?: () => void;
 }) {
+  // rc.2's trusted context never refetches a missing quorum, so retrying in
+  // the same session cannot succeed; a new session fetches a fresh list.
+  const reconnect = useContext(SdkContext)?.reconnect;
+  const missingQuorum = !!reconnect && classifySdkError(error) === 'missing-quorum';
+  const action = missingQuorum ? reconnect : onRetry;
   return (
     <InfoBlock>
       <VStack align="flex-start" spacing={3}>
@@ -26,9 +34,15 @@ export function ErrorCard({
         <Text color="muted" fontSize="sm" fontFamily="mono">
           {error?.message ?? 'Unknown error.'}
         </Text>
-        {onRetry ? (
-          <Button size="sm" variant="outline" borderColor="hairlineStrong" color="ink" onClick={onRetry}>
-            Retry
+        {missingQuorum ? (
+          <Text color="muted" fontSize="sm">
+            The response names a quorum that is not in this session&apos;s trusted quorum list, so it
+            could not be verified. Reconnecting fetches a fresh list, which helps after a quorum rotation.
+          </Text>
+        ) : null}
+        {action ? (
+          <Button size="sm" variant="outline" borderColor="hairlineStrong" color="ink" onClick={action}>
+            {missingQuorum ? 'Reconnect' : 'Retry'}
           </Button>
         ) : null}
       </VStack>

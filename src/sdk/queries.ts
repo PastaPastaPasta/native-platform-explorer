@@ -7,13 +7,13 @@ import {
   type UseQueryResult,
 } from '@tanstack/react-query';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import { getSdkQueryKey, useSdk, useSdkQuery as useSessionQuery, type SdkQueryExecution } from './hooks';
+import { getSdkQueryKey, overlayQueryResult, useSdk, useSdkQuery as useSessionQuery, type SdkQueryExecution } from './hooks';
 import { epochInfoQuery, epochRangeError, epochRangeQueries, fetchEpochRange, isEpochIndex } from './epoch-queries';
 import { fetchCurrentEpoch } from './current-epoch';
 import { getConfig } from '@/config';
 import { classifyProof, getQuorumKeySource, isProofFallbackBlocked, verificationForResponse, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
-import { extractErrorMessage, normalizeError } from './errors';
+import { extractErrorMessage, isAbsentEntityError, normalizeError } from './errors';
 import {
   useQueryProofRecorder,
   useQueryProofEntry,
@@ -58,6 +58,10 @@ interface SdkQueryOpts<TData>
   methodParams?: Record<string, unknown>;
   /** Limits of captured evidence for queries that combine multiple responses. */
   captureNote?: string;
+}
+
+function notFoundNote(error: unknown): string {
+  return `The SDK reported no matching record: ${extractErrorMessage(error)}`;
 }
 
 function decodeChainId(raw: unknown): string {
@@ -114,7 +118,7 @@ function useSdkQuery<TData>(
   opts?: SdkQueryOpts<TData>,
 ): SdkQueryResult<TData> {
   const context = useSdk();
-  const { network, trusted } = context;
+  const { network, trusted, quorumUrl } = context;
   const { hasProofVariant = true, withProofFn, methodName, methodParams, captureNote, ...rest } = opts ?? {};
   const proofStore = useQueryProofRecorder();
   const fullKey = getSdkQueryKey(context, key);
@@ -125,11 +129,11 @@ function useSdkQuery<TData>(
     const { assertActive } = execution;
     const generation = proofStore.generation;
     const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
-    const quorumKeySource = getQuorumKeySource(network, trusted);
+    const quorumKeySource = getQuorumKeySource(network, quorumUrl);
     const t0 = performance.now();
     const record = (
       status: 'success' | 'error',
-      outcome: Partial<Pick<QueryProofEntry, 'result' | 'metadata' | 'proof' | 'error' | 'proofCaptureError'>>,
+      outcome: Partial<Pick<QueryProofEntry, 'result' | 'metadata' | 'proof' | 'error' | 'proofCaptureError' | 'captureNote'>>,
       error?: unknown,
     ) => {
       assertActive();
@@ -182,6 +186,10 @@ function useSdkQuery<TData>(
       } catch (error) {
         assertActive();
         const captureError = extractErrorMessage(error);
+        if (isAbsentEntityError(error)) {
+          record('success', { result: null, captureNote: notFoundNote(error) });
+          return null as TData;
+        }
         if (isProofFallbackBlocked(error)) {
           record('error', { error: captureError }, error);
           // Never retry native proof errors, including decoding/context errors.
@@ -196,6 +204,10 @@ function useSdkQuery<TData>(
           return (result ?? null) as TData;
         } catch (fallbackError) {
           assertActive();
+          if (isAbsentEntityError(fallbackError)) {
+            record('success', { result: null, proofCaptureError: captureError, captureNote: notFoundNote(fallbackError) });
+            return null as TData;
+          }
           record('error', { error: extractErrorMessage(fallbackError), proofCaptureError: captureError }, fallbackError);
           throw normalizeError(fallbackError);
         }
@@ -209,11 +221,16 @@ function useSdkQuery<TData>(
       return (result ?? null) as TData;
     } catch (error) {
       assertActive();
+      if (isAbsentEntityError(error)) {
+        // The SDK raises these kinds (EpochNotFound, …) when the requested entity
+        // is absent; pages render their not-found state for null.
+        record('success', { result: null, captureNote: notFoundNote(error) });
+        return null as TData;
+      }
       record('error', { error: extractErrorMessage(error) }, error);
       throw normalizeError(error);
     }
   }, rest);
-  const proofState = classifyProof(q, { trusted, hasProofVariant });
   // RQ's stock `isLoading` is `isPending && isFetching`, so it goes false the
   // moment a query is gated off — including the SDK-boot window when the
   // internal gate above forces `enabled: false`. The common pattern
@@ -221,11 +238,11 @@ function useSdkQuery<TData>(
   // then flash the empty state before any fetch is attempted. Override to:
   // "loading whenever the caller asked for data but none has arrived". Queries
   // the *caller* explicitly disables stay non-loading so they don't spin
-  // forever waiting for a precondition the user hasn't met yet. (Mutating `q`
-  // instead of spreading preserves RQ's discriminated-union narrowing.)
+  // forever waiting for a precondition the user hasn't met yet. A failed SDK
+  // session surfaces as an error from the session query instead.
   const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
-
-  return Object.assign(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled });
+  const proofState = classifyProof(q, { hasProofVariant });
+  return overlayQueryResult(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled }) as SdkQueryResult<TData>;
 }
 
 function identifierLeaf(value: object): unknown {

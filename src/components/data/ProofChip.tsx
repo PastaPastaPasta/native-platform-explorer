@@ -18,8 +18,6 @@ function meta(proofState: ProofState): { color: string; label: string; icon: Rea
       return { color: 'gray.250', label: '…', icon: <Spinner size="xs" /> };
     case 'unverified-no-variant':
       return { color: 'gray.400', label: 'No proof', icon: <InfoOutlineIcon /> };
-    case 'unverified-trusted-off':
-      return { color: 'warning', label: 'Unverified', icon: <InfoOutlineIcon /> };
     case 'failed':
       return { color: 'danger', label: 'Proof failed', icon: <WarningTwoIcon /> };
     case 'unavailable':

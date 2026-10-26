@@ -1,78 +1,45 @@
 import type { UseQueryResult } from '@tanstack/react-query';
 import { devnetShortName, getNetwork } from './networks';
+import { classifySdkError, type SdkErrorClass } from './errors';
 
 export type ProofState =
   | { kind: 'verified'; verifiedAt: number }
   | { kind: 'unverified-in-flight' }
   | { kind: 'unverified-no-variant'; reason: 'no-proof-method' }
-  | { kind: 'unverified-trusted-off'; reason: 'trusted-mode-off' }
   | { kind: 'failed'; error: string }
-  | { kind: 'unavailable'; error: string }
+  | { kind: 'unavailable'; error: string; reason?: UnavailableReason }
   | { kind: 'unknown' };
 
+/** Why a query produced no verifiable answer. */
+export type UnavailableReason = Exclude<SdkErrorClass, 'verification'>;
+
+/** Every session is trusted: the pinned SDK cannot query without its
+ * trusted context, so there is no unverified "trusted mode off" state. */
 export interface ClassifyOptions {
-  trusted: boolean;
   /** True when the underlying SDK method has a `…WithProof` sibling. */
   hasProofVariant: boolean;
 }
 
-type ProofError = { code?: unknown; kind?: unknown; name?: unknown; message?: unknown; cause?: unknown };
-
-const PROOF_ERROR_TAG = /^(ProofVerificationFailed|InvalidProof|InvalidSignature|PROOF_VERIFICATION_FAILED|DriveProofError|Proof|InvalidProvedResponse)$/;
-const VERIFICATION_FAILURE = /\b(?:proof verification (?:failed|error)|invalid (?:grovedb |merkle )?proof|invalid quorum signature)\b/i;
-const CRYPTOGRAPHIC_MISMATCH = /\b(?:invalid (?:quorum )?signature|(?:quorum )?signature (?:verification )?(?:failed|mismatch)|(?:state |merkle )?root (?:hash )?(?:mismatch|differs))\b/i;
-const PROOF_UNAVAILABLE = /\b(?:(?:unable|failed|cannot) to (?:decode|parse) (?:the )?(?:grovedb )?proof|unsupported (?:proof|protocol) version|non-trusted mode is not supported in wasm|(?:missing|unavailable) (?:proof context|quorum (?:public )?key)|(?:proof context|quorum (?:public )?key) (?:is )?(?:missing|unavailable)|failed to (?:retrieve|fetch) quorum (?:public )?key)\b/i;
-
-/** SDK fields live on prototype getters; normalization preserves the raw error
- * on cause. Traverse both without enumerating or importing the WASM runtime. */
-function* proofErrorChain(error: unknown): Generator<ProofError> {
-  const seen = new Set<object>();
-  let current = error;
-  while (current) {
-    if (typeof current === 'string') { yield { message: current }; return; }
-    if (typeof current !== 'object' || seen.has(current)) return;
-    seen.add(current);
-    const e = current as ProofError;
-    yield e;
-    current = e.cause;
-  }
-}
-
-function isNativeProofError(e: ProofError): boolean {
-  // Pinned rc.2 WasmSdkErrorKind: DriveProofError=2, Proof=4,
-  // InvalidProvedResponse=5. These categories include decoding failures.
-  return [e.code, e.kind, e.name].some((tag) => PROOF_ERROR_TAG.test(String(tag ?? '')))
-    || (typeof e.kind === 'number' && [2, 4, 5].includes(e.kind));
-}
-
-/** A native proof error must never trigger an ordinary-method retry, even when
- * decoding/context limitations prevent a cryptographic-failure diagnosis. */
+/** Native proof, missing-quorum, absence and decoding/context errors must never
+ * trigger an ordinary-method retry: the ordinary method uses the same trusted
+ * context and would hit the same condition (or silently mask it). */
 export function isProofFallbackBlocked(error: unknown): boolean {
-  for (const e of proofErrorChain(error)) {
-    if (isNativeProofError(e)) return true;
-    if (typeof e.message === 'string' && (VERIFICATION_FAILURE.test(e.message) || CRYPTOGRAPHIC_MISMATCH.test(e.message) || PROOF_UNAVAILABLE.test(e.message))) return true;
-  }
-  return false;
+  const kind = classifySdkError(error);
+  return kind === 'verification' || kind === 'proof-unavailable' || kind === 'missing-quorum' || kind === 'not-found';
 }
 
-/** Recognized decoding/context limitations are unavailable. Explicit crypto
- * mismatches and otherwise unknown native proof errors remain failures. */
+/** Recognized decoding/context limitations and missing quorum keys are
+ * unavailable. Explicit crypto mismatches and otherwise unknown native proof
+ * errors remain failures. */
 export function isProofVerificationError(error: unknown): boolean {
-  let proofFailure = false;
-  let unavailable = false;
-  for (const e of proofErrorChain(error)) {
-    proofFailure ||= isNativeProofError(e);
-    if (typeof e.message !== 'string') continue;
-    if (CRYPTOGRAPHIC_MISMATCH.test(e.message)) return true;
-    unavailable ||= PROOF_UNAVAILABLE.test(e.message);
-    proofFailure ||= VERIFICATION_FAILURE.test(e.message);
-  }
-  return proofFailure && !unavailable;
+  return classifySdkError(error) === 'verification';
 }
 
 export type VerificationResult = 'verified' | 'not-verified' | 'failed' | 'unavailable';
 
 export function verificationForResponse(opts: ClassifyOptions & {
+  /** The session's trust flag, recorded in evidence; always true in the app. */
+  trusted: boolean;
   status: 'success' | 'error';
   error?: unknown;
 }): VerificationResult {
@@ -83,10 +50,9 @@ export function verificationForResponse(opts: ClassifyOptions & {
 }
 
 /** The configured trust anchor, not a claim that the browser validates Core consensus. */
-export function getQuorumKeySource(network: string, trusted: boolean): string {
-  if (!trusted) return 'Not used (trusted mode off)';
+export function getQuorumKeySource(network: string, quorumUrlOverride?: string | null): string {
   const cfg = getNetwork(network);
-  return cfg.quorumUrl ?? `https://quorums.${cfg.type === 'devnet' ? devnetShortName(cfg) : cfg.type}.networks.dash.org`;
+  return quorumUrlOverride || cfg.quorumUrl || `https://quorums.${cfg.type === 'devnet' ? devnetShortName(cfg) : cfg.type}.networks.dash.org`;
 }
 
 /** Ordinary trusted SDK methods verify internally; captured bytes are independent.
@@ -96,16 +62,12 @@ export function classifyProof<TData>(
   opts: ClassifyOptions,
 ): ProofState {
   if (query.status === 'error') {
-    return {
-      kind: isProofVerificationError(query.error) ? 'failed' : 'unavailable',
-      error: query.error?.message ?? 'Unknown error',
-    };
+    const error = query.error?.message ?? 'Unknown error';
+    const kind = classifySdkError(query.error);
+    return kind === 'verification' ? { kind: 'failed', error } : { kind: 'unavailable', error, reason: kind };
   }
   if (!opts.hasProofVariant) {
     return { kind: 'unverified-no-variant', reason: 'no-proof-method' };
-  }
-  if (!opts.trusted) {
-    return { kind: 'unverified-trusted-off', reason: 'trusted-mode-off' };
   }
   if (query.status === 'success' && query.data !== undefined) {
     return { kind: 'verified', verifiedAt: query.dataUpdatedAt };
@@ -120,7 +82,6 @@ const SEVERITY: Record<ProofState['kind'], number> = {
   failed: 50,
   unavailable: 40,
   'unverified-in-flight': 30,
-  'unverified-trusted-off': 20,
   'unverified-no-variant': 10,
   unknown: 5,
   verified: 0,
@@ -145,12 +106,21 @@ export function describeProofState(s: ProofState): string {
       return 'Fetching — proof verification pending.';
     case 'unverified-no-variant':
       return 'This SDK method does not support proof verification.';
-    case 'unverified-trusted-off':
-      return 'Trusted mode is off. Data fetched without proof verification.';
     case 'failed':
       return `Proof verification failed: ${s.error}`;
     case 'unavailable':
-      return `Query unavailable; proof verification was not completed: ${s.error}`;
+      switch (s.reason) {
+        case 'timeout':
+          return `Platform did not answer in time; nothing was verified. Retry may succeed: ${s.error}`;
+        case 'transport':
+          return `No usable answer from a Platform node (unreachable, or an answer without a proof); nothing was verified. Retry may succeed: ${s.error}`;
+        case 'missing-quorum':
+          return `This response names a quorum that is not in the trusted quorum list, so its proof could not be checked. The list may predate a quorum rotation; Reconnect fetches a fresh one: ${s.error}`;
+        case 'not-found':
+          return `Platform reported no matching record: ${s.error}`;
+        default:
+          return `Query unavailable; proof verification was not completed: ${s.error}`;
+      }
     case 'unknown':
     default:
       return 'Proof state unknown.';

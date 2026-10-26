@@ -21,6 +21,7 @@ import {
 } from '@chakra-ui/react';
 import {
   createCustomDevnetConfig,
+  derivedQuorumNameError,
   hasNetwork,
   isBuiltInNetwork,
   saveCustomDevnet,
@@ -94,17 +95,16 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
     const trimmedQuorum = quorumUrl.trim();
     if (trimmedQuorum && !isValidUrl(trimmedQuorum)) {
       next.quorum = 'Not a valid HTTP(S) URL';
+    } else if (!trimmedQuorum && trimmedName && !next.name) {
+      const reason = derivedQuorumNameError(trimmedName.replace(/^devnet-/, ''));
+      if (reason) next.quorum = `Required for this name: no default can be derived (${reason}).`;
     }
 
+    // Every session prefetches from the quorum service (explicit or derived
+    // from the name), which also supplies the masternode list.
     const addresses = parseAddresses(dapiAddressesRaw);
-    // Addresses are required only when no quorum URL is set; with a quorum
-    // URL the SDK's trusted context discovers masternodes via /masternodes.
-    if (addresses.length === 0 && !trimmedQuorum) {
-      next.dapi = 'Required when no quorum URL is provided';
-    } else if (addresses.length > 0) {
-      const bad = addresses.find((a) => !isValidUrl(a));
-      if (bad) next.dapi = `Not a valid HTTP(S) URL: ${bad}`;
-    }
+    const bad = addresses.find((a) => !isValidUrl(a));
+    if (bad) next.dapi = `Not a valid HTTP(S) URL: ${bad}`;
 
     const trimmedInsight = insightApiUrl.trim();
     if (trimmedInsight && !isValidUrl(trimmedInsight)) {
@@ -160,7 +160,7 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
             </FormControl>
 
             <FormControl isInvalid={!!errors.dapi}>
-              <FormLabel fontSize="sm">DAPI addresses</FormLabel>
+              <FormLabel fontSize="sm">DAPI addresses (optional)</FormLabel>
               <Textarea
                 size="sm"
                 value={dapiAddressesRaw}
@@ -173,11 +173,10 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
                 _focus={{ borderColor: 'brand.normal' }}
               />
               <FormHelperText fontSize="xs" color="gray.400">
-                HP masternode endpoints, one per line (or comma-separated). Required for
-                non-trusted mode; optional when a quorum URL is provided (the SDK&apos;s
-                trusted context discovers masternodes from there). If they use self-signed
-                certs you may need to visit each URL in a separate tab once to accept the
-                certificate.
+                HP masternode endpoints, one per line (or comma-separated). The SDK uses
+                them only if the quorum service does not publish a masternode list; a
+                published list replaces them. If they use self-signed certs you may need to
+                visit each URL in a separate tab once to accept the certificate.
               </FormHelperText>
               {errors.dapi ? (
                 <FormErrorMessage fontSize="xs">{errors.dapi}</FormErrorMessage>
@@ -185,22 +184,23 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
             </FormControl>
 
             <FormControl isInvalid={!!errors.quorum}>
-              <FormLabel fontSize="sm">Quorum URL (optional)</FormLabel>
+              <FormLabel fontSize="sm">Quorum service URL</FormLabel>
               <Input
                 size="sm"
                 value={quorumUrl}
                 onChange={(e) => setQuorumUrl(e.target.value)}
-                placeholder="https://quorums.mycoolnet.networks.dash.org"
+                placeholder={`https://quorums.${name.trim().replace(/^devnet-/, '') || 'mycoolnet'}.networks.dash.org`}
                 fontFamily="mono"
                 bg="gray.800"
                 borderColor="gray.700"
                 _focus={{ borderColor: 'brand.normal' }}
               />
               <FormHelperText fontSize="xs" color="gray.400">
-                Trusted-context quorums service. When set, enables proof verification and
-                lets the SDK discover masternodes. Defaults to
-                <code> https://quorums.&lt;name&gt;.networks.dash.org</code> if the devnet
-                name follows that convention.
+                Required: every session verifies proofs with quorum keys from this
+                service, which also supplies the masternode list. Blank uses
+                <code> https://quorums.&lt;name&gt;.networks.dash.org</code> (name without
+                the <code>devnet-</code> prefix), so leave it blank only if the devnet
+                runs its service there.
               </FormHelperText>
               {errors.quorum ? (
                 <FormErrorMessage fontSize="xs">{errors.quorum}</FormErrorMessage>

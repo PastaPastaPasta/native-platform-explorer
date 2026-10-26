@@ -1,5 +1,5 @@
 import React, { type ReactNode } from 'react';
-import { act, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SdkContext, type SdkContextValue } from '../SdkProvider';
@@ -16,6 +16,7 @@ import {
 import { QueryProofStoreProvider, useQueryProofStore } from '@/contexts/QueryProofStore';
 import { createMockSdk, createSdkContextValue } from '@/test/sdk';
 import { createTestQueryClient } from '@/test/render';
+import { SdkSessionError, shouldRetrySdkQuery } from '../errors';
 
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -262,5 +263,149 @@ describe('SDK freshness policies', () => {
     expect(queryClient.getQueryState(otherTrust)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(otherSession)?.isInvalidated).toBe(true);
     expect(queryClient.getQueryState(otherNetwork)?.isInvalidated).toBe(false);
+  });
+});
+
+describe('SDK session failures and pending sessions', () => {
+  function CreditsCard() {
+    const q = useTotalCreditsInPlatform();
+    return <>
+      <div data-testid="card">{q.isLoading ? 'loading' : q.isError ? `error:${q.error?.message}` : `data:${String(q.data)}`}</div>
+      <div data-testid="proof">{q.proofState.kind}</div>
+      <button onClick={() => { void q.refetch(); }}>Retry</button>
+    </>;
+  }
+
+  it('shows the session error on cards instead of spinning, and Retry reconnects', async () => {
+    const queryClient = client();
+    const reconnect = vi.fn();
+    const failed = createSdkContextValue({ sdk: null, status: 'error', error: new SdkSessionError('unreachable', 'Failed to prefetch quorums'), reconnect });
+    render(<Boundary client={queryClient} context={failed}><CreditsCard /></Boundary>);
+    expect(screen.getByTestId('card')).toHaveTextContent('error:Failed to prefetch quorums');
+    expect(screen.getByTestId('proof')).toHaveTextContent('unavailable');
+    fireEvent.click(screen.getByText('Retry'));
+    expect(reconnect).toHaveBeenCalledOnce();
+    expect(queryClient.getQueryState(getSdkQueryKey(failed, ['system', 'totalCreditsInPlatform']))?.status).toBe('pending');
+  });
+
+  it('keeps caller-disabled queries idle when the session fails', async () => {
+    const queryClient = client();
+    const failed = createSdkContextValue({ sdk: null, status: 'error', error: new Error('down') });
+    function Disabled() {
+      const q = useSdkQuery<string>(['disabled'], vi.fn(), { enabled: false });
+      return <div data-testid="disabled">{q.status}:{String(q.isLoading)}</div>;
+    }
+    render(<Boundary client={queryClient} context={failed}><Disabled /></Boundary>);
+    expect(screen.getByTestId('disabled')).toHaveTextContent('pending:false');
+  });
+
+  it('makes refetch a no-op while connecting instead of caching a "not ready" error', async () => {
+    const queryClient = client();
+    const fetch = vi.fn().mockResolvedValue({ data: 5 });
+    const sdk = createMockSdk({ system: { totalCreditsInPlatformWithProof: fetch, totalCreditsInPlatform: vi.fn().mockResolvedValue(5) } });
+    const pending = createSdkContextValue({ sdk: null, status: 'connecting' });
+    const view = render(<Boundary client={queryClient} context={pending}><CreditsCard /></Boundary>);
+    expect(screen.getByTestId('card')).toHaveTextContent('loading');
+    await act(async () => { fireEvent.click(screen.getByText('Retry')); await Promise.resolve(); });
+    const state = queryClient.getQueryState(getSdkQueryKey(pending, ['system', 'totalCreditsInPlatform']));
+    expect(state?.error ?? null).toBeNull();
+    expect(state?.fetchStatus).toBe('idle');
+    expect(screen.getByTestId('card')).toHaveTextContent('loading');
+    view.rerender(<Boundary client={queryClient} context={{ ...pending, sdk, status: 'ready' }}><CreditsCard /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('data:5'));
+  });
+
+  it('reports an exhausted DAPI address list to the provider and clears it on success', async () => {
+    const queryClient = client();
+    const reportUnreachable = vi.fn();
+    const failure = new Error('Failed to get status: no available addresses to retry, last error: fetch failed');
+    const status = vi.fn().mockRejectedValueOnce(failure).mockResolvedValue({ chain: {} });
+    const context = createSdkContextValue({ sessionId: 7, reportUnreachable, sdk: createMockSdk({ system: { status } }) });
+    function StatusProbe() { const q = useSystemStatus(); return <><div data-testid="status">{q.status}</div><button onClick={() => { void q.refetch(); }}>Refresh</button></>; }
+    const view = render(<Boundary client={queryClient} context={context}><StatusProbe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('error'));
+    expect(reportUnreachable).toHaveBeenCalledWith(7, failure);
+    const flagged = { ...context, unreachable: new Error('No DAPI endpoint answered') };
+    view.rerender(<Boundary client={queryClient} context={flagged}><StatusProbe /></Boundary>);
+    fireEvent.click(screen.getByText('Refresh'));
+    await waitFor(() => expect(screen.getByTestId('status')).toHaveTextContent('success'));
+    expect(reportUnreachable).toHaveBeenLastCalledWith(7, null);
+  });
+
+  it('turns a definite SDK not-found into a null result for not-found states', async () => {
+    const queryClient = client();
+    const notFound = Object.create({ get kind() { return 12; }, get name() { return 'TotalCreditsNotFound'; }, get message() { return 'total credits not found'; } });
+    const sdk = createMockSdk({ system: {
+      totalCreditsInPlatformWithProof: vi.fn().mockRejectedValue(notFound),
+      totalCreditsInPlatform: vi.fn().mockRejectedValue(notFound),
+    } });
+    render(<Boundary client={queryClient} context={createSdkContextValue({ sdk })}><CreditsCard /><Probe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('data:null'));
+    expect(sdk.system.totalCreditsInPlatform).not.toHaveBeenCalled();
+  });
+
+  it('keeps a missing dependency (generic NotFound) as an error, without fallback', async () => {
+    const queryClient = client();
+    const missing = Object.create({ get kind() { return 27; }, get name() { return 'NotFound'; }, get message() { return 'Data contract not found'; } });
+    const sdk = createMockSdk({ system: {
+      totalCreditsInPlatformWithProof: vi.fn().mockRejectedValue(missing),
+      totalCreditsInPlatform: vi.fn().mockResolvedValue(1n),
+    } });
+    render(<Boundary client={queryClient} context={createSdkContextValue({ sdk })}><CreditsCard /><Probe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('error:NotFound: Data contract not found'));
+    expect(screen.getByTestId('proof')).toHaveTextContent('unavailable');
+    expect(sdk.system.totalCreditsInPlatform).not.toHaveBeenCalled();
+  });
+
+  it('keeps a transport gRPC NOT_FOUND retryable after the query normalizes it', async () => {
+    const queryClient = client();
+    const nodeNotFound = Object.create({ get kind() { return 6; }, get name() { return 'DapiClientError'; }, get message() { return "transport error: grpc error: code: 'Some requested entity was not found'"; } });
+    const sdk = createMockSdk({ system: {
+      totalCreditsInPlatformWithProof: vi.fn().mockRejectedValue(nodeNotFound),
+      totalCreditsInPlatform: vi.fn().mockRejectedValue(nodeNotFound),
+    } });
+    function ReasonProbe() {
+      const q = useTotalCreditsInPlatform();
+      const reason = q.proofState.kind === 'unavailable' ? q.proofState.reason : q.proofState.kind;
+      return <div data-testid="card">{q.isError ? `error:${reason}:${String(shouldRetrySdkQuery(0, q.error))}` : 'pending'}</div>;
+    }
+    render(<Boundary client={queryClient} context={createSdkContextValue({ sdk })}><ReasonProbe /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('card')).toHaveTextContent('error:transport:true'));
+    // A capture failure, not an absence: the ordinary method is tried too.
+    expect(sdk.system.totalCreditsInPlatform).toHaveBeenCalledOnce();
+  });
+
+  it('returns a new result object instead of mutating React Query\'s tracked result', async () => {
+    const queryClient = client();
+    const results: unknown[] = [];
+    function Capture() {
+      const q = useTotalCreditsInPlatform();
+      results.push(q);
+      return <div data-testid="v">{String(q.data ?? '')}:{q.proofState.kind}</div>;
+    }
+    render(<Boundary client={queryClient} context={createSdkContextValue()}><Capture /></Boundary>);
+    await waitFor(() => expect(screen.getByTestId('v')).toHaveTextContent('100:verified'));
+    const last = results.at(-1) as Record<string, unknown>;
+    expect(last.proofState).toEqual(expect.objectContaining({ kind: 'verified' }));
+    expect({ ...last }).toHaveProperty('proofState');
+    const observerResult = queryClient.getQueryCache().getAll()[0]!.observers[0]!.getCurrentResult() as unknown as Record<string, unknown>;
+    expect(observerResult).not.toHaveProperty('proofState');
+  });
+});
+
+describe('paginated evonode blocks', () => {
+  it('stops requesting pages from a retired session after a network switch', async () => {
+    const queryClient = client();
+    const first = deferred<Map<string, bigint>>();
+    const page = new Map(Array.from({ length: 100 }, (_, i) => [i.toString(16).padStart(64, '0'), 1n]));
+    const byRange = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(page);
+    const controller = new AbortController();
+    const context = createSdkContextValue({ sessionSignal: controller.signal, sdk: createMockSdk({ epoch: { evonodesProposedBlocksByRange: byRange } }) });
+    function Blocks() { useAllEvonodeBlocksInEpoch(3); return null; }
+    render(<Boundary client={queryClient} context={context}><Blocks /></Boundary>);
+    await waitFor(() => expect(byRange).toHaveBeenCalledOnce());
+    act(() => controller.abort());
+    await act(async () => { first.resolve(page); await first.promise; await new Promise((r) => setTimeout(r, 0)); });
+    expect(byRange).toHaveBeenCalledOnce();
   });
 });

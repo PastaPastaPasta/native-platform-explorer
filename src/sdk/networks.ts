@@ -15,9 +15,9 @@ export interface NetworkConfig {
   insightApiUrl?: string;
   /** Faucet URL (devnets/testnet). */
   faucetBaseUrl?: string;
-  /** Custom DAPI masternode endpoints. Required for non-trusted devnets;
-   *  may be omitted when a trusted devnet quorums service is reachable, since
-   *  the SDK's trusted context discovers masternodes via `/masternodes`. */
+  /** Custom DAPI masternode endpoints. Optional: every session prefetches
+   *  from the devnet's quorum service, whose published masternode list
+   *  replaces these; they are used only when it publishes none. */
   dapiAddresses?: string[];
   /** Devnet short name (no `devnet-` prefix). Passed to the SDK as
    *  `EvoSDK.devnet(name)` / `EvoSDK.devnetTrusted(name)`. Only meaningful
@@ -33,6 +33,16 @@ export interface NetworkConfig {
  *  so callers can keep the long form everywhere except the SDK boundary. */
 export function devnetShortName(cfg: NetworkConfig): string {
   return cfg.devnetName ?? cfg.name.replace(/^devnet-/, '');
+}
+
+/** Why the SDK cannot derive `https://quorums.<short>.networks.dash.org` from
+ *  a devnet short name (rc.2 trusted-context `get_quorum_base_url`), or null. */
+export function derivedQuorumNameError(short: string): string | null {
+  if (!short) return 'the name without "devnet-" is empty';
+  if (!/^[a-z0-9-]+$/i.test(short)) return 'it may use only letters, digits and hyphens';
+  if (short.startsWith('-') || short.endsWith('-')) return 'it cannot start or end with a hyphen';
+  if (['mainnet', 'testnet', 'devnet', 'local', 'regtest'].includes(short.toLowerCase())) return `"${short}" is reserved`;
+  return null;
 }
 
 export const TESTNET: NetworkConfig = {
@@ -95,10 +105,6 @@ export function isBuiltInNetwork(name: string): boolean {
 function isValidNetworkConfig(value: unknown): value is NetworkConfig {
   if (!value || typeof value !== 'object') return false;
   const c = value as Record<string, unknown>;
-  const hasAddresses =
-    Array.isArray(c.dapiAddresses) &&
-    c.dapiAddresses.every((a) => typeof a === 'string' && a.length > 0);
-  const hasQuorumUrl = typeof c.quorumUrl === 'string' && c.quorumUrl.length > 0;
   return (
     c.type === 'devnet' &&
     typeof c.name === 'string' &&
@@ -108,9 +114,9 @@ function isValidNetworkConfig(value: unknown): value is NetworkConfig {
     (c.faucetBaseUrl === undefined || typeof c.faucetBaseUrl === 'string') &&
     (c.devnetName === undefined || typeof c.devnetName === 'string') &&
     (c.quorumUrl === undefined || typeof c.quorumUrl === 'string') &&
-    // At least one connection path: explicit DAPI addresses, a quorum URL the
-    // SDK can discover masternodes from, or both.
-    (hasAddresses || hasQuorumUrl)
+    // No quorum URL is fine: the SDK derives one from the devnet name.
+    (c.dapiAddresses === undefined ||
+      (Array.isArray(c.dapiAddresses) && c.dapiAddresses.every((a) => typeof a === 'string' && a.length > 0)))
   );
 }
 
@@ -184,8 +190,7 @@ export interface CreateCustomDevnetParams {
   name: string;
   label?: string;
   insightApiUrl?: string;
-  /** Required when no `quorumUrl` is set; optional otherwise (the trusted
-   *  context discovers masternodes from the quorums service). */
+  /** Optional fallback endpoints; see `NetworkConfig.dapiAddresses`. */
   dapiAddresses?: string[];
   faucetBaseUrl?: string;
   /** Short name used by the SDK devnet factories (no `devnet-` prefix).
