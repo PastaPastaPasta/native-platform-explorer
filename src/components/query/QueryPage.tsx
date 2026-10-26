@@ -186,7 +186,7 @@ export function QueryPage() {
                 is {trusted ? 'on' : 'off'} here.{' '}
                 {trusted
                   ? 'Results here are proof-verified.'
-                  : 'Results here are not proof-verified; turn on trusted mode in Settings to verify them.'}
+                  : 'Results here are not proof-verified.'}
               </Text>
             )}
             <HStack spacing={3} flexWrap="wrap">

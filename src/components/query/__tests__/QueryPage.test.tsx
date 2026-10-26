@@ -104,7 +104,7 @@ describe('Query workspace execution', () => {
     // The parameter is only a claim about the link, never about the sender's results.
     renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query), trusted: false } });
     const notice = await screen.findByText(/This link was shared from trusted mode, but trusted mode\s+is off here/);
-    expect(notice).toHaveTextContent('Results here are not proof-verified; turn on trusted mode in Settings to verify them.');
+    expect(notice).toHaveTextContent('Results here are not proof-verified.');
     expect(notice).not.toHaveTextContent(/sender/);
   });
 

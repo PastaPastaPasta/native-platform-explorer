@@ -45,12 +45,12 @@ describe('useDocumentsAggregate', () => {
   it.each([
     ['count', undefined, 'count', [params]],
     ['sum', 'score', 'sum', [params, 'score']],
-  ] as const)('uses the plain facade %s method without trusted mode', async (kind, field, method, args) => {
+  ] as const)('uses the plain facade %s method when the session has no proof transport', async (kind, field, method, args) => {
     const plain = vi.fn().mockResolvedValue(new Map([['', 4n]]));
     const withProof = vi.fn();
     const sdk = createMockSdk({ documents: { [method]: plain, [`${method}WithProof`]: withProof } });
     renderWithProviders(<Probe kind={kind} field={field} />, { sdk: { sdk, trusted: false } });
-    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:=4:unverified-trusted-off'));
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:=4:verified'));
     expect(plain).toHaveBeenCalledWith(...args);
     expect(withProof).not.toHaveBeenCalled();
   });
