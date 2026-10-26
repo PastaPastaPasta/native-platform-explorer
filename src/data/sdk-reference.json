@@ -177,7 +177,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 369,
+              "line": 372,
               "owner": "executeAddressCreateIdentity"
             }
           ]
@@ -188,7 +188,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 318,
+              "line": 321,
               "owner": "executeAddressFundFromAssetLock"
             }
           ]
@@ -199,7 +199,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 87,
+              "line": 88,
               "owner": "assertSpendable"
             },
             {
@@ -226,7 +226,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 232,
+              "line": 233,
               "owner": "executeAddressTopUpIdentity"
             }
           ]
@@ -237,7 +237,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 150,
+              "line": 151,
               "owner": "executeAddressTransfer"
             }
           ]
@@ -248,7 +248,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 184,
+              "line": 185,
               "owner": "executeAddressTransferFromIdentity"
             }
           ]
@@ -259,7 +259,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 274,
+              "line": 275,
               "owner": "executeAddressWithdraw"
             }
           ]
@@ -275,7 +275,7 @@
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 270,
+              "line": 273,
               "owner": "executeContractUpdate"
             },
             {
@@ -306,7 +306,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 240,
+              "line": 243,
               "owner": "executeContractRegister"
             }
           ]
@@ -317,7 +317,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 305,
+              "line": 308,
               "owner": "executeContractUpdate"
             }
           ]
@@ -328,7 +328,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 379,
+              "line": 382,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -339,7 +339,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 450,
+              "line": 453,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -350,7 +350,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 350,
+              "line": 353,
               "owner": "fetchExistingDocument"
             },
             {
@@ -366,7 +366,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 578,
+              "line": 581,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -377,7 +377,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 418,
+              "line": 421,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -388,7 +388,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 535,
+              "line": 538,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -399,7 +399,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 495,
+              "line": 498,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -421,7 +421,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 787,
+              "line": 790,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -546,7 +546,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 32,
+              "line": 33,
               "owner": "buildNewIdentity"
             }
           ]
@@ -557,7 +557,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 92,
+              "line": 95,
               "owner": "executeIdentityCreate"
             }
           ]
@@ -568,7 +568,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 636,
+              "line": 639,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -579,7 +579,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 669,
+              "line": 672,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -590,12 +590,12 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 356,
+              "line": 359,
               "owner": "fetchExistingIdentity"
             },
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 78,
+              "line": 80,
               "owner": "executeIdentityCreate"
             },
             {
@@ -627,7 +627,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 127,
+              "line": 132,
               "owner": "executeIdentityTopUp"
             }
           ]
@@ -638,7 +638,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 705,
+              "line": 708,
               "owner": "executeIdentityUpdateKeys"
             }
           ]
@@ -1017,12 +1017,12 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 492,
+              "line": 495,
               "owner": "executeDocumentTransfer"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 575,
+              "line": 578,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -1044,7 +1044,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 744,
+              "line": 747,
               "owner": "newIdentityKeys"
             },
             {
@@ -1142,7 +1142,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 663,
+              "line": 666,
               "owner": "executeIdentityCreditWithdrawal"
             },
             {
