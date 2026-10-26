@@ -32,18 +32,21 @@ export function TokenFlagsPills({ flags }: { flags: TokenFlags }) {
   if (entries.length === 0) return null;
   return (
     <HStack spacing={2} flexWrap="wrap">
-      {entries.map(([k, v]) => (
-        <Badge
-          key={k}
-          colorScheme={v === 'unknown' ? 'gray' : FLAG_META[k].color}
-          variant={v === 'unknown' ? 'outline' : 'subtle'}
-          fontSize="2xs"
-          textTransform="none"
-          title={v === 'unknown' ? 'The explorer could not read who may perform this action.' : undefined}
-        >
-          {v === 'unknown' ? `${FLAG_META[k].label}: unknown` : FLAG_META[k].label}
-        </Badge>
-      ))}
+      {entries.map(([k, v]) => {
+        const unknown = v === 'unknown';
+        return (
+          <Badge
+            key={k}
+            colorScheme={unknown ? 'gray' : FLAG_META[k].color}
+            variant={unknown ? 'outline' : 'subtle'}
+            fontSize="2xs"
+            textTransform="none"
+            title={unknown ? 'The explorer could not read who may perform this action.' : undefined}
+          >
+            {unknown ? `${FLAG_META[k].label}: unknown` : FLAG_META[k].label}
+          </Badge>
+        );
+      })}
     </HStack>
   );
 }
