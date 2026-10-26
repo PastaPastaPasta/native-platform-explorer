@@ -13,7 +13,7 @@
  * service, rate APIs and every other cross-origin request bypass the worker.
  * Navigations and other unhashed files are network-first, so an online visit
  * always gets the deployed HTML; the cache only answers when the network
- * fails. /_next/static files are cache-first, stored on first use (the ~12 MB
+ * fails, and it only keeps pages and payloads that name this build. /_next/static files are cache-first, stored on first use (the ~12 MB
  * SDK chunk and the WASM are never precached). They are keyed by their SRI
  * hash and stored only if their bytes match it, so the cache holds exactly
  * this build's files whatever the server or an older cache returns.
@@ -135,7 +135,7 @@ async function cacheLoaded({ page, assets }) {
   if (!pageUrl || pageUrl.pathname.startsWith(STATIC_PATH)) return;
   try {
     const response = await fetch(pageUrl, { cache: 'no-cache' });
-    if (cacheable(response) && (await response.clone().text()).includes(BUILD_META)) await storePage(pageUrl.href, response);
+    if (cacheable(response)) await storePage(pageUrl.href, response, BUILD_META);
   } catch {
     // As above.
   }
@@ -163,7 +163,7 @@ async function navigate(event) {
     // Revalidate: the HTTP cache must not hand back HTML that references
     // chunks a newer deploy has removed. The copy keeps redirect: 'manual'.
     const response = await fetch(new Request(request, { cache: 'no-cache' }));
-    if (cacheable(response)) event.waitUntil(storePage(request.url, response.clone()));
+    if (cacheable(response)) event.waitUntil(storePage(request.url, response.clone(), BUILD_META));
     return response;
   } catch (error) {
     const pages = await caches.open(PAGES);
@@ -189,7 +189,8 @@ async function networkFirst(event) {
   const { request } = event;
   try {
     const response = await fetch(request, { cache: 'no-cache' });
-    if (cacheable(response)) event.waitUntil(storePage(request.url, response.clone()));
+    // Next's segment payloads all carry the build ID.
+    if (cacheable(response)) event.waitUntil(storePage(request.url, response.clone(), CONFIG.buildId));
     return response;
   } catch (error) {
     const cached = await (await caches.open(PAGES)).match(pageKey(request.url), { ignoreVary: true });
@@ -206,8 +207,12 @@ async function storeAsset(file, response) {
   }
 }
 
-async function storePage(url, response) {
+/** Store a page or payload only if it names this build (`marker`): after a
+ *  deploy, the old worker must not keep the new build's HTML, whose chunks it
+ *  cannot serve offline. */
+async function storePage(url, response, marker) {
   try {
+    if (!(await response.clone().text()).includes(marker)) return;
     await (await caches.open(PAGES)).put(pageKey(url), response);
   } catch {
     // Quota, or a cache deleted by a newer worker: the response was served anyway.

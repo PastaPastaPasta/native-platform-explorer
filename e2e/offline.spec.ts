@@ -47,9 +47,9 @@ function exportCopy(edit: (sw: string) => string, buildId = currentBuild) {
 const otherVersion = (sw: string) => sw.replace(/"version":"[^"]+"/, '"version":"e2e-previous-deploy"');
 
 async function blockExternal(context: BrowserContext) {
-  await context.route(/^https?:\/\//, (route) => (
-    new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort('failed')
-  ));
+  // Local requests are not intercepted at all: routed requests the worker
+  // makes itself can stall under load and keep it from being replaced.
+  await context.route(/^https?:\/\/(?!127\.0\.0\.1[:/])/, (route) => route.abort('failed'));
 }
 
 async function controlledBy(page: Page) {
@@ -60,13 +60,20 @@ async function controlledBy(page: Page) {
   }));
 }
 
+async function cachedPaths(page: Page) {
+  return page.evaluate(async () => {
+    const keys = await Promise.all((await caches.keys()).map(async (name) => (await caches.open(name)).keys()));
+    return keys.flat().map((request) => new URL(request.url).pathname);
+  });
+}
+
 async function checkForUpdate(page: Page) {
   await page.evaluate(async () => {
     await (await navigator.serviceWorker.getRegistration())?.update();
   });
 }
 
-const BRAND = (page: Page) => page.getByRole('banner').getByRole('searchbox', { name: 'Search', exact: true });
+const HEADER_SEARCH = (page: Page) => page.getByRole('banner').getByRole('searchbox', { name: 'Search', exact: true });
 const PROMPT = 'A new version of the explorer is available.';
 // Activating a worker waits for the old one's pending cache writes (the SDK
 // chunk is ~12 MB), which takes a while on a busy machine.
@@ -79,13 +86,10 @@ test('the app shell and visited pages load offline; other pages explain why not'
     // The first page loads before the worker controls it; the page then hands
     // its HTML and the SDK chunk it fetched to the worker.
     await page.goto(`${url}about/?network=testnet`);
-    const { scope, caches } = await controlledBy(page);
+    const { scope, caches: cacheNames } = await controlledBy(page);
     expect(scope).toBe(url);
-    expect(caches.every((name) => name.startsWith(`npe:${basePath}/:`))).toBe(true);
-    await expect.poll(() => page.evaluate(async () => {
-      const keys = await Promise.all((await caches.keys()).map(async (name) => (await caches.open(name)).keys()));
-      return keys.flat().map((request) => new URL(request.url).pathname);
-    }), { timeout: WORKER_SWITCH_MS }).toEqual(expect.arrayContaining([
+    expect(cacheNames.every((name) => name.startsWith(`npe:${basePath}/:`))).toBe(true);
+    await expect.poll(() => cachedPaths(page), { timeout: WORKER_SWITCH_MS }).toEqual(expect.arrayContaining([
       `${basePath}/about/`,
       `${basePath}/_next/static/chunks/${SDK_CHUNK}`,
     ]));
@@ -96,7 +100,7 @@ test('the app shell and visited pages load offline; other pages explain why not'
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
     await page.goto(url);
-    await expect(BRAND(page)).toBeVisible();
+    await expect(HEADER_SEARCH(page)).toBeVisible();
     // The SDK itself loads from the cache; only the network is missing.
     const notice = page.getByRole('alert').filter({ hasText: 'You are offline' });
     await expect(notice).toBeVisible();
@@ -106,7 +110,7 @@ test('the app shell and visited pages load offline; other pages explain why not'
     await page.goto(`${url}query/?network=testnet`);
     await expect(page.getByRole('heading', { name: 'This page is not available offline' })).toBeVisible();
     expect(new URL(page.url()).pathname).toBe(`${basePath}/query/`);
-    await expect(BRAND(page)).toBeVisible();
+    await expect(HEADER_SEARCH(page)).toBeVisible();
   } finally {
     await context.setOffline(false);
     server.close();
@@ -135,7 +139,7 @@ test('a new deploy offers a reload that switches builds without failed loads', a
     const reloaded = page.waitForEvent('load');
     await page.getByRole('button', { name: 'Reload', exact: true }).click();
     await reloaded;
-    await expect(BRAND(page)).toBeVisible();
+    await expect(HEADER_SEARCH(page)).toBeVisible();
     await expect(page.locator('meta[name="npe-build"]')).toHaveAttribute('content', currentBuild);
     await expect(page.getByText(PROMPT)).toBeHidden();
     const after = await controlledBy(page);
@@ -174,15 +178,19 @@ test('the kill switch worker removes the caches and registration', async ({ page
   try {
     await blockExternal(context);
     await page.goto(url);
-    expect((await controlledBy(page)).caches.length).toBeGreaterThan(0);
+    await controlledBy(page);
+    // Let the worker finish caching the first visit's SDK chunk.
+    await expect.poll(() => cachedPaths(page), { timeout: WORKER_SWITCH_MS })
+      .toContain(`${basePath}/_next/static/chunks/${SDK_CHUNK}`);
 
     server.setRoot(killed);
-    await checkForUpdate(page);
-    await expect.poll(() => page.evaluate(async () => ({
-      registered: (await navigator.serviceWorker.getRegistration()) !== undefined,
-      caches: await caches.keys(),
-    })), { timeout: WORKER_SWITCH_MS }).toEqual({ registered: false, caches: [] });
-    await expect(BRAND(page)).toBeVisible();
+    // Each poll repeats the update check, as further navigations would.
+    await expect.poll(() => page.evaluate(async () => {
+      const registration = await navigator.serviceWorker.getRegistration();
+      await registration?.update().catch(() => undefined);
+      return { registered: registration !== undefined, caches: await caches.keys() };
+    }), { timeout: WORKER_SWITCH_MS }).toEqual({ registered: false, caches: [] });
+    await expect(HEADER_SEARCH(page)).toBeVisible();
   } finally {
     server.close();
     rmSync(killed, { recursive: true, force: true });
