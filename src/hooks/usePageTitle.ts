@@ -45,17 +45,14 @@ function unregister(owner: { title: string }) {
  *  title until the entity's own name loads, then the name. */
 export function usePageTitle(title?: string | null): void {
   const formatted = formatPageTitle(title);
-  const owner = useRef<{ title: string } | null>(null);
+  // One stable entry per mounted caller; title changes update it in place.
+  const owner = useRef({ title: formatted });
   useEffect(() => {
-    const entry = { title: formatted };
-    owner.current = entry;
+    const entry = owner.current;
     register(entry);
     return () => unregister(entry);
-    // Registration follows mount; title changes update the entry in place.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   useEffect(() => {
-    if (!owner.current) return;
     owner.current.title = formatted;
     apply();
   }, [formatted]);

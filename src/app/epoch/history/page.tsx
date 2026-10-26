@@ -30,7 +30,6 @@ import { epochRangeError, MAX_EPOCH_INDEX, MAX_EPOCH_RANGE } from '@sdk/epoch-qu
 import { normaliseEpoch } from '@util/epoch';
 import { epochIndexParser, resolveEpochRange } from '@util/url-state';
 
-
 function Content() {
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },

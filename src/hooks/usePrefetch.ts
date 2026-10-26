@@ -9,9 +9,7 @@ export type PrefetchTarget =
   | { kind: 'contract'; id: string }
   | { kind: 'token'; id: string }
   | { kind: 'dpns'; name: string }
-  | { kind: 'epoch'; index: number }
-  | { kind: 'address'; addr: string }
-  | { kind: 'identityByPkh'; pkh: string };
+  | { kind: 'epoch'; index: number };
 
 export const PREFETCH_DELAY_MS = 150;
 /** At most this many prefetches run at once; further hovers are ignored. */
@@ -21,8 +19,6 @@ export function prefetchKey(target: PrefetchTarget): string {
   switch (target.kind) {
     case 'dpns': return `dpns:${target.name}`;
     case 'epoch': return `epoch:${target.index}`;
-    case 'address': return `address:${target.addr}`;
-    case 'identityByPkh': return `identityByPkh:${target.pkh}`;
     default: return `${target.kind}:${target.id}`;
   }
 }

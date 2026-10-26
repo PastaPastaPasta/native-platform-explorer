@@ -10,12 +10,10 @@ import {
   type PrefetchTarget,
 } from '@hooks/usePrefetch';
 import {
-  useAddressInfo,
   useContract,
   useDpnsResolve,
   useEpochInfo,
   useIdentity,
-  useIdentityByPublicKeyHash,
   useTokenContractInfo,
 } from '@sdk/queries';
 
@@ -41,8 +39,6 @@ function Contract({ name, id }: { name: string; id: string }) { useSettle(name, 
 function Token({ name, id }: { name: string; id: string }) { useSettle(name, useTokenContractInfo(id)); return null; }
 function Dpns({ name, value }: { name: string; value: string }) { useSettle(name, useDpnsResolve(value)); return null; }
 function Epoch({ name, index }: { name: string; index: number }) { useSettle(name, useEpochInfo(index)); return null; }
-function Address({ name, addr }: { name: string; addr: string }) { useSettle(name, useAddressInfo(addr)); return null; }
-function Pkh({ name, pkh }: { name: string; pkh: string }) { useSettle(name, useIdentityByPublicKeyHash(pkh)); return null; }
 
 function Prefetcher({ target }: { target: PrefetchTarget }) {
   const name = prefetchKey(target);
@@ -52,8 +48,6 @@ function Prefetcher({ target }: { target: PrefetchTarget }) {
     case 'token': return <Token name={name} id={target.id} />;
     case 'dpns': return <Dpns name={name} value={target.name} />;
     case 'epoch': return <Epoch name={name} index={target.index} />;
-    case 'address': return <Address name={name} addr={target.addr} />;
-    case 'identityByPkh': return <Pkh name={name} pkh={target.pkh} />;
   }
 }
 

@@ -13,8 +13,9 @@ import { useWellKnownName } from './useWellKnownName';
 export function useIdentityTitle(id: string | undefined): void {
   const aliasesQ = useDpnsUsernames(id || undefined);
   const wellKnown = useWellKnownName(id);
-  const aliases = Array.isArray(aliasesQ.data) ? (aliasesQ.data as unknown[]) : [];
-  const alias = aliases.find((name): name is string => typeof name === 'string' && name.length > 0);
+  const alias = Array.isArray(aliasesQ.data)
+    ? aliasesQ.data.find((name): name is string => typeof name === 'string' && name.length > 0)
+    : undefined;
   usePageTitle(id ? (alias ?? wellKnown?.name ?? `Identity ${shortId(id)}`) : 'Identities');
 }
 

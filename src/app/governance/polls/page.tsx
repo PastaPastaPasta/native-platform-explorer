@@ -10,7 +10,6 @@ import {
   HStack,
   Input,
   Text,
-  useDisclosure,
   VStack,
 } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
@@ -25,10 +24,9 @@ import { useVotePollsByEndDate } from '@sdk/queries';
 import { readProp } from '@util/sdk-shape';
 import { isoDayParser, pageParser, pollWindowParser, type PollWindow } from '@util/url-state';
 
-type PresetKey = PollWindow;
 const PAGE_SIZE = 20;
 
-const PRESETS: Array<{ key: PresetKey; label: string; days: number | null }> = [
+const PRESETS: Array<{ key: PollWindow; label: string; days: number | null }> = [
   { key: '24h', label: 'Next 24 h', days: 1 },
   { key: '7d', label: 'Next 7 d', days: 7 },
   { key: '30d', label: 'Next 30 d', days: 30 },
@@ -70,7 +68,7 @@ function Content() {
     { window: pollWindowParser, from: isoDayParser, to: isoDayParser, page: pageParser },
     { history: 'push' },
   );
-  const preset: PresetKey = url.window ?? 'all-upcoming';
+  const preset: PollWindow = url.window ?? 'all-upcoming';
   const page = url.page ?? 1;
   const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   // The export's build time and locale differ from the visitor's. Initialize
@@ -81,7 +79,6 @@ function Content() {
   }, []);
   const customStart = url.from ?? (nowMs === undefined ? '' : isoDate(nowMs));
   const customEnd = url.to ?? (nowMs === undefined ? '' : isoDate(nowMs + 30 * 86_400_000));
-  const custom = useDisclosure({ isOpen: preset === 'custom' });
 
   const range = useMemo(() => {
     if (nowMs === undefined) return { start: undefined, end: undefined };
@@ -140,7 +137,7 @@ function Content() {
                 </Button>
               ))}
             </HStack>
-            <Collapse in={custom.isOpen} animateOpacity>
+            <Collapse in={preset === 'custom'} animateOpacity>
               <Box pt={2}>
                 <HStack spacing={2} flexWrap="wrap">
                   <Input

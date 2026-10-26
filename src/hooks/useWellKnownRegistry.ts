@@ -75,16 +75,17 @@ export function useWellKnownRegistry() {
   return useMemo(() => {
     const sources = { bundled: BUNDLED_WELL_KNOWN, remote: state.remoteEntries, local: state.local };
     const entries = mergeRegistry(sources, network);
+    const allEntries = mergeRegistry(sources);
     return {
       network,
       entries,
       /** Every network's entries, for management in Settings. */
-      allEntries: mergeRegistry(sources),
+      allEntries,
       remote: state.remote,
       local: state.local,
       /** Throws a RegistryError when the entry is invalid or already listed. */
       addLocal(raw: unknown) {
-        const next = addLocalEntry(state.local, raw, mergeRegistry(sources));
+        const next = addLocalEntry(state.local, raw, allEntries);
         try { writeLocalRegistry(next); } catch {
           throw new RegistryError('Browser storage is unavailable; the entry was not saved.');
         }
