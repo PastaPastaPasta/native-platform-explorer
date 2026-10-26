@@ -23,6 +23,7 @@ import { VotePollsList } from '@components/governance/VotePollsList';
 import { CreditsBlock } from '@components/data/CreditsBlock';
 import { Identifier } from '@components/data/Identifier';
 import { ProofGlyph } from '@components/proof/ProofGlyph';
+import { WalkCapNotice } from '@components/data/WalkCapNotice';
 import { QuorumBreakdownList } from '@components/network/QuorumsTable';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
@@ -442,12 +443,16 @@ export default function HomePage() {
             </Text>
             <LoadingCard lines={5} />
           </VStack>
-        ) : evonodesQ.isError ? (
+        ) : epochQ.isError || evonodesQ.isError ? (
           <Text fontSize="sm" color="failed" fontFamily="mono">
-            Proposers unavailable: {evonodesQ.error?.message ?? 'request failed'}
+            Proposers unavailable:{' '}
+            {epochQ.isError ? 'the current epoch is unknown' : evonodesQ.error?.message ?? 'request failed'}
           </Text>
         ) : (
-          <EvonodesLeaderboard entries={proposers.bars} limit={10} />
+          <VStack align="stretch" spacing={2}>
+            <WalkCapNotice data={evonodesQ.data} what="proposers" />
+            <EvonodesLeaderboard entries={proposers.bars} limit={10} />
+          </VStack>
         )}
       </Box>
 

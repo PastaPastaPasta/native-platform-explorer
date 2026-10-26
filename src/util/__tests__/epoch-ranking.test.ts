@@ -1,13 +1,17 @@
 import { describe, expect, it, vi } from 'vitest';
 import {
   fetchAllEvonodeBlocks,
+  MAX_PROPOSER_PAGES,
   normaliseEpoch,
   proposerStanding,
   summariseProposers,
   withEpochDuration,
 } from '../epoch';
 
+import { isTruncatedWalk } from '../paged-walk';
+
 const hash = (n: number) => n.toString(16).padStart(64, '0');
+const active = { assertActive: () => {} };
 
 describe('proposer ranking across every page', () => {
   // Regression: the leaderboard used one page of 100 evonodes in proTxHash
@@ -18,12 +22,37 @@ describe('proposer ranking across every page', () => {
       const from = startAfter ? all.findIndex(([h]) => h === startAfter) + 1 : 0;
       return new Map(all.slice(from, from + (limit ?? 100)));
     });
-    const blocks = await fetchAllEvonodeBlocks({ epoch: { evonodesProposedBlocksByRange } } as never, 7);
+    const blocks = await fetchAllEvonodeBlocks({ epoch: { evonodesProposedBlocksByRange } } as never, 7, active);
     const summary = summariseProposers(blocks);
+    expect(isTruncatedWalk(blocks)).toBe(false);
     expect(evonodesProposedBlocksByRange).toHaveBeenCalledTimes(3);
     expect(summary.proposers).toBe(250);
     expect(summary.totalBlocks).toBe(249 * 2 + 30);
     expect(summary.bars[0]).toEqual({ proTxHash: hash(241), blocks: 30 });
+  });
+
+  it('stops without another request once the session retires mid-walk', async () => {
+    let retired = false;
+    const execution = { assertActive: () => { if (retired) throw new Error('session retired'); } };
+    const evonodesProposedBlocksByRange = vi.fn(async () => {
+      retired = true;
+      return new Map(Array.from({ length: 100 }, (_, i) => [hash(i + 1), 1n]));
+    });
+    await expect(
+      fetchAllEvonodeBlocks({ epoch: { evonodesProposedBlocksByRange } } as never, 7, execution),
+    ).rejects.toThrow('session retired');
+    expect(evonodesProposedBlocksByRange).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the result truncated when the page cap stops the walk', async () => {
+    const evonodesProposedBlocksByRange = vi.fn(async ({ limit, startAfter }: { limit?: number; startAfter?: string }) => {
+      const from = startAfter ? parseInt(startAfter, 16) + 1 : 1;
+      return new Map(Array.from({ length: limit ?? 100 }, (_, i) => [hash(from + i), 1n]));
+    });
+    const blocks = await fetchAllEvonodeBlocks({ epoch: { evonodesProposedBlocksByRange } } as never, 7, active);
+    expect(evonodesProposedBlocksByRange).toHaveBeenCalledTimes(MAX_PROPOSER_PAGES);
+    expect(isTruncatedWalk(blocks)).toBe(true);
+    expect(blocks.size).toBe(MAX_PROPOSER_PAGES * 100);
   });
 
   it('breaks ties by proTxHash so the order is stable', () => {

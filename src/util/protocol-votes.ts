@@ -1,12 +1,15 @@
 import type { EvoSDK } from '@dashevo/evo-sdk';
+import type { SdkQueryExecution } from '@sdk/hooks';
 import { readProp } from './sdk-shape';
 import { proTxHashToHex } from './protx';
+import { WalkedMap } from './paged-walk';
 
 // versionUpgradeVoteStatus pages are capped at 100 entries and keyed by hex
 // proTxHash. The start hash is inclusive, so each later page repeats the
-// previous page's last entry. Hard-capped to prevent runaway walks.
+// previous page's last entry. Hard-capped to prevent runaway walks; a walk
+// that hits the cap is marked truncated.
 const PAGE_LIMIT = 100;
-const MAX_PAGES = 100;
+export const MAX_VOTE_PAGES = 100;
 
 /** The voted version of a native ProtocolVersionUpgradeVoteStatus. Its
  *  `proTxHash` getter is an opaque ProTxHash with no accessors, so callers
@@ -20,12 +23,15 @@ export function voteVersion(status: unknown): number | null {
 /** Every masternode vote, keyed by lowercase hex proTxHash. */
 export async function fetchAllProtocolVotes(
   sdk: Pick<EvoSDK, 'protocol'>,
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
+  execution: Pick<SdkQueryExecution, 'assertActive'>,
+): Promise<WalkedMap<string, number>> {
+  const out = new WalkedMap<string, number>();
   let start: string | undefined;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < MAX_VOTE_PAGES; page++) {
+    execution.assertActive();
     const result = await sdk.protocol.versionUpgradeVoteStatus(start, PAGE_LIMIT);
-    if (!(result instanceof Map) || result.size === 0) break;
+    execution.assertActive();
+    if (!(result instanceof Map) || result.size === 0) return out;
     let last: string | undefined;
     let added = 0;
     for (const [key, status] of result) {
@@ -37,9 +43,10 @@ export async function fetchAllProtocolVotes(
       out.set(hex, version);
       added++;
     }
-    if (!last || added === 0 || result.size < PAGE_LIMIT) break;
+    if (!last || added === 0 || result.size < PAGE_LIMIT) return out;
     start = last;
   }
+  out.truncated = true;
   return out;
 }
 

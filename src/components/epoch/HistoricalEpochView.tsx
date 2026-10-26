@@ -9,6 +9,7 @@ import { NotFoundCard } from '@ui/NotFoundCard';
 import { EpochHeaderCard } from './EpochHeaderCard';
 import { FinalizedEpochCard } from './FinalizedEpochCard';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
+import { WalkCapNotice } from '@components/data/WalkCapNotice';
 import { normaliseEpoch, normaliseFinalizedEpoch, summariseProposers, type ProposerSummary } from '@util/epoch';
 
 function ProposerTotals({ summary }: { summary: ProposerSummary }) {
@@ -74,7 +75,10 @@ export function HistoricalEpochView({ index, epochQ, finalizedQ, evonodesQ }: {
         evonodesQ.status === 'pending' ? <LoadingCard lines={6} /> : evonodesQ.status === 'error' ?
         <ErrorCard title="Live proposers unavailable" error={evonodesQ.error}
           onRetry={() => { void evonodesQ.refetch(); }} /> :
-        <EvonodesLeaderboard entries={liveProposers?.bars ?? []} limit={50} />}
+        <VStack align="stretch" spacing={2}>
+          <WalkCapNotice data={evonodesQ.data} what="proposers" />
+          <EvonodesLeaderboard entries={liveProposers?.bars ?? []} limit={50} />
+        </VStack>}
     </InfoBlock>
   </VStack>;
 }

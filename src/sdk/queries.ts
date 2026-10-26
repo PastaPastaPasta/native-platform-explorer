@@ -751,9 +751,9 @@ export function useFinalizedEpochInfo(index: number | undefined) {
 export function useAllEvonodeBlocksInEpoch(epoch: number | undefined) {
   return useSdkQuery(
     ['epoch', 'evonodesProposedBlocksByRange', 'all', epoch],
-    async (sdk) => {
+    async (sdk, execution) => {
       const { fetchAllEvonodeBlocks } = await import('@util/epoch');
-      return fetchAllEvonodeBlocks(sdk, epoch!);
+      return fetchAllEvonodeBlocks(sdk, epoch!, execution);
     },
     {
       enabled: epoch !== undefined, staleTime: LIVE, methodName: 'epoch.evonodesProposedBlocksByRange', methodParams: { epoch, paginated: true },
@@ -842,9 +842,9 @@ export function useProtocolVersionUpgradeVoteStatus(
 export function useAllProtocolVotes() {
   return useSdkQuery(
     ['protocol', 'versionUpgradeVoteStatus', 'all'],
-    async (sdk) => {
+    async (sdk, execution) => {
       const { fetchAllProtocolVotes } = await import('@util/protocol-votes');
-      return fetchAllProtocolVotes(sdk);
+      return fetchAllProtocolVotes(sdk, execution);
     },
     {
       staleTime: LIVE, methodName: 'protocol.versionUpgradeVoteStatus', methodParams: { paginated: true, count: 100 },

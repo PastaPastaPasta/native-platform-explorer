@@ -1,5 +1,7 @@
 import type { EvoSDK } from '@dashevo/evo-sdk';
+import type { SdkQueryExecution } from '@sdk/hooks';
 import { readProp } from './sdk-shape';
+import { WalkedMap } from './paged-walk';
 
 export interface NormalisedEpoch {
   index: number;
@@ -102,9 +104,10 @@ export function normaliseFinalizedEpoch(input: unknown): NormalisedFinalizedEpoc
 // Server caps limit at 100 per request. When we need every proposer in an
 // epoch (e.g. to compute rank + share for a single evonode), walk pages via
 // `startAfter` until we've seen every entry. Hard-capped to prevent runaway
-// calls on pathologically large epochs.
+// calls on pathologically large epochs; a walk that hits the cap is marked
+// truncated.
 const PAGE_LIMIT = 100;
-const MAX_PAGES = 50;
+export const MAX_PROPOSER_PAGES = 50;
 
 /** Extracts a hex proTxHash from the SDK's Identifier map key. `startAfter`
  *  expects ProTxHashLike = ProTxHash | string | Uint8Array where the string
@@ -131,16 +134,19 @@ function keyToHex(key: unknown): string | undefined {
 export async function fetchAllEvonodeBlocks(
   sdk: Pick<EvoSDK, 'epoch'>,
   epoch: number,
-): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
+  execution: Pick<SdkQueryExecution, 'assertActive'>,
+): Promise<WalkedMap<string, number>> {
+  const out = new WalkedMap<string, number>();
   let cursor: string | undefined = undefined;
-  for (let page = 0; page < MAX_PAGES; page++) {
+  for (let page = 0; page < MAX_PROPOSER_PAGES; page++) {
+    execution.assertActive();
     const result = await sdk.epoch.evonodesProposedBlocksByRange({
       epoch,
       limit: PAGE_LIMIT,
       startAfter: cursor,
     });
-    if (!(result instanceof Map) || result.size === 0) break;
+    execution.assertActive();
+    if (!(result instanceof Map) || result.size === 0) return out;
     let lastHex: string | undefined;
     for (const [key, val] of result) {
       // Display key = the SDK's map key (hex in rc.2, which /evonode/ links
@@ -152,9 +158,10 @@ export async function fetchAllEvonodeBlocks(
       if (!out.has(displayKey)) out.set(displayKey, blocks);
       if (hex) lastHex = hex;
     }
-    if (!lastHex || result.size < PAGE_LIMIT) break;
+    if (!lastHex || result.size < PAGE_LIMIT) return out;
     cursor = lastHex;
   }
+  out.truncated = true;
   return out;
 }
 

@@ -8,6 +8,7 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { NotFoundCard } from '@ui/NotFoundCard';
 import { EpochHeaderCard } from '@components/epoch/EpochHeaderCard';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
+import { WalkCapNotice } from '@components/data/WalkCapNotice';
 import type { NormalisedEpoch } from '@util/epoch';
 import { summariseProposers } from '@util/epoch';
 
@@ -79,8 +80,15 @@ export function EpochView({
           </VStack>
         ) : evonodesQ.isError ? (
           <ErrorCard error={evonodesQ.error} onRetry={() => evonodesQ.refetch()} />
+        ) : epochQ.isError ? (
+          <Text color="muted" fontSize="sm">
+            Proposers cannot be listed without the current epoch.
+          </Text>
         ) : (
-          <EvonodesLeaderboard entries={proposers.bars} limit={leaderboardLimit} />
+          <VStack align="stretch" spacing={2}>
+            <WalkCapNotice data={evonodesQ.data} what="proposers" />
+            <EvonodesLeaderboard entries={proposers.bars} limit={leaderboardLimit} />
+          </VStack>
         )}
       </InfoBlock>
     </VStack>

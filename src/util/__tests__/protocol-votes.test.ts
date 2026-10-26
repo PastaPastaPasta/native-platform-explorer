@@ -1,6 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
-import { fetchAllProtocolVotes, findOwnVote, tallyProtocolVotes, voteVersion } from '../protocol-votes';
+import {
+  fetchAllProtocolVotes,
+  findOwnVote,
+  MAX_VOTE_PAGES,
+  tallyProtocolVotes,
+  voteVersion,
+} from '../protocol-votes';
 import { proTxHashToBase58 } from '../protx';
+import { isTruncatedWalk } from '../paged-walk';
+
+const active = { assertActive: () => {} };
 
 const hash = (n: number) => n.toString(16).padStart(64, '0');
 // Native vote statuses expose `version` (and an opaque proTxHash) as getters.
@@ -20,8 +29,9 @@ describe('fetchAllProtocolVotes', () => {
   it('walks every page, de-duplicating the inclusive start entry', async () => {
     const votes = Array.from({ length: 254 }, (_, i): [string, number] => [hash(i + 1), i < 200 ? 13 : 12]);
     const { sdk, versionUpgradeVoteStatus } = fakeSdk(votes);
-    const all = await fetchAllProtocolVotes(sdk);
+    const all = await fetchAllProtocolVotes(sdk, active);
     expect(all.size).toBe(254);
+    expect(isTruncatedWalk(all)).toBe(false);
     expect(all.get(hash(254))).toBe(12);
     expect(versionUpgradeVoteStatus).toHaveBeenCalledTimes(3);
     expect(versionUpgradeVoteStatus.mock.calls[1]).toEqual([hash(100), 100]);
@@ -29,7 +39,34 @@ describe('fetchAllProtocolVotes', () => {
 
   it('stops on an empty first page', async () => {
     const { sdk } = fakeSdk([]);
-    expect(await fetchAllProtocolVotes(sdk)).toEqual(new Map());
+    const all = await fetchAllProtocolVotes(sdk, active);
+    expect(all.size).toBe(0);
+    expect(isTruncatedWalk(all)).toBe(false);
+  });
+
+  it('stops without another request once the session retires mid-walk', async () => {
+    const votes = Array.from({ length: 254 }, (_, i): [string, number] => [hash(i + 1), 13]);
+    const { sdk, versionUpgradeVoteStatus } = fakeSdk(votes);
+    let retired = false;
+    const execution = { assertActive: () => { if (retired) throw new Error('session retired'); } };
+    versionUpgradeVoteStatus.mockImplementationOnce(async (start, count) => {
+      retired = true;
+      return new Map(votes.slice(0, count).map(([h, v]) => [h, status(v)]));
+    });
+    await expect(fetchAllProtocolVotes(sdk, execution)).rejects.toThrow('session retired');
+    expect(versionUpgradeVoteStatus).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the result truncated when the page cap stops the walk', async () => {
+    // Every page is full, so only the cap ends the walk.
+    const versionUpgradeVoteStatus = vi.fn(async (start: string | undefined, count: number) => {
+      const from = start ? parseInt(start, 16) : 1;
+      return new Map(Array.from({ length: count }, (_, i) => [hash(from + i), status(13)]));
+    });
+    const all = await fetchAllProtocolVotes({ protocol: { versionUpgradeVoteStatus } } as never, active);
+    expect(versionUpgradeVoteStatus).toHaveBeenCalledTimes(MAX_VOTE_PAGES);
+    expect(isTruncatedWalk(all)).toBe(true);
+    expect(all).toBeInstanceOf(Map);
   });
 });
 

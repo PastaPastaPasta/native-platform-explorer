@@ -4,7 +4,15 @@ import { QueryClientProvider, type QueryClient } from '@tanstack/react-query';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SdkContext, type SdkContextValue } from '../SdkProvider';
 import { getSdkQueryKey, invalidateNetworkQueries, useSdkQuery } from '../hooks';
-import { useDocument, useDocumentsQuery, useDocumentsAggregate, useSystemStatus, useTotalCreditsInPlatform } from '../queries';
+import {
+  useAllEvonodeBlocksInEpoch,
+  useAllProtocolVotes,
+  useDocument,
+  useDocumentsQuery,
+  useDocumentsAggregate,
+  useSystemStatus,
+  useTotalCreditsInPlatform,
+} from '../queries';
 import { QueryProofStoreProvider, useQueryProofStore } from '@/contexts/QueryProofStore';
 import { createMockSdk, createSdkContextValue } from '@/test/sdk';
 import { createTestQueryClient } from '@/test/render';
@@ -135,6 +143,41 @@ describe('SDK query readiness and sessions', () => {
     await act(async () => { old.reject(new Error('late transport error')); await old.promise.catch(() => {}); });
     expect(fallback).not.toHaveBeenCalled();
     expect(screen.getByTestId('entries')).toBeEmptyDOMElement();
+  });
+});
+
+describe('paginated walks and session retirement', () => {
+  const hash = (n: number) => n.toString(16).padStart(64, '0');
+  const fullPage = (value: unknown) => new Map(Array.from({ length: 100 }, (_, i) => [hash(i + 1), value]));
+
+  it.each(['votes', 'proposers'] as const)('stops the %s walk after the session retires mid-walk', async (kind) => {
+    const queryClient = client();
+    const first = deferred<Map<string, unknown>>();
+    const page = vi.fn().mockReturnValueOnce(first.promise).mockResolvedValue(new Map());
+    const controller = new AbortController();
+    const context = createSdkContextValue({
+      trusted: false,
+      sessionSignal: controller.signal,
+      sdk: createMockSdk(kind === 'votes'
+        ? { protocol: { versionUpgradeVoteStatus: page } }
+        : { epoch: { evonodesProposedBlocksByRange: page } }),
+    });
+    function WalkProbe() {
+      const votes = useAllProtocolVotes();
+      const blocks = useAllEvonodeBlocksInEpoch(kind === 'proposers' ? 7 : undefined);
+      const q = kind === 'votes' ? votes : blocks;
+      return <div data-testid="walk">{q.status}:{q.data instanceof Map ? q.data.size : ''}</div>;
+    }
+    render(<Boundary client={queryClient} context={context}><WalkProbe /></Boundary>);
+    await waitFor(() => expect(page).toHaveBeenCalledOnce());
+    act(() => controller.abort());
+    // A full first page would normally request a second one.
+    await act(async () => {
+      first.resolve(fullPage(kind === 'votes' ? Object.create({ version: 13 }) : 1n));
+      await first.promise;
+    });
+    expect(page).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('walk')).not.toHaveTextContent('success');
   });
 });
 
