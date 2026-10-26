@@ -1,5 +1,5 @@
 import type { KeySelectionCriteria, SignerKeyDescriptor } from './types';
-import { SignerUnavailableError } from './types';
+import { SigningKeyUnavailableError } from './types';
 
 const PURPOSES = [
   'AUTHENTICATION',
@@ -81,7 +81,7 @@ export function selectSigningKey<T extends SignerKeyDescriptor>(
   });
   const selected = eligible[0];
   if (!selected) {
-    throw new SignerUnavailableError(
+    throw new SigningKeyUnavailableError(
       `No enabled matching on-chain key satisfies ${describePurpose(criteria) ?? 'the requested purpose'}` +
         `${criteria?.minSecurityLevel ? ` at ${criteria.minSecurityLevel} security or stronger` : ''}` +
         `${criteria?.allowedSecurityLevels ? ` (allowed levels: ${criteria.allowedSecurityLevels.join(', ')})` : ''}` +

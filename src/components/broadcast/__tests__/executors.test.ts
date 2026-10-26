@@ -17,6 +17,11 @@ import {
 } from '../executors';
 import { operationRequirement } from '../capabilities';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../outcomes';
+import {
+  SignerDisconnectedError,
+  SignerUnavailableError,
+  SigningKeyUnavailableError,
+} from '@/signer/types';
 
 vi.mock('@dashevo/evo-sdk', () => {
   class Document {
@@ -151,34 +156,43 @@ describe('broadcast executors', () => {
       expect(create).toHaveBeenCalledOnce();
     });
 
-    it('fails as not submitted when it is no longer eligible', async () => {
+    it.each([
+      [
+        new SigningKeyUnavailableError('No enabled matching on-chain key satisfies (key 3)'),
+        /reviewed signing key #3 can no longer sign this operation \(No enabled matching.*disabled or changed on Platform/,
+      ],
+      [
+        new SignerDisconnectedError('Signer has been disconnected.'),
+        /signer was disconnected before it could sign with key #3.*Reconnect it on \/wallet/,
+      ],
+      [
+        new SignerUnavailableError('Identity not found on the current network.'),
+        /signer could not prepare key #3 \(Identity not found/,
+      ],
+      [new Error('Failed to fetch'), /Could not load key #3 from Platform before signing \(Failed to fetch\)/],
+    ])('fails as not submitted, naming the cause, when it cannot be prepared (%s)', async (cause, message) => {
       const create = vi.fn();
-      const execution = run(
-        createMockSigner({
-          prepareSdk: vi
-            .fn()
-            .mockRejectedValue(new Error('No enabled matching on-chain key satisfies (key 3)')),
-        }),
-        create,
-      );
+      const execution = run(createMockSigner({ prepareSdk: vi.fn().mockRejectedValue(cause) }), create);
       await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
-      await expect(execution).rejects.toThrow(
-        /reviewed signing key #3 can no longer sign this operation \(No enabled matching/,
-      );
+      await expect(execution).rejects.toThrow(message);
+      if (!(cause instanceof SigningKeyUnavailableError))
+        await expect(execution).rejects.not.toThrow(/disabled or changed on Platform/);
       expect(create).not.toHaveBeenCalled();
     });
 
-    it('refuses material for another key and releases it', async () => {
+    it.each([
+      ['another key', createSigningMaterial({ keyId: 4 })],
+      // The signer reports the reviewed key but hands the SDK another one.
+      ['a mislabelled key', createSigningMaterial({ keyId: 3, identityKey: { keyId: 4 } as never })],
+    ])('refuses material for %s and releases it', async (_, material) => {
       const release = vi.fn();
       const create = vi.fn();
       const execution = run(
-        createMockSigner({
-          prepareSdk: vi.fn().mockResolvedValue(createSigningMaterial({ keyId: 4, release })),
-        }),
+        createMockSigner({ prepareSdk: vi.fn().mockResolvedValue({ ...material, release }) }),
         create,
       );
       await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
-      await expect(execution).rejects.toThrow(/key #3 .*selected key #4/);
+      await expect(execution).rejects.toThrow(/prepared key #4 instead of the reviewed signing key #3/);
       expect(create).not.toHaveBeenCalled();
       expect(release).toHaveBeenCalledOnce();
     });

@@ -11,7 +11,14 @@ import type {
 } from '@dashevo/evo-sdk';
 import { extractErrorMessage } from '@sdk/errors';
 import { decodeWif } from '@/signer/local';
-import type { ExplorerSigner, KeySelectionCriteria, SdkSigningMaterial } from '@/signer/types';
+import {
+  SignerDisconnectedError,
+  SignerUnavailableError,
+  SigningKeyUnavailableError,
+  type ExplorerSigner,
+  type KeySelectionCriteria,
+  type SdkSigningMaterial,
+} from '@/signer/types';
 import {
   BroadcastOutcomeUnknownError,
   OperationNotSubmittedError,
@@ -130,9 +137,12 @@ async function withSigningMaterial<T>(
         'Signing material does not match the reviewed identity.',
       );
     }
-    if (signingKeyId !== undefined && material.keyId !== signingKeyId) {
+    // Check the key object the SDK will sign with, not the signer's own report.
+    const preparedKeyId = material.identityKey.keyId;
+    if (signingKeyId !== undefined && preparedKeyId !== signingKeyId) {
       throw new OperationNotSubmittedError(
-        reviewedKeyUnavailable(signingKeyId, `the signer selected key #${material.keyId}`),
+        `The signer prepared key #${preparedKeyId} instead of the reviewed signing key ` +
+          `#${signingKeyId}. Build and review the operation again.`,
       );
     }
     return await fn(material, submit);
@@ -155,11 +165,24 @@ async function withSigningMaterial<T>(
   }
 }
 
+/** Why the reviewed key could not be prepared. Nothing was submitted in any case. */
 function reviewedKeyUnavailable(keyId: number, cause: unknown): string {
+  const reason = extractErrorMessage(cause);
+  if (cause instanceof SigningKeyUnavailableError)
+    return (
+      `The reviewed signing key #${keyId} can no longer sign this operation (${reason}). ` +
+      'It may have been disabled or changed on Platform; build and review the operation again.'
+    );
+  if (cause instanceof SignerDisconnectedError)
+    return (
+      `The signer was disconnected before it could sign with key #${keyId} (${reason}). ` +
+      'Reconnect it on /wallet, then build and review the operation again.'
+    );
+  if (cause instanceof SignerUnavailableError)
+    return `The signer could not prepare key #${keyId} (${reason}). Check the signer and try again.`;
   return (
-    `The reviewed signing key #${keyId} can no longer sign this operation ` +
-    `(${extractErrorMessage(cause)}). It may have been disabled or changed on Platform; ` +
-    'build and review the operation again.'
+    `Could not load key #${keyId} from Platform before signing (${reason}). ` +
+    'Check the connection and try again.'
   );
 }
 

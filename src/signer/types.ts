@@ -92,3 +92,19 @@ export class SignerUnavailableError extends Error {
     this.name = 'SignerUnavailableError';
   }
 }
+
+/** No enabled on-chain key the signer holds meets the request. */
+export class SigningKeyUnavailableError extends SignerUnavailableError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SigningKeyUnavailableError';
+  }
+}
+
+/** The signer was disconnected and no longer holds its private keys. */
+export class SignerDisconnectedError extends SignerUnavailableError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignerDisconnectedError';
+  }
+}

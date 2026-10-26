@@ -17,6 +17,7 @@ import { createBackupSigner } from '../backup';
 import { createMnemonicSigner, identityKeyPath } from '../mnemonic';
 import { createWifSigner } from '../wif';
 import { createLocalSigner } from '../local';
+import { SigningKeyUnavailableError, type KeySelectionCriteria } from '../types';
 import { operationRequirement } from '@components/broadcast/capabilities';
 
 // These public fixtures are deterministic test keys. Only the network read is
@@ -239,6 +240,49 @@ describe('SDK-compatible signers', () => {
     );
     signer.destroy();
     await expect(createWifSigner(sdk, wif, ID)).rejects.toThrow(/do not match/);
+  });
+
+  it('never swaps a pinned key disabled on-chain for another eligible key', async () => {
+    const publicData = async (key: number) => {
+      const derived = await wallet.deriveKeyFromSeedWithPath({
+        mnemonic: PHRASE,
+        path: identityKeyPath('testnet', 0, key),
+        network: 'testnet',
+      });
+      try {
+        return Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
+      } finally {
+        derived.free();
+      }
+    };
+    const high = async (keyId: number, disabledAt?: number) => ({
+      keyId,
+      purpose: 0,
+      securityLevel: 2,
+      keyType: 0,
+      data: await publicData(keyId),
+      ...(disabledAt === undefined ? {} : { disabledAt }),
+    });
+    const { sdk, changeKeys } = fixture();
+    changeKeys([await high(1), await high(2)]);
+    const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet');
+    const reviewed: KeySelectionCriteria = {
+      purpose: 'AUTHENTICATION',
+      allowedSecurityLevels: ['HIGH'],
+    };
+    const pinned = await signer.prepareSdk!({ ...reviewed, keyId: 2 });
+    expect(pinned.identityKey.keyId).toBe(2);
+    pinned.release!();
+
+    // Key #2 is disabled after review; key #1 still meets the criteria.
+    changeKeys([await high(1), await high(2, 1)]);
+    const attempt = signer.prepareSdk!({ ...reviewed, keyId: 2 });
+    await expect(attempt).rejects.toBeInstanceOf(SigningKeyUnavailableError);
+    await expect(attempt).rejects.toThrow(/\(key 2\)/);
+    const unpinned = await signer.prepareSdk!(reviewed);
+    expect(unpinned.identityKey.keyId).toBe(1);
+    unpinned.release!();
+    signer.destroy();
   });
 
   it('wipes owned byte arrays on failed import and disconnect', async () => {

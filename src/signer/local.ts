@@ -7,7 +7,7 @@ import type {
   SignerKeyDescriptor,
   SignerKind,
 } from './types';
-import { SignerUnavailableError } from './types';
+import { SignerDisconnectedError, SignerUnavailableError } from './types';
 
 export interface ImportedPrivateKey {
   bytes: Uint8Array;
@@ -57,7 +57,7 @@ export async function createLocalSigner(
   };
   const assertLive = () => {
     if (!privateKeys)
-      throw new SignerUnavailableError('Signer has been disconnected. Reconnect before signing.');
+      throw new SignerDisconnectedError('Signer has been disconnected. Reconnect before signing.');
     return privateKeys;
   };
 
