@@ -42,6 +42,7 @@ export const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       { href: '/epoch/history/', label: 'Epoch history' },
       { href: '/network/protocol/', label: 'Protocol' },
       { href: '/network/credits/', label: 'Credits' },
+      { href: '/network/shielded/', label: 'Shielded pool' },
     ],
   },
   {
