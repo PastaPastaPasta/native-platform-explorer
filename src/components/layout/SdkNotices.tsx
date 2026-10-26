@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import NextLink from 'next/link';
 import { Box, Button, CloseButton, Heading, HStack, Link, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
@@ -10,6 +10,7 @@ import { derivedQuorumNameError, devnetShortName, getNetwork, isBuiltInNetwork }
 import { getQuorumKeySource } from '@sdk/proofs';
 import { useProtocolVersionCheck } from '@sdk/version';
 import { EVO_SDK_VERSION } from '@/version';
+import { useOnlineStatus } from '@hooks/useOnlineStatus';
 
 const COPY: Record<SdkSessionFailure, { title: string; body: string }> = {
   'unknown-network': {
@@ -30,21 +31,35 @@ const COPY: Record<SdkSessionFailure, { title: string; body: string }> = {
   },
 };
 
+// navigator.onLine === false explains any connection failure (PRD §14.3).
+const OFFLINE_COPY = {
+  title: 'You are offline',
+  body: 'This browser has no network connection. Pages it has saved still work, but Platform data cannot be loaded or verified until the connection returns. The explorer reconnects when it does.',
+};
+
 /** Page-level state for a failed SDK session (PRD §11.7). Rendered above the
  *  page instead of replacing it: settings, saved items and local tools still
  *  work, and each SDK-backed card reports the same failure. */
 export function SdkSessionNotice() {
   const { status, error: sessionError, unreachable, network, reconnect } = useSdk();
   const error = status === 'error' ? sessionError : unreachable;
-  if (!error) return null;
   const reason: SdkSessionFailure = error instanceof SdkSessionError ? error.reason : 'failed';
-  const copy = COPY[reason];
+  const online = useOnlineStatus();
+  const wasOnline = useRef(online);
+  useEffect(() => {
+    const cameBack = online && !wasOnline.current;
+    wasOnline.current = online;
+    if (cameBack && error && reason !== 'unknown-network') reconnect();
+  }, [online, error, reason, reconnect]);
+  if (!error) return null;
+  const offline = !online && reason !== 'unknown-network';
+  const copy = offline ? OFFLINE_COPY : COPY[reason];
   const cfg = getNetwork(network);
   const label = cfg.label || network;
   // A failed connect means the quorum prefetch failed. For a custom devnet
   // without a saved quorum URL (e.g. one saved with only DAPI addresses) that
   // is the service derived from its name.
-  const derivedDevnetQuorum = status === 'error' && (reason === 'timeout' || reason === 'unreachable')
+  const derivedDevnetQuorum = !offline && status === 'error' && (reason === 'timeout' || reason === 'unreachable')
     && cfg.type === 'devnet' && !cfg.quorumUrl && !isBuiltInNetwork(network);
   const derivedNameError = derivedDevnetQuorum ? derivedQuorumNameError(devnetShortName(cfg)) : null;
   return (
@@ -52,7 +67,7 @@ export function SdkSessionNotice() {
       <VStack align="flex-start" spacing={3}>
         <Heading as="h2" size="sm" color="failed">
           {copy.title}
-          {reason !== 'unknown-network' ? ` (${label})` : null}
+          {reason !== 'unknown-network' && !offline ? ` (${label})` : null}
         </Heading>
         <Text color="muted" fontSize="sm" maxW="70ch">{copy.body}</Text>
         {derivedDevnetQuorum ? (

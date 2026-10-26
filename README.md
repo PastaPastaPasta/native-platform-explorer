@@ -67,6 +67,7 @@ build time.
 | `NEXT_PUBLIC_WELL_KNOWN_URL` | Extra well-known registry JSON loaded at runtime | unset |
 | `NEXT_PUBLIC_BRIDGE_URL` | Bridge for identity create/top-up shortcuts; empty disables them | `https://bridge.dashhq.org` |
 | `NEXT_PUBLIC_BASE_PATH` | Path prefix for project-site hosting, e.g. `/native-platform-explorer` | empty (root) |
+| `NEXT_PUBLIC_SERVICE_WORKER` | `off` removes the offline service worker and ships its kill switch (see [Hardening](#hardening)) | `on` |
 
 `NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported
 (see below).
@@ -193,7 +194,7 @@ superseded builds are not deployed. No rebuild happens during deployment.
 
 Fraunces and JetBrains Mono are bundled locally with their OFL licenses;
 Geist is bundled by its npm package. Builds do not fetch Google Fonts.
-CI includes the complete font licenses in the validated deployment artifact.
+`pnpm build` copies the complete font licenses (and `.nojekyll`) into `out/`.
 The package manager is pinned in `package.json`.
 
 The current custom domain uses the root prefix. To reproduce it locally, omit
@@ -201,9 +202,75 @@ The current custom domain uses the root prefix. To reproduce it locally, omit
 
 ```sh
 NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm build
-cp src/styles/fonts/Fraunces-OFL.txt src/styles/fonts/JetBrainsMono-OFL.txt out/
 NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
 ```
+
+`pnpm e2e` serves `out/` on port 3100; set `NPE_PREVIEW_PORT` to use another.
+
+### Hardening
+
+`pnpm build` runs `scripts/harden-export.mjs` after `next build`. It rewrites
+`out/` in place:
+
+- **Content Security Policy.** GitHub Pages cannot send headers, so each page
+  gets a `<meta http-equiv="Content-Security-Policy">` whose `script-src` lists
+  the SHA-256 of that page's inline scripts (no `'unsafe-inline'` for
+  scripts). `'wasm-unsafe-eval'` lets the SDK compile its WASM, in a `blob:`
+  worker (`worker-src 'self' blob:`). `connect-src` allows any `https:` origin,
+  because DAPI nodes are arbitrary hosts such as `https://68.67.122.1:1443`,
+  plus `http://localhost:*` and `http://127.0.0.1:*` for local quorum services.
+  `style-src` needs `'unsafe-inline'`: Chakra UI (emotion) writes `<style>`
+  elements and style attributes at runtime. A meta policy cannot set
+  `frame-ancestors`, `sandbox` or `report-uri`, so framing cannot be blocked on
+  this host.
+- **Subresource Integrity.** Script, stylesheet and script-preload tags carry
+  `integrity`. The webpack runtime is patched with the SHA-256 of every chunk
+  and sets `integrity` on the chunks it loads later, the SDK chunk included; a
+  chunk name missing from the map (client navigation reads them from RSC
+  payloads) gets a hash nothing matches, so it is refused. The proof parser
+  fetches its WASM with its hash from the same map. The patched runtime is
+  renamed after its content. The build fails if Next's runtime no longer has
+  the expected shape.
+- **`integrity.json`.** The SRI hash of every file in `out/` plus the commit,
+  build ID, base path, `NEXT_PUBLIC_*` settings and toolchain. Next's build ID
+  is the git commit plus a digest of the base path and `NEXT_PUBLIC_*` settings
+  (random for a tree with uncommitted changes; override with `NPE_BUILD_ID`),
+  so it changes whenever the output does and Next reloads pages whose
+  navigation payloads come from another build. Client module IDs are
+  hashed without the checkout directory (`PortableModuleIdsPlugin` in
+  `next.config.mjs`), so two builds of a commit are byte-identical wherever
+  they run. `pnpm verify:integrity <site URL>` compares a local
+  build with a deployment; `/about#verify` describes the steps for users.
+- **Offline service worker** (`sw.js`). Only same-origin files inside the base
+  path are handled; DAPI, quorum, rate and other cross-origin requests never
+  touch it. Pages and other unhashed files are network-first (revalidated, so
+  the HTTP cache cannot serve HTML that names deleted chunks) and fall back to
+  the cache, then to `/offline/`; only pages and payloads that name the
+  worker's own build are cached. `/_next/static` files are cache-first, cached
+  on first use (the SDK chunk and WASM are never precached) and stored only if
+  their bytes match this build's SRI hash. Caches are named per base path and
+  build and the old ones are removed when a new worker activates. A new worker
+  waits: a page from an older build shows "A new version of the explorer is
+  available" and activates it on Reload; a page already on the new build
+  switches silently.
+
+To switch the worker off, build with `NEXT_PUBLIC_SERVICE_WORKER=off`. Pages
+then stop registering it and unregister an existing one, and `sw.js` becomes a
+kill switch (`scripts/sw/unregister.js`). Browsers fetch `sw.js` on navigation
+(bypassing the HTTP cache), install it, and it deletes the caches and the
+registration without reloading open pages. Keep shipping the kill switch for a
+while: a browser that has not visited since still has the old worker until it
+fetches the new `sw.js`. Re-enabling later is an ordinary deploy.
+
+Rolling back to an earlier commit that also has the worker is an ordinary
+deploy: its pages name another build, so open tabs offer a reload. Rolling
+back past the commit that introduced the worker needs one extra step: that
+build has no `sw.js`, and a failed update check leaves installed workers in
+place, so copy `scripts/sw/unregister.js` to `public/sw.js` in the rollback.
+
+The worker's scope is the base path. Do not deploy at the root of a shared
+origin such as `<user>.github.io`: there it would also handle sibling
+project sites' navigations, and serve this site's offline page for them.
 
 ## Build plan (original)
 

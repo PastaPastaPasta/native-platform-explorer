@@ -78,6 +78,25 @@ describe('SdkSessionNotice', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('no available addresses to retry');
   });
 
+  it('explains an offline browser and reconnects when the connection returns', () => {
+    const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+    const reconnect = vi.fn();
+    renderWithProviders(<SdkSessionNotice />, { sdk: {
+      sdk: null, status: 'error', reconnect,
+      error: new SdkSessionError('unreachable', 'Failed to prefetch quorums: HTTP request error'),
+    } });
+    const alert = screen.getByRole('alert');
+    expect(alert).toHaveTextContent('You are offline');
+    expect(alert).toHaveTextContent('Pages it has saved still work');
+    expect(alert).not.toHaveTextContent('Cannot reach Dash Platform');
+    expect(reconnect).not.toHaveBeenCalled();
+    online.mockReturnValue(true);
+    act(() => { window.dispatchEvent(new Event('online')); });
+    expect(screen.getByRole('alert')).toHaveTextContent('Cannot reach Dash Platform (Testnet)');
+    expect(reconnect).toHaveBeenCalledOnce();
+    online.mockRestore();
+  });
+
   it('renders nothing for healthy or connecting sessions', () => {
     renderWithProviders(<SdkSessionNotice />, { sdk: { status: 'connecting', sdk: null } });
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();

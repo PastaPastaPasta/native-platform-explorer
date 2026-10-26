@@ -14,6 +14,7 @@ import { ProofInspector } from '@components/proof/ProofInspector';
 import { recordShellReady } from '@sdk/timing';
 import { SdkSessionNotice } from './SdkNotices';
 import { PrefetchHost } from './PrefetchHost';
+import { ServiceWorkerManager } from './ServiceWorkerManager';
 
 export function RootComponent({ children }: { children: ReactNode }) {
   useEffect(recordShellReady, []);
@@ -49,6 +50,7 @@ export function RootComponent({ children }: { children: ReactNode }) {
         <QueryInspectorDrawer />
         <ProofInspector />
         <PrefetchHost />
+        <ServiceWorkerManager />
       </Box>
     </MotionConfig>
   );

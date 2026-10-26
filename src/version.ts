@@ -6,3 +6,7 @@ export const APP_VERSION = '0.1.0';
 // so it always reflects the SDK the bundle was compiled against. Falls back to
 // 'unknown' if the env var is absent (e.g. a test runner that bypasses Next).
 export const EVO_SDK_VERSION = process.env.NEXT_PUBLIC_EVO_SDK_VERSION ?? 'unknown';
+
+// Injected by next.config.mjs: the commit the bundle was built from, or '' if
+// the build had no git checkout.
+export const GIT_COMMIT = process.env.NEXT_PUBLIC_GIT_COMMIT ?? '';
