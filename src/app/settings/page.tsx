@@ -16,6 +16,7 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { InfoLine } from '@components/data/InfoLine';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import { useSdk } from '@sdk/hooks';
 import { useQueryProofStore } from '@/contexts/QueryProofStore';
 import {
@@ -26,6 +27,7 @@ import {
 } from '@sdk/networks';
 import { CustomDevnetModal } from '@components/layout/CustomDevnetModal';
 import { ConnectionSettingsForm } from '@components/settings/ConnectionSettingsForm';
+import { WellKnownRegistrySettings } from '@components/settings/WellKnownRegistrySettings';
 import { getQuorumKeySource } from '@sdk/proofs';
 import { useProtocolVersionCheck } from '@sdk/version';
 import { EVO_SDK_VERSION } from '@/version';
@@ -55,6 +57,7 @@ function useLocalStorageBool(key: string, fallback: boolean) {
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Settings' }]);
+  usePageTitle('Settings');
   const { network, setNetwork, reconnect, status, error, quorumUrl } = useSdk();
   const protocol = useProtocolVersionCheck();
   const { enabled: inspectorEnabled, setEnabled: setInspectorEnabled } = useQueryProofStore();
@@ -245,6 +248,20 @@ export default function Page() {
                 {diagEnabled ? 'Enabled' : 'Disabled'}
               </Text>
             </HStack>
+          </VStack>
+        </InfoBlock>
+
+        <InfoBlock id="well-known" scrollMarginTop="96px">
+          <VStack align="stretch" spacing={3}>
+            <Heading size="sm" color="gray.100">
+              Well-known registry
+            </Heading>
+            <Text fontSize="sm" color="gray.250">
+              Names for otherwise anonymous contract, token and identity IDs. Bundled entries
+              ship with the explorer, remote entries come from this build&apos;s registry URL,
+              and local entries are yours, stored in this browser only.
+            </Text>
+            <WellKnownRegistrySettings />
           </VStack>
         </InfoBlock>
 

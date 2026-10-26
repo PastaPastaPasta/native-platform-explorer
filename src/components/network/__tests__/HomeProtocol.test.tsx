@@ -20,7 +20,7 @@ vi.mock('@sdk/queries', () => Object.fromEntries([
   'useSystemStatus', 'useCurrentEpoch', 'useTotalCreditsInPlatform', 'useCurrentQuorumsInfo',
   'useAllEvonodeBlocksInEpoch', 'useAllProtocolVotes', 'useVotePollsByEndDate', 'useDashUsdRate',
   // Not used by the home page; mocked so a regression to it would render v12.
-  'useProtocolVersionUpgradeState',
+  'useProtocolVersionUpgradeState', 'useContractsPreview',
 ].map((name) => [name, () => state.hooks[name]])));
 
 function protocolCell(): HTMLElement {
@@ -38,6 +38,7 @@ beforeEach(() => {
     useVotePollsByEndDate: ok([]),
     useDashUsdRate: ok(null),
     useProtocolVersionUpgradeState: ok({ currentProtocolVersion: 12, nextProtocolVersion: undefined }),
+    useContractsPreview: ok(new Map()),
   };
 });
 
