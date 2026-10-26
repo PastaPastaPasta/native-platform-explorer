@@ -76,25 +76,25 @@ describe('buildDocumentsQuery', () => {
     expect(q.orderByDerived).toBe(true);
   });
 
-  it('keeps a chosen ORDER BY and warns when it conflicts with the range field', () => {
+  it('keeps a chosen ORDER BY and warns when it omits the range field', () => {
     const q = buildDocumentsQuery([['score', '>', '5']], ['active', 'desc'], schema, indices);
     expect(q.orderBy).toEqual([['active', 'desc']]);
-    expect(q.warnings[0]).toMatch(/ORDER BY on the range or IN field `score`/);
+    expect(q.warnings.join(' ')).toMatch(/needs ORDER BY score/);
   });
 
   it('accepts an ORDER BY alone on a leading index property', () => {
     const q = buildDocumentsQuery([], ['score', 'desc'], schema, indices);
-    expect(q.errors).toEqual([]);
-    expect(q.orderBy).toEqual([['score', 'desc']]);
+    expect(q).toMatchObject({ errors: [], warnings: [], orderBy: [['score', 'desc']] });
   });
 
-  it('rejects two range fields, bad values and non-leading fields', () => {
-    expect(buildDocumentsQuery([['score', '>', '1'], ['normalizedLabel', '<', 'b']], null, schema, indices).errors[0])
-      .toMatch(/Only one field can use range filters/);
+  it('blocks values that do not parse and warns about index rules without blocking', () => {
     expect(buildDocumentsQuery([['score', '>', 'x']], null, schema, indices).errors[0]).toMatch(/integer/);
-    expect(buildDocumentsQuery([['normalizedLabel', '==', 'a']], null, schema, indices).errors[0])
-      .toMatch(/No index starts with `normalizedLabel`/);
-    expect(buildDocumentsQuery([['x', '==', 'a']], null, schema, []).errors[0]).toMatch(/declares no indices/);
+    const twoRanges = buildDocumentsQuery([['score', '>', '1'], ['normalizedLabel', '<', 'b']], null, schema, indices);
+    expect(twoRanges.errors).toEqual([]);
+    expect(twoRanges.warnings.join(' ')).toMatch(/Only one field can use range filters/);
+    expect(buildDocumentsQuery([['normalizedLabel', '==', 'a']], null, schema, indices, 14).warnings.join(' '))
+      .toMatch(/No index supports this filter/);
+    expect(buildDocumentsQuery([['x', '==', 'a']], null, schema, []).warnings[0]).toMatch(/declares no indices/);
   });
 });
 

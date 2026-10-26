@@ -25,6 +25,7 @@ import { CursorPagination } from '@components/pagination/CursorPagination';
 import { PAGE_SIZES } from '@components/pagination/PageSizeSelector';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContract, useDocumentsQuery } from '@sdk/queries';
+import { usePlatformProtocolVersion } from '@sdk/health';
 import { shortId } from '@util/identifier';
 import {
   getDocumentTypeSchema,
@@ -97,9 +98,10 @@ function Content() {
   const cursorStack = state.after;
   const startAfter = cursorStack[cursorStack.length - 1];
 
+  const protocolVersion = usePlatformProtocolVersion();
   const built = useMemo(
-    () => buildDocumentsQuery(filters, parseOrderBy(orderKey || null), docSchema, indices),
-    [filters, orderKey, docSchema, indices],
+    () => buildDocumentsQuery(filters, parseOrderBy(orderKey || null), docSchema, indices, protocolVersion),
+    [filters, orderKey, docSchema, indices, protocolVersion],
   );
 
   const queryParams =

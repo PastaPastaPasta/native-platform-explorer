@@ -834,6 +834,17 @@
               "owner": "useDpnsUsername"
             }
           ]
+        },
+        {
+          "method": "system.status",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 855,
+              "owner": "useSystemStatus"
+            }
+          ]
         }
       ]
     },

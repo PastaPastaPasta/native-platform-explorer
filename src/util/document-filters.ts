@@ -1,12 +1,12 @@
 // Translate the documents browser's filter rows into a `documents.query`
 // `where` / `orderBy` pair, typed against the document type's JSON schema.
 
-import { validateWhereAgainstIndices, type SchemaIndex } from './schema';
+import { checkQueryAgainstIndices, type SchemaIndex } from './schema';
 
 export const FILTER_OPERATORS = ['==', '<', '<=', '>', '>=', 'in', 'startsWith'] as const;
 export type FilterOperator = (typeof FILTER_OPERATORS)[number];
 
-export const RANGE_OPERATORS: ReadonlySet<FilterOperator> = new Set(['<', '<=', '>', '>=', 'startsWith']);
+const RANGE_OPERATORS: ReadonlySet<FilterOperator> = new Set(['<', '<=', '>', '>=', 'startsWith']);
 
 /** One filter row, kept as text so it round-trips through the URL. */
 export type DocumentFilter = [field: string, op: FilterOperator, value: string];
@@ -122,20 +122,20 @@ export function indexedFields(indices: SchemaIndex[]): string[] {
 }
 
 /**
- * Build the SDK query. Platform requires every range or IN field to appear in
- * ORDER BY and allows one range field per query. When the user has not chosen
- * an order, the range/IN field supplies it; a conflicting choice is a warning
- * (Platform has the last word). Index fit is checked with the shared
- * leftmost-prefix rule over every filtered and ordered field.
+ * Build the SDK query. Platform requires every range or IN field in ORDER BY;
+ * when the user has not chosen an order, the range/IN field supplies it.
+ * Values that do not parse are errors (the query is not sent). Index fit is
+ * checked with the query workspace's rules (`checkQueryAgainstIndices`) and
+ * reported as warnings: Platform has the last word.
  */
 export function buildDocumentsQuery(
   filters: DocumentFilter[],
   orderBy: OrderBy | null,
   docSchema: Schema,
   indices: SchemaIndex[],
+  protocolVersion?: number,
 ): BuiltQuery {
   const errors: string[] = [];
-  const warnings: string[] = [];
   const where: unknown[] = [];
   for (const filter of filters) {
     const parsed = parseFilterValue(filter, docSchema);
@@ -143,33 +143,19 @@ export function buildDocumentsQuery(
     else where.push([filter[0], filter[1], parsed.value]);
   }
 
-  const rangeFields = Array.from(new Set(filters.filter(([, op]) => RANGE_OPERATORS.has(op)).map(([f]) => f)));
-  const inFields = Array.from(new Set(filters.filter(([, op]) => op === 'in').map(([f]) => f)));
-  if (rangeFields.length > 1) {
-    errors.push(`Only one field can use range filters; this query uses ${rangeFields.map((f) => `\`${f}\``).join(', ')}.`);
-  }
-  const ordered = rangeFields[0] ?? inFields[0];
-  let effective: OrderBy[] = orderBy ? [orderBy] : [];
-  let orderByDerived = false;
-  if (!orderBy && ordered) {
-    effective = [[ordered, 'asc']];
-    orderByDerived = true;
-  } else if (orderBy && ordered && orderBy[0] !== ordered) {
-    warnings.push(`Platform requires ORDER BY on the range or IN field \`${ordered}\`; ordering by \`${orderBy[0]}\` will likely be rejected.`);
-  }
+  const ordered = filters.find(([, op]) => RANGE_OPERATORS.has(op) || op === 'in')?.[0];
+  const derived = !orderBy && !!ordered;
+  const effective: OrderBy[] = orderBy ? [orderBy] : ordered ? [[ordered, 'asc']] : [];
 
-  const fields = Array.from(new Set([...filters.map(([f]) => f), ...effective.map(([f]) => f)]));
-  if (fields.length > 0 && !(fields.length === 1 && fields[0] === '$id')) {
-    const fit = validateWhereAgainstIndices(fields, indices);
-    if (!fit.valid) {
-      errors.push(
-        indices.length === 0
-          ? 'This document type declares no indices, so it can only be listed by $id.'
-          : `No index starts with ${fields.map((f) => `\`${f}\``).join(', ')}. Filter and order by a leading run of one index.`,
-      );
-    }
-  }
-  return { where, orderBy: effective, orderByDerived, errors, warnings };
+  const { warnings } = checkQueryAgainstIndices(
+    {
+      where: filters.map(([field, operator]) => ({ field, operator })),
+      orderBy: effective.map(([field]) => ({ field })),
+    },
+    indices,
+    { protocolVersion },
+  );
+  return { where, orderBy: effective, orderByDerived: derived, errors, warnings };
 }
 
 // ── URL encoding ───────────────────────────────────────────────────────

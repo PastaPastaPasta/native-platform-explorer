@@ -186,7 +186,7 @@ describe('DocumentsFiltersPanel', () => {
     );
   });
 
-  it('shows query errors with the available indices', () => {
+  it('shows index warnings with the available indices', () => {
     renderWithProviders(
       <DocumentsFiltersPanel
         docSchema={docSchema}
@@ -194,15 +194,15 @@ describe('DocumentsFiltersPanel', () => {
         filters={[]}
         orderBy={null}
         derivedOrderBy={['normalizedLabel', 'asc']}
-        errors={['No index starts with `normalizedLabel`.']}
-        warnings={[]}
+        errors={[]}
+        warnings={['No index supports this filter and ORDER BY combination.']}
         limit={25}
         onApply={vi.fn()}
         onLimitChange={vi.fn()}
         onReset={vi.fn()}
       />,
     );
-    expect(screen.getByRole('status')).toHaveTextContent('No index starts with `normalizedLabel`.');
+    expect(screen.getByRole('status')).toHaveTextContent('No index supports this filter and ORDER BY combination.');
     expect(screen.getByRole('status')).toHaveTextContent('parentNameAndLabel: normalizedParentDomainName, normalizedLabel');
     expect(screen.getByRole('option', { name: 'auto (normalizedLabel)' })).toBeInTheDocument();
   });

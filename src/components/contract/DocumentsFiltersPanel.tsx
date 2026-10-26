@@ -100,8 +100,8 @@ export function DocumentsFiltersPanel({
         Filters
       </Heading>
       <Text fontSize="xs" color="gray.400" mb={3}>
-        Queries must follow a declared index: filter and order by a leading run of its
-        properties, with at most one range field. Indices:{' '}
+        Queries must follow a declared index, with at most one range field, and range or IN
+        fields must be ordered. Index warnings are advisory; Platform decides. Indices:{' '}
         {indices.map((i) => `${i.name} (${i.properties.map((p) => p.field).join(', ')})`).join('; ') || 'none'}.
       </Text>
       {indices.length === 0 ? (
@@ -178,8 +178,8 @@ export function DocumentsFiltersPanel({
       {errors.length > 0 || warnings.length > 0 ? (
         <Box mt={3} role="status">
           {errors.map((e) => <Text key={e} fontSize="sm" color="warning">{e}</Text>)}
-          {warnings.map((w) => <Text key={w} fontSize="xs" color="gray.300">{w}</Text>)}
-          {errors.length > 0 && indices.length > 0 ? (
+          {warnings.map((w) => <Text key={w} fontSize="sm" color="warning">{w}</Text>)}
+          {warnings.length > 0 && indices.length > 0 ? (
             <Wrap spacing={2} mt={2}>
               {indices.map((idx) => (
                 <WrapItem key={idx.name}>
