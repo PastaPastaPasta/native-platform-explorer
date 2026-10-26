@@ -12,13 +12,13 @@ import {
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LookupInput } from '@ui/LookupInput';
-import { WELL_KNOWN } from '@constants/well-known';
+import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 import { Identifier } from '@components/data/Identifier';
 import { TokenDiscoveryPanel } from '@components/token/TokenDiscoveryPanel';
 import { isBase58Identifier } from '@util/identifier';
 
 export function TokenLanding() {
-  const wellKnownTokens = WELL_KNOWN.filter((w) => w.kind === 'token');
+  const wellKnownTokens = useWellKnownEntries('token');
 
   return (
     <Container py={{ base: 4, md: 6 }}>
