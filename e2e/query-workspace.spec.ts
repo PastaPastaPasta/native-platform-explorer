@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { test, expect, type Page, type Route } from '@playwright/test';
 import { routeOffline } from './quorum-fixtures';
 
@@ -15,6 +16,17 @@ async function openOfflineWorkspace(page: Page, holdDapi?: (route: Route) => Pro
   });
   await page.goto('query/?network=testnet');
   await expect(page.getByRole('status').filter({ hasText: /^Ready on testnet$/ })).toBeVisible();
+}
+
+// Testnet DPNS contract v2 as the SDK persists it (`dash-sdk.contracts.testnet`:
+// id → { version, base64 platform-serialized bytes }), recorded from a proved
+// `contracts.fetch`. Seeding it is what a returning visitor's browser holds.
+const DPNS_CONTRACT_CACHE = readFileSync(new URL('./fixtures/contracts/testnet-dpns.json', import.meta.url), 'utf8');
+
+async function seedPersistedContracts(page: Page) {
+  await page.addInitScript((value) => {
+    window.localStorage.setItem('dash-sdk.contracts.testnet', value);
+  }, JSON.stringify(JSON.parse(DPNS_CONTRACT_CACHE)));
 }
 
 async function saveQuery(page: Page, name: string, sql = SQL) {
@@ -241,33 +253,39 @@ test('unsupported SQL is rejected before issuing a document request', async ({ p
 });
 
 test('an unchanged SQL run can be cancelled and started again during an endpoint outage', async ({ page }) => {
-  // Hold real DAPI requests, including the contract lookup required by the
-  // installed SDK before document retrieval. Fail them after cancellation.
+  // evo-sdk 5.0 shares one in-flight contract lookup per contract, so a run
+  // restarted during a held lookup joins it and sends nothing new. Seed the
+  // SDK's persisted contract cache with the recorded public DPNS contract
+  // instead: each run then goes straight to its document query, which is held
+  // here and failed after cancellation. No DAPI response is fabricated.
+  await seedPersistedContracts(page);
   let release!: () => void;
   const held = new Promise<void>((resolve) => { release = resolve; });
   let requests = 0;
+  let documentRequests = 0;
   let failures = 0;
   await openOfflineWorkspace(page, async (route) => {
     requests++;
+    if (route.request().url().includes('/getDocuments')) documentRequests++;
     await held;
     await route.abort('failed');
     failures++;
   });
-  const backgroundRequests = requests;
   await page.getByLabel('SQL Query').fill(SQL);
   const editor = await page.getByLabel('SQL Query').elementHandle();
   const timeOrigin = await page.evaluate(() => performance.timeOrigin);
   await page.getByRole('button', { name: 'Run', exact: true }).click();
   await expect(page.getByRole('button', { name: 'Cancel run' })).toBeVisible();
-  await expect.poll(() => requests).toBeGreaterThan(backgroundRequests);
+  await expect.poll(() => documentRequests).toBeGreaterThan(0);
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
   expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
+  const firstRunDocumentRequests = documentRequests;
   await page.getByRole('button', { name: 'Cancel run' }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Cancelled\./ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  // evo-sdk 5.0 shares one in-flight contract lookup per contract, so the
-  // restarted run joins the held lookup instead of sending another request.
+  // The restarted run issues its own document query.
+  await expect.poll(() => documentRequests).toBeGreaterThan(firstRunDocumentRequests);
   await expect(page.getByRole('button', { name: 'Cancel run' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel run' }).click();
   const requestsBeforeRelease = requests;
