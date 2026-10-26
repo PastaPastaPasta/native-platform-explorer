@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Box,
@@ -48,7 +48,9 @@ export function DocumentReplaceForm({
   const [documentType, setDocumentType] = useState(params.get('type') ?? '');
   const [documentId, setDocumentId] = useState(params.get('id') ?? '');
   const [properties, setProperties] = useState<SchemaObject>({});
-  const [loaded, setLoaded] = useState(false);
+  // The editable properties and revision always come from one fetched document.
+  // Changing the contract, type, or ID invalidates them until that target loads.
+  const [loaded, setLoaded] = useState<{ target: string; revision: bigint } | null>(null);
 
   const validContract = isBase58Identifier(contractId.trim());
   const validDocId = isBase58Identifier(documentId.trim());
@@ -74,10 +76,8 @@ export function DocumentReplaceForm({
   const docTypeNames = useMemo(() => Object.keys(documentSchemas), [documentSchemas]);
 
   useEffect(() => {
-    if (!documentType && docTypeNames.length > 0) {
-      const fallback = docTypeNames[0];
-      if (fallback) setDocumentType(fallback);
-    }
+    const fallback = docTypeNames[0];
+    if (fallback && !docTypeNames.includes(documentType)) setDocumentType(fallback);
   }, [docTypeNames, documentType]);
 
   const docQuery = useSdkQuery(
@@ -89,25 +89,35 @@ export function DocumentReplaceForm({
     { enabled: validContract && validDocId && !!documentType },
   );
 
-  const currentRevision = useMemo<bigint>(() => {
-    if (!docQuery.data) return 0n;
-    const rev = (docQuery.data as { revision?: bigint }).revision;
-    return typeof rev === 'bigint' ? rev : rev != null ? BigInt(rev) : 1n;
-  }, [docQuery.data]);
+  const target = `${contractId.trim()}/${documentType}/${documentId.trim()}`;
+  const populate = useCallback(
+    (doc: unknown) => {
+      if (!doc) return;
+      // Ignore a response for a different document (e.g. a late refetch).
+      const id = (doc as { id?: unknown }).id;
+      if (id !== undefined && String(id) !== documentId.trim()) return;
+      const rev = (doc as { revision?: bigint | number | null }).revision;
+      const plain = toPlain(doc) as Record<string, unknown>;
+      // Document.toObject() and toJSON() include $-prefixed metadata; the
+      // properties bag for our form is everything else.
+      const props =
+        plain && typeof plain === 'object'
+          ? stripSystemFields(
+              plain.properties && typeof plain.properties === 'object'
+                ? (plain.properties as Record<string, unknown>)
+                : plain,
+            )
+          : {};
+      setProperties(props);
+      setLoaded({ target, revision: rev != null ? BigInt(rev) : 1n });
+    },
+    [documentId, target],
+  );
+  const isLoaded = loaded?.target === target;
 
   useEffect(() => {
-    if (!docQuery.data || loaded) return;
-    const plain = toPlain(docQuery.data) as Record<string, unknown>;
-    // Document.toObject() and toJSON() include $-prefixed metadata; the
-    // properties bag for our form is everything else.
-    const props = plain && typeof plain === 'object'
-      ? stripSystemFields(plain.properties && typeof plain.properties === 'object'
-          ? (plain.properties as Record<string, unknown>)
-          : plain)
-      : {};
-    setProperties(props);
-    setLoaded(true);
-  }, [docQuery.data, loaded]);
+    if (docQuery.data && !isLoaded) populate(docQuery.data);
+  }, [docQuery.data, isLoaded, populate]);
 
   const activeSchema = documentSchemas[documentType];
   const errors = useMemo(() => {
@@ -116,7 +126,7 @@ export function DocumentReplaceForm({
   }, [activeSchema, properties]);
 
   useEffect(() => {
-    if (!validContract || !validDocId || !documentType || !activeSchema || !loaded) {
+    if (!validContract || !validDocId || !documentType || !activeSchema || !loaded || !isLoaded) {
       onOptionsChange(null);
       return;
     }
@@ -128,7 +138,7 @@ export function DocumentReplaceForm({
       contractId: contractId.trim(),
       documentType,
       documentId: documentId.trim(),
-      currentRevision,
+      currentRevision: loaded.revision,
       properties,
     });
   }, [
@@ -137,10 +147,10 @@ export function DocumentReplaceForm({
     documentType,
     activeSchema,
     loaded,
+    isLoaded,
     properties,
     contractId,
     documentId,
-    currentRevision,
     errors,
     onOptionsChange,
   ]);
@@ -180,9 +190,9 @@ export function DocumentReplaceForm({
           <Text fontSize="sm" color="gray.100" fontWeight={500}>
             Document ID
           </Text>
-          {docQuery.data ? (
+          {loaded && isLoaded ? (
             <Text fontSize="xs" color="gray.400">
-              Revision: {String(currentRevision)} → {String(currentRevision + 1n)}
+              Revision: {String(loaded.revision)} → {String(loaded.revision + 1n)}
             </Text>
           ) : null}
         </HStack>
@@ -190,10 +200,7 @@ export function DocumentReplaceForm({
           <Input
             size="sm"
             value={documentId}
-            onChange={(e) => {
-              setDocumentId(e.target.value);
-              setLoaded(false);
-            }}
+            onChange={(e) => setDocumentId(e.target.value)}
             placeholder="Base58 document ID"
             fontFamily="mono"
             bg="gray.800"
@@ -203,8 +210,8 @@ export function DocumentReplaceForm({
             size="sm"
             variant="outline"
             onClick={() => {
-              setLoaded(false);
-              void docQuery.refetch();
+              setLoaded(null);
+              void docQuery.refetch().then((result) => populate(result.data));
             }}
             isDisabled={!validDocId || !documentType}
           >
@@ -213,7 +220,7 @@ export function DocumentReplaceForm({
         </HStack>
       </Box>
 
-      {activeSchema && loaded ? (
+      {activeSchema && isLoaded ? (
         <SchemaForm
           schema={activeSchema}
           value={properties}
