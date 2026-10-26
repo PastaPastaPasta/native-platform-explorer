@@ -1,5 +1,13 @@
 # Current epoch integrity
 
+> **evo-sdk 5.0:** from 5.0.0-rc.8 the SDK's own `epoch.current()` no longer
+> trusts `metadata.epoch`: it proves epoch zero, then proves `[hint, hint + 1]`
+> ascending and answers with the newest started epoch in that proof (a wrong
+> hint fails closed with `EpochNotFound` or `StaleNode`). The explorer keeps
+> its signed-time helper, which needs no SDK behaviour, and the replay below
+> now asserts that the SDK method rejects the metadata-only attack. The rest of
+> this note describes 4.0.0-rc.2.
+
 The pinned `@dashevo/evo-sdk` 4.0.0-rc.2 implicit current-epoch verifier uses
 response `metadata.epoch` as its GroveDB query bound. That field is outside the
 Tenderdash-signed state identifier. A transport that supplies a valid historical
@@ -78,8 +86,10 @@ Assertions cover:
 
 - Native acceptance of explicit epoch zero, historical epoch 42, and a live
   current control; the helper returns the index derived from signed time.
-- The old implicit current method accepts epoch 42 when only unsigned
-  `metadata.epoch` is changed; its unmodified historical-proof control rejects.
+- The SDK's implicit current method (5.0) proves epoch zero and then
+  `[current, current + 1]`. When only unsigned `metadata.epoch` is changed to
+  42, it follows that hint to live proofs that show later epochs started and
+  fails closed with `StaleNode`. (4.0.0-rc.2 accepted epoch 42 here.)
 - The actual helper ignores the same metadata change: it requests explicit
   epoch zero and the derived current index, and native explicit-query verification
   rejects the historical epoch-42 proof.
