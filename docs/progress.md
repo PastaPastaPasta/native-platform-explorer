@@ -52,6 +52,21 @@ served export in headless Chromium against real testnet or mainnet data.
 | [#47](https://github.com/PastaPastaPasta/native-platform-explorer/pull/47) address, identity, vote and raw writes | `787d7f4` | Form-signed operations: every `addresses.*` write, identity create and top-up from an asset lock, masternode votes, raw broadcast of a signed transition; plain-object address inputs for the rc.8 deserialization bug. | 1,326 unit tests; 63 e2e; every operation except the masternode vote run live on testnet with proved read-back. Masternode voting is unit-tested only (no voting key). |
 | [#48](https://github.com/PastaPastaPasta/native-platform-explorer/pull/48) token writes | `4146238` | All 11 token writes plus group propose/co-sign; Drive-mirroring checks before Review and again before signing; CRITICAL key rules for token batches; destructive config updates; proved-read confirmation for the SDK's group-proposal `DriveProofError`; token page Actions row. | 1,504 unit tests; 66 e2e; 29 live testnet transitions with proved read-back. Not live: pre-programmed and once-per-identity claims, group co-sign of non-config actions, mainnet. |
 
+**Discrepancy fixes and live write QA (`fix/discrepancies-l`).** Fixes the
+eight discrepancies the #49 docs audit listed (read-only builds hide every
+write link; the token balance lookup defaults to the last connected identity;
+token writes appear in `/sdk-reference`; seeded holder balances get proofs;
+aggregate presets use the testnet grades contract; stale network and env notes;
+no `trusted` flag in share links) and checks the asset-lock key before
+submission. It also ran the remaining writes live on testnet through the UI:
+contract register and update; document create, replace, delete, transfer, set
+price and purchase; identity credit transfer, withdrawal and key add/disable;
+non-contested DPNS registration. That run found and fixed un-bumped document
+revisions for transfer/price/purchase, optional fields submitted as `""`,
+identifiers shown as `{"__type":"Identifier"}`, unlabelled schema form fields
+and the normalized DPNS name in receipts. Still not live: masternode votes,
+contested DPNS, some token claims, mainnet.
+
 **In progress: I1, hardening (`chore/hardening`).** A parallel branch adds a
 service worker / offline shell, a meta Content-Security-Policy, an
 `integrity.json` with SRI hashes, a `Cargo.lock` for the vendored proof parser,
