@@ -268,7 +268,7 @@ export function buildSdkExample(
       : `const result = await sdk.documents.${method}(params${field});`;
   }
   return (
-    `// npm install @dashevo/evo-sdk@4.0.0-rc.2\n` +
+    `// npm install @dashevo/evo-sdk@5.0.0-rc.8\n` +
     `import { EvoSDK } from '@dashevo/evo-sdk';\n\n` +
     `${instructions}const sdk = ${construction};\nawait sdk.connect();\n\n` +
     `const params = ${sdkLiteral(params)};\n\n${query}\n\n` +
