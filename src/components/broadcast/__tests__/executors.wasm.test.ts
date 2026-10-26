@@ -36,7 +36,7 @@ function protocol() {
   const current = platformVersion.version;
   return {
     version: vi.fn(() => current),
-    system: { status: vi.fn().mockResolvedValue({ version: { protocol: { drive: { current } } } }) },
+    system: { totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue({ data: 1n, metadata: { protocolVersion: current } }) },
   };
 }
 

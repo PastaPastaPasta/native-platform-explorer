@@ -99,9 +99,8 @@ export interface ExecuteArgs<TOptions> {
 // adapters still have their IdentitySigner freed by the fallback here.
 // The signer refetches the identity's keys, so pin the reviewed key: if it was
 // disabled between review and signing, fail instead of signing with another.
-// That proved read also brings the session's protocol version up to the
-// network's, so the version check runs after it and before `fn` builds
-// anything; `fn` receives the checked version.
+// Before `fn` builds anything, the session's protocol version is checked
+// against the network's; `fn` receives the checked version.
 async function withSigningMaterial<T>(
   { sdk, signer, signingKeyId }: Pick<ExecuteArgs<unknown>, 'sdk' | 'signer' | 'signingKeyId'>,
   criteria: () => Promise<KeySelectionCriteria | undefined>,
@@ -153,12 +152,8 @@ async function withSigningMaterial<T>(
           `#${signingKeyId}. Build and review the operation again.`,
       );
     }
-    let platformVersion: number;
-    try {
-      platformVersion = await assertWritableProtocolVersion(sdk);
-    } catch (error) {
-      throw new OperationNotSubmittedError(error);
-    }
+    // Nothing is built or submitted yet, so a failure here is "not submitted".
+    const platformVersion = await assertWritableProtocolVersion(sdk);
     return await fn(material, submit, platformVersion);
   } catch (error) {
     if (

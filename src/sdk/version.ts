@@ -10,8 +10,6 @@ import {
   type ProtocolVersionMismatch,
 } from './protocol-version';
 
-export { networkProtocolVersion } from './protocol-version';
-
 export interface ProtocolVersionCheck {
   /** Newest Platform protocol version the bundled SDK supports
    *  (`EvoSDK.getLatestVersionNumber()`). */

@@ -470,36 +470,33 @@ describe('broadcast executors', () => {
   });
 
   describe('protocol version guard', () => {
-    const drive = (current: number) => ({ version: { protocol: { drive: { current, latest: current } } } });
+    // A proved response; the quorum signature binds its protocol version.
+    const proved = (protocolVersion: number) => ({ data: 1n, metadata: { protocolVersion } });
 
     beforeEach(async () => {
       const actual = await vi.importActual<typeof ProtocolVersion>('@sdk/protocol-version');
       assertWritable.mockImplementation(actual.assertWritableProtocolVersion);
     });
 
-    it('checks after the signer\'s proved read, so a session at the network floor is not blocked', async () => {
+    it('compares after its own proved read, so a session at the network floor is not blocked', async () => {
       // A fresh mainnet/testnet session reports v13 until a proved answer
-      // carries the network's v14; the signer's identity fetch is that answer.
+      // carries the network's v14.
       let version = 13;
       const sdk = {
         version: vi.fn(() => version),
-        system: { status: vi.fn().mockResolvedValue(drive(14)) },
-        identities: { fetch: vi.fn(async () => { version = 14; return {}; }) },
+        system: { totalCreditsInPlatformWithProof: vi.fn(async () => { version = 14; return proved(14); }) },
         contracts: noteContracts(),
         documents: { create: vi.fn().mockResolvedValue({ id: 'confirmed-document-id' }) },
       };
-      const prepareSdk = vi.fn(async () => {
-        await sdk.identities.fetch();
-        return createSigningMaterial();
-      });
+      const prepareSdk = vi.fn().mockResolvedValue(createSigningMaterial());
       const result = await executeDocumentCreate({
         sdk: sdk as never,
         signer: createMockSigner({ prepareSdk }),
         options: { contractId: 'contract-1', documentType: 'note', properties: {} },
       });
       expect(result.documentId).toBe('confirmed-document-id');
-      expect(prepareSdk.mock.invocationCallOrder[0]).toBeLessThan(
-        sdk.system.status.mock.invocationCallOrder[0]!,
+      expect(sdk.system.totalCreditsInPlatformWithProof.mock.invocationCallOrder[0]).toBeLessThan(
+        sdk.documents.create.mock.invocationCallOrder[0]!,
       );
     });
 
@@ -510,7 +507,7 @@ describe('broadcast executors', () => {
       const error = await executeContractRegister({
         sdk: {
           version: vi.fn().mockReturnValue(14),
-          system: { status: vi.fn().mockResolvedValue(drive(13)) },
+          system: { totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue(proved(13)) },
           contracts: { publish },
         } as never,
         signer: createMockSigner({
@@ -524,12 +521,26 @@ describe('broadcast executors', () => {
       expect(free).toHaveBeenCalledOnce();
     });
 
+    it('refuses a network newer than the SDK supports', async () => {
+      const update = vi.fn();
+      await expect(executeIdentityUpdateKeys({
+        sdk: {
+          version: vi.fn().mockReturnValue(14),
+          system: { totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue(proved(15)) },
+          identities: { fetch: vi.fn().mockResolvedValue({}), update },
+        } as never,
+        signer: createMockSigner(),
+        options: { addKeys: [], disableKeyIds: [1] } as never,
+      })).rejects.toThrow(/runs Platform protocol v15, but the SDK session uses v14\. .*does not support/);
+      expect(update).not.toHaveBeenCalled();
+    });
+
     it('refuses when the network protocol version cannot be read', async () => {
       const create = vi.fn();
       await expect(executeDocumentCreate({
         sdk: {
           version: vi.fn().mockReturnValue(14),
-          system: { status: vi.fn().mockRejectedValue(new Error('no available addresses')) },
+          system: { totalCreditsInPlatformWithProof: vi.fn().mockRejectedValue(new Error('no available addresses')) },
           contracts: noteContracts(),
           documents: { create },
         } as never,
