@@ -34,30 +34,19 @@
           "sources": [
             {
               "file": "src/util/epoch.ts",
-              "line": 138,
+              "line": 143,
               "owner": "fetchAllEvonodeBlocks"
             }
           ]
         },
         {
-          "method": "protocol.versionUpgradeState",
+          "method": "protocol.versionUpgradeVoteStatus",
           "kind": "facade",
           "sources": [
             {
-              "file": "src/sdk/queries.ts",
-              "line": 823,
-              "owner": "useProtocolVersionUpgradeState"
-            }
-          ]
-        },
-        {
-          "method": "protocol.versionUpgradeStateWithProof",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/sdk/queries.ts",
-              "line": 824,
-              "owner": "useProtocolVersionUpgradeState"
+              "file": "src/util/protocol-votes.ts",
+              "line": 32,
+              "owner": "fetchAllProtocolVotes"
             }
           ]
         },
@@ -1036,7 +1025,7 @@
           "sources": [
             {
               "file": "src/util/epoch.ts",
-              "line": 138,
+              "line": 143,
               "owner": "fetchAllEvonodeBlocks"
             }
           ]
@@ -1075,7 +1064,7 @@
           "sources": [
             {
               "file": "src/util/epoch.ts",
-              "line": 138,
+              "line": 143,
               "owner": "fetchAllEvonodeBlocks"
             }
           ]
@@ -1191,7 +1180,7 @@
           "sources": [
             {
               "file": "src/util/epoch.ts",
-              "line": 138,
+              "line": 143,
               "owner": "fetchAllEvonodeBlocks"
             }
           ]
@@ -1960,7 +1949,7 @@
           "sources": [
             {
               "file": "src/util/epoch.ts",
-              "line": 138,
+              "line": 143,
               "owner": "fetchAllEvonodeBlocks"
             }
           ]
@@ -2015,7 +2004,7 @@
           "sources": [
             {
               "file": "src/util/protocol-votes.ts",
-              "line": 27,
+              "line": 32,
               "owner": "fetchAllProtocolVotes"
             }
           ]

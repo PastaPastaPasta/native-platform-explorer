@@ -28,9 +28,9 @@ import { QuorumBreakdownList } from '@components/network/QuorumsTable';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useAllEvonodeBlocksInEpoch,
+  useAllProtocolVotes,
   useCurrentEpoch,
   useCurrentQuorumsInfo,
-  useProtocolVersionUpgradeState,
   useSystemStatus,
   useTotalCreditsInPlatform,
   useVotePollsByEndDate,
@@ -43,6 +43,7 @@ import { isEpochIndex } from '@sdk/epoch-queries';
 import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 import { normaliseQuorums, quorumBreakdown } from '@util/quorums';
+import { tallyProtocolVotes, upgradeCandidates } from '@util/protocol-votes';
 import { isBase58Identifier, looksLikeDpnsName } from '@util/identifier';
 import type { ProofStatus } from '@components/proof/ProofInspectorContext';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
@@ -224,7 +225,7 @@ export default function HomePage() {
   const statusQ = useSystemStatus();
   const epochQ = useCurrentEpoch();
   const creditsQ = useTotalCreditsInPlatform();
-  const protocolQ = useProtocolVersionUpgradeState();
+  const votesQ = useAllProtocolVotes();
   const quorumsQ = useCurrentQuorumsInfo();
 
   const epoch = epochQ.data
@@ -255,19 +256,19 @@ export default function HomePage() {
   const quorums = useMemo(() => normaliseQuorums(quorumsQ.data).quorums, [quorumsQ.data]);
   const quorumGroups = useMemo(() => quorumBreakdown(quorums), [quorums]);
 
-  // The running version is the current epoch's; rc.2's versionUpgradeState
-  // currentProtocolVersion disagrees with it on both public networks.
+  // The running version is the current epoch's, and a pending upgrade is
+  // read from the votes. rc.2's versionUpgradeState reports both relative to
+  // the SDK's built-in version, so it is not used: without an epoch the
+  // version is unknown rather than the SDK's.
   const epochProtocol = readProp<number>(epochQ.data, 'protocolVersion');
-  const versionQ = typeof epochProtocol === 'number' ? epochQ : protocolQ;
-  const protocolCurrent =
-    typeof epochProtocol === 'number'
-      ? epochProtocol
-      : readProp<number>(protocolQ.data, 'currentProtocolVersion');
-  const protocolNext = readProp<number | undefined>(protocolQ.data, 'nextProtocolVersion');
-  const protocolPending =
-    typeof protocolNext === 'number' && (protocolCurrent === undefined || protocolNext > protocolCurrent)
-      ? protocolNext
-      : undefined;
+  const protocolCurrent = typeof epochProtocol === 'number' ? epochProtocol : undefined;
+  const protocolPending = useMemo(
+    () =>
+      votesQ.data instanceof Map && protocolCurrent !== undefined
+        ? upgradeCandidates(tallyProtocolVotes(votesQ.data), protocolCurrent)[0]
+        : undefined,
+    [votesQ.data, protocolCurrent],
+  );
 
   return (
     <VStack align="stretch" spacing={8} py={{ base: 4, md: 8 }}>
@@ -368,11 +369,11 @@ export default function HomePage() {
 
           <StatCell
             label="Protocol version"
-            proofStatus={glyphStatus(versionQ.proofState)}
+            proofStatus={glyphStatus(epochQ.proofState)}
             proofTitle="Protocol version proof"
-            proofEntry={versionQ.proofEntry}
-            loading={versionQ.isLoading}
-            error={versionQ.error}
+            proofEntry={epochQ.proofEntry}
+            loading={epochQ.isLoading}
+            error={epochQ.error}
             value={
               <Text
                 fontFamily="heading"
@@ -385,12 +386,16 @@ export default function HomePage() {
               </Text>
             }
             footnote={
-              protocolPending ? (
+              protocolCurrent === undefined ? undefined : protocolPending ? (
                 <Text as="span" color="warning">
-                  upgrade → v{String(protocolPending)}
+                  {`${protocolPending.count} vote${protocolPending.count === 1 ? '' : 's'} for v${protocolPending.version}`}
                 </Text>
+              ) : votesQ.data instanceof Map ? (
+                `no votes above v${protocolCurrent}`
+              ) : votesQ.isError ? (
+                'upgrade votes unavailable'
               ) : (
-                'no pending upgrade'
+                'reading upgrade votes…'
               )
             }
           />

@@ -4,6 +4,7 @@ import {
   findOwnVote,
   MAX_VOTE_PAGES,
   tallyProtocolVotes,
+  upgradeCandidates,
   voteVersion,
 } from '../protocol-votes';
 import { proTxHashToBase58 } from '../protx';
@@ -97,5 +98,20 @@ describe('tallyProtocolVotes', () => {
       known: 5,
       unvoted: 2,
     });
+  });
+});
+
+describe('upgradeCandidates', () => {
+  // rc.2's versionUpgradeState() picks the first voted version above the
+  // SDK's own v12, so a v11 network voting for v12 reported no next version.
+  it('finds a pending version above the network version, not the SDK version', () => {
+    const tally = tallyProtocolVotes(new Map([[hash(1), 12], [hash(2), 12], [hash(3), 11]]));
+    expect(upgradeCandidates(tally, 11)).toEqual([{ version: 12, count: 2 }]);
+    expect(upgradeCandidates(tally, 12)).toEqual([]);
+  });
+
+  it('orders several candidates by votes, then by the higher version', () => {
+    const tally = tallyProtocolVotes(new Map([[hash(1), 14], [hash(2), 15], [hash(3), 15], [hash(4), 16], [hash(5), 13]]));
+    expect(upgradeCandidates(tally, 13).map((c) => c.version)).toEqual([15, 16, 14]);
   });
 });

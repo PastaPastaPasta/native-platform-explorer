@@ -90,3 +90,16 @@ export function tallyProtocolVotes(
     unvoted: known.size - votes.size,
   };
 }
+
+/** Versions voted above the network's current version, most votes first
+ *  (ties to the higher version). rc.2's versionUpgradeState().nextProtocolVersion
+ *  is the first voted version above the SDK's built-in version (12), not the
+ *  network's, so a pending upgrade must be read from the tally instead. */
+export function upgradeCandidates(
+  tally: Pick<VoteTally, 'byVersion'>,
+  current: number,
+): Array<{ version: number; count: number }> {
+  return tally.byVersion
+    .filter((v) => v.version > current)
+    .sort((a, b) => b.count - a.count || b.version - a.version);
+}

@@ -20,6 +20,7 @@ import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { InfoLine } from '@components/data/InfoLine';
 import { Identifier } from '@components/data/Identifier';
+import { WalkCapNotice } from '@components/data/WalkCapNotice';
 import { VoteTallyBar, type TallySegment } from '@components/governance/VoteTallyBar';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
@@ -30,7 +31,7 @@ import {
   useProtocolVersionUpgradeState,
 } from '@sdk/queries';
 import { normaliseEpoch } from '@util/epoch';
-import { tallyProtocolVotes } from '@util/protocol-votes';
+import { tallyProtocolVotes, upgradeCandidates } from '@util/protocol-votes';
 import { readProp } from '@util/sdk-shape';
 
 function versionColor(version: number, current: number | null): string {
@@ -46,14 +47,12 @@ export default function Page() {
   const votesQ = useAllProtocolVotes();
 
   // The running version comes from the current epoch record. rc.2's
-  // versionUpgradeState().currentProtocolVersion disagrees with it on both
-  // public networks, so it is only shown as a discrepancy note.
+  // versionUpgradeState() reports both versions relative to the SDK's
+  // built-in version, so it is only shown as a discrepancy note.
   const epochIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : undefined;
   const epochProtocol = readProp<number>(currentQ.data, 'protocolVersion');
   const current = typeof epochProtocol === 'number' ? epochProtocol : null;
   const reportedCurrent = readProp<number>(stateQ.data, 'currentProtocolVersion');
-  const next = readProp<number | undefined>(stateQ.data, 'nextProtocolVersion');
-  const pending = typeof next === 'number' && (current === null || next > current) ? next : null;
 
   // Platform exposes no masternode list. Evonodes are known from their votes
   // and from block proposals in the previous (finalized) and current epochs.
@@ -77,17 +76,29 @@ export default function Page() {
     return tallyProtocolVotes(votes, known);
   }, [votes, liveQ.data, prevProposers]);
 
+  // A pending upgrade is any voted version above the current one; the
+  // most-voted is the likeliest next version. Unknown without both inputs.
+  const candidates = tally && current !== null ? upgradeCandidates(tally, current) : null;
+  const pending = candidates?.[0] ?? null;
+  const others = (candidates ?? []).slice(1).map((c) => `v${c.version} (${c.count})`);
+  const nextNote =
+    candidates === null
+      ? currentQ.isError ? 'needs the current version' : undefined
+      : pending
+        ? `most-voted version above v${current}${others.length > 0 ? `; also voted: ${others.join(', ')}` : ''}`
+        : `no recorded vote above v${current} this epoch`;
+
   const segments: TallySegment[] = tally
     ? [
         ...tally.byVersion.map(({ version, count }) => ({
-          label: `v${version}${version === current ? ' (current)' : version === pending ? ' (next)' : ''}`,
+          label: `v${version}${version === current ? ' (current)' : version === pending?.version ? ' (next)' : ''}`,
           count,
           color: versionColor(version, current),
         })),
         ...(knownReady ? [{ label: 'no vote yet', count: tally.unvoted, color: 'gray.600' }] : []),
       ]
     : [];
-  const pendingVotes = pending !== null ? tally?.byVersion.find((v) => v.version === pending)?.count : undefined;
+  const unknownText = (q: { isLoading: boolean }) => (q.isLoading ? '…' : 'unknown');
 
   const rows = useMemo(
     () => (votes ? [...votes.entries()].sort(([a], [b]) => (a < b ? -1 : 1)) : []),
@@ -103,49 +114,57 @@ export default function Page() {
           </Heading>
         </InfoBlock>
 
-        {stateQ.isLoading || currentQ.isLoading ? (
-          <LoadingCard />
-        ) : stateQ.isError ? (
-          <ErrorCard error={stateQ.error} onRetry={() => stateQ.refetch()} />
-        ) : (
-          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
-            <InfoBlock>
-              <InfoLine
-                label="Current version"
-                description={epochIdx !== undefined ? `from epoch #${epochIdx}` : undefined}
-                value={
-                  <Text fontFamily="mono" fontSize="2xl" color="gray.100">
-                    {current !== null ? `v${current}` : '—'}
-                  </Text>
-                }
-              />
-            </InfoBlock>
-            <InfoBlock>
-              <InfoLine
-                label="Next version"
-                value={
-                  <Text fontFamily="mono" fontSize="2xl" color={pending ? 'warning' : 'gray.400'}>
-                    {pending !== null ? `v${pending}` : 'none pending'}
-                  </Text>
-                }
-              />
-            </InfoBlock>
-            <InfoBlock>
-              <InfoLine
-                label={pending !== null ? `Votes for v${pending}` : 'Voters'}
-                value={
-                  <Text fontFamily="mono" fontSize="2xl" color="gray.100">
-                    {pending !== null ? pendingVotes ?? (votesQ.isLoading ? '…' : 0) : tally?.voted ?? '…'}
-                  </Text>
-                }
-              />
-            </InfoBlock>
-          </SimpleGrid>
-        )}
+        {currentQ.isError ? (
+          <ErrorCard
+            title="Current epoch unavailable"
+            error={currentQ.error}
+            onRetry={() => currentQ.refetch()}
+          />
+        ) : null}
+        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+          <InfoBlock>
+            <InfoLine
+              label="Current version"
+              description={epochIdx !== undefined ? `from epoch #${epochIdx}` : undefined}
+              value={
+                <Text fontFamily="mono" fontSize="2xl" color={current !== null ? 'gray.100' : 'gray.400'}>
+                  {current !== null ? `v${current}` : unknownText(currentQ)}
+                </Text>
+              }
+            />
+          </InfoBlock>
+          <InfoBlock>
+            <InfoLine
+              label="Next version"
+              description={nextNote}
+              value={
+                <Text fontFamily="mono" fontSize="2xl" color={pending ? 'warning' : 'gray.400'}>
+                  {candidates === null
+                    ? unknownText(current === null ? currentQ : votesQ)
+                    : pending
+                      ? `v${pending.version}`
+                      : 'none voted'}
+                </Text>
+              }
+            />
+          </InfoBlock>
+          <InfoBlock>
+            <InfoLine
+              label={pending ? `Votes for v${pending.version}` : 'Voters'}
+              description={pending && knownReady && tally ? `of ${tally.known} known evonodes` : undefined}
+              value={
+                <Text fontFamily="mono" fontSize="2xl" color="gray.100">
+                  {pending ? pending.count : tally?.voted ?? unknownText(votesQ)}
+                </Text>
+              }
+            />
+          </InfoBlock>
+        </SimpleGrid>
         {typeof reportedCurrent === 'number' && current !== null && reportedCurrent !== current ? (
           <Text fontSize="xs" color="gray.400">
             The SDK&apos;s versionUpgradeState reports currentProtocolVersion v{reportedCurrent}, which
-            disagrees with the current epoch record (v{current}); this page uses the epoch record.
+            disagrees with the current epoch record (v{current}); this page uses the epoch record and
+            reads the next version from the votes below.
           </Text>
         ) : null}
 
@@ -161,6 +180,8 @@ export default function Page() {
             ) : tally ? (
               <>
                 <VoteTallyBar variant="protocol" segments={segments} />
+                <WalkCapNotice data={votes} what="the vote list" />
+                <WalkCapNotice data={liveQ.data} what="current-epoch proposers" />
                 <Text fontSize="xs" color="gray.400">
                   {knownReady ? (
                     <>
@@ -171,6 +192,11 @@ export default function Page() {
                       votes reset each epoch, so &ldquo;no vote yet&rdquo; shrinks as the epoch
                       fills. Platform does not expose the masternode list, so evonodes that
                       have not proposed recently are not counted.
+                    </>
+                  ) : currentQ.isError ? (
+                    <>
+                      Showing {tally.voted} recorded votes. The current epoch could not be read on
+                      this network, so recent proposers, and evonodes without a vote, are unknown.
                     </>
                   ) : liveQ.isError || prevQ.isError ? (
                     <>

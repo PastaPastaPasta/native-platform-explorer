@@ -146,8 +146,55 @@ describe('protocol page', () => {
     expect(screen.getByText('v13 (current):')).toBeVisible();
     // The SDK's stale currentProtocolVersion is reported, not displayed as current.
     expect(screen.getByText(/reports currentProtocolVersion v12/)).toBeVisible();
-    expect(screen.getByText('none pending')).toBeVisible();
+    // The SDK's nextProtocolVersion (13) is the current version here, not a pending one.
+    expect(screen.getByText('none voted')).toBeVisible();
+    expect(screen.getByText('no recorded vote above v13 this epoch')).toBeVisible();
     expect(screen.getByText(`proTxHash (3)`)).toBeVisible();
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+
+  it('reads the next version from the tally, not the SDK’s v12 basis', () => {
+    // Network on v11 voting for v12: rc.2 reports no next version because it
+    // compares against its own v12.
+    state.hooks.useCurrentEpoch = ok({ index: 86, protocolVersion: 11, firstBlockTime: 1 });
+    state.hooks.useProtocolVersionUpgradeState = ok({ currentProtocolVersion: 12, nextProtocolVersion: undefined });
+    state.hooks.useAllProtocolVotes = ok(new Map([[hash(1), 12], [hash(2), 12], [hash(3), 11]]));
+    renderWithProviders(<ProtocolPage />);
+    expect(screen.queryByText('none voted')).toBeNull();
+    expect(screen.getByText('most-voted version above v11')).toBeVisible();
+    expect(screen.getByText('v12 (next):')).toBeVisible();
+    expect(screen.getByText('Votes for v12')).toBeVisible();
+    expect(screen.getByText('of 4 known evonodes')).toBeVisible();
+  });
+
+  it('degrades on a network without a known epoch length (devnet)', () => {
+    state.hooks.useCurrentEpoch = failed('Current epoch is unavailable: this network has no verified epoch duration.');
+    state.hooks.useAllEvonodeBlocksInEpoch = idle;
+    state.hooks.useFinalizedEpochInfo = idle;
+    state.hooks.useProtocolVersionUpgradeState = failed('state failed');
+    renderWithProviders(<ProtocolPage />);
+    // The epoch error is shown; votes still render even though versionUpgradeState failed.
+    expect(screen.getByText('Current epoch unavailable')).toBeVisible();
+    expect(screen.getByText(/no verified epoch duration/)).toBeVisible();
+    expect(screen.getAllByText('unknown')).toHaveLength(2);
+    expect(screen.getByText('needs the current version')).toBeVisible();
+    expect(screen.getByText('v13:')).toBeVisible();
+    expect(screen.getByText(/The current epoch could not be read on this network/)).toBeVisible();
+    expect(screen.queryByText(/reading recent proposers/)).toBeNull();
+    expect(screen.getByText(`proTxHash (3)`)).toBeVisible();
+  });
+
+  it('keeps the summary when versionUpgradeState fails', () => {
+    state.hooks.useProtocolVersionUpgradeState = failed('state failed');
+    renderWithProviders(<ProtocolPage />);
+    expect(screen.getByText('from epoch #86')).toBeVisible();
+    expect(screen.getByText('none voted')).toBeVisible();
+  });
+
+  it('warns when the vote walk stopped at its page cap', () => {
+    state.hooks.useAllProtocolVotes = ok(truncated([[hash(1), 13]]));
+    renderWithProviders(<ProtocolPage />);
+    expect(screen.getByRole('status')).toHaveTextContent('Results may be incomplete: reading the vote list');
   });
 });
 
@@ -156,6 +203,13 @@ describe('EvonodesLeaderboard', () => {
     const entries = [{ proTxHash: hash(1), blocks: 9 }, { proTxHash: hash(2), blocks: 5 }, { proTxHash: hash(3), blocks: 1 }];
     renderWithProviders(<EvonodesLeaderboard entries={entries} limit={2} />);
     expect(screen.getByText(/Top 2 of 3 proposers · 15 blocks proposed/)).toBeVisible();
+  });
+
+  it('numbers ties with competition rank, as on /evonode', () => {
+    const entries = [9, 5, 5, 1].map((blocks, i) => ({ proTxHash: hash(i + 1), blocks }));
+    renderWithProviders(<EvonodesLeaderboard entries={entries} />);
+    const ranks = screen.getAllByRole('link').map((row) => row.firstElementChild?.textContent);
+    expect(ranks).toEqual(['1', '2', '2', '4']);
   });
 });
 
@@ -175,12 +229,5 @@ describe('QuorumsTable', () => {
     expect(toggle).toHaveAttribute('aria-expanded', 'false');
     fireEvent.click(toggle);
     expect(screen.getByRole('button', { name: 'Hide raw response' })).toHaveAttribute('aria-expanded', 'true');
-  });
-
-  it('numbers ties with competition rank, as on /evonode', () => {
-    const entries = [9, 5, 5, 1].map((blocks, i) => ({ proTxHash: hash(i + 1), blocks }));
-    renderWithProviders(<EvonodesLeaderboard entries={entries} />);
-    const ranks = screen.getAllByRole('link').map((row) => row.firstElementChild?.textContent);
-    expect(ranks).toEqual(['1', '2', '2', '4']);
   });
 });
