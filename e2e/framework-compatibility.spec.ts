@@ -7,9 +7,12 @@ test('mobile navigation drawer supports focus restoration and client navigation'
   await page.goto('about/');
 
   const openMenu = page.getByRole('button', { name: 'Open menu' });
-  await openMenu.click();
   const drawer = page.getByRole('dialog', { name: 'Main navigation' });
-  await expect(drawer).toBeVisible();
+  // Retry the first open: a click before hydration is ignored.
+  await expect(async () => {
+    await openMenu.click();
+    await expect(drawer).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   await page.keyboard.press('Escape');
   await expect(drawer).toBeHidden();
   await expect(openMenu).toBeFocused();
@@ -28,9 +31,13 @@ test('settings modal retains controlled input and restores focus on close', asyn
   await page.goto('settings/');
 
   const openModal = page.getByRole('button', { name: 'Add custom devnet…' });
-  await openModal.click();
   const dialog = page.getByRole('dialog', { name: 'Add custom devnet' });
-  await expect(dialog).toBeVisible();
+  // The static export renders this button before React hydrates; a click that
+  // lands first is ignored, so retry until the dialog actually opens.
+  await expect(async () => {
+    await openModal.click();
+    await expect(dialog).toBeVisible({ timeout: 1_000 });
+  }).toPass();
   const name = dialog.getByRole('textbox', { name: /^Name/ });
   await name.fill('devnet-framework-test');
   await expect(name).toHaveValue('devnet-framework-test');
