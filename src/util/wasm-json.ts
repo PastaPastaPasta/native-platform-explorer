@@ -6,6 +6,19 @@
 // `{"__wbg_ptr": …}`.  The helpers here walk the prototype chain to
 // surface the real data.
 
+/** An SDK Identifier's base58 text. Its value sits behind `toBase58()`, not a
+ *  getter, so walking it would show only `{ "__type": "Identifier" }`. */
+function identifierBase58(value: object): string | undefined {
+  const candidate = value as { __type?: unknown; toBase58?: () => unknown };
+  try {
+    if (candidate.__type !== 'Identifier' || typeof candidate.toBase58 !== 'function') return undefined;
+    const text = candidate.toBase58();
+    return typeof text === 'string' ? text : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 /** Walk an object/WASM class instance into a plain JSON-serialisable form.
  *  Handles three sources of state that JSON.stringify would otherwise miss:
  *    1) enumerable own properties (plain objects, wasm-bindgen direct fields)
@@ -124,7 +137,7 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     const isWasmShell =
       value != null && typeof value === 'object' && '__wbg_ptr' in (value as object);
     if (rendered === undefined || rendered === '{}' || isWasmShell || Array.isArray(value)) {
-      const walked = walkInstance(value);
+      const walked = walkInstance(value, 0, identifierBase58);
       return JSON.stringify(walked, wasmReplacer, indent) ?? String(value);
     }
     return rendered;
@@ -132,7 +145,7 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     // JSON.stringify threw (typically circular references on WASM classes).
     // Fall back to a shallow walk.
     try {
-      return JSON.stringify(walkInstance(value), wasmReplacer, indent) ?? String(value);
+      return JSON.stringify(walkInstance(value, 0, identifierBase58), wasmReplacer, indent) ?? String(value);
     } catch {
       return String(value);
     }
