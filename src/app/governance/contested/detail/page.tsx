@@ -13,6 +13,8 @@ import { DateBlock } from '@components/data/DateBlock';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { VoteTallyBar } from '@components/governance/VoteTallyBar';
 import { ContenderCard } from '@components/governance/ContenderCard';
+import { ContenderVoters } from '@components/governance/ContenderVoters';
+import { IdentityLink } from '@components/data/IdentityLink';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContestedResourceVoteState, useVotePollsByEndDate } from '@sdk/queries';
 import { shortId } from '@util/identifier';
@@ -263,6 +265,45 @@ function Content() {
                 </Wrap>
               )}
             </InfoBlock>
+
+            {contenders.length > 0 ? (
+              <InfoBlock>
+                <Heading size="sm" color="gray.100" mb={1}>
+                  Voters by contender
+                </Heading>
+                <Text fontSize="xs" color="gray.400" mb={3}>
+                  Each voter is a masternode&apos;s voting identity. Tallies are weighted (an evonode&apos;s
+                  vote counts 4, a regular masternode&apos;s 1), so a tally can exceed its voter count.
+                  Abstain and lock votes are only available as totals.
+                </Text>
+                <VStack align="stretch" spacing={4}>
+                  {contenders.map((c, i) => {
+                    const towardsId =
+                      idToString(readProp<unknown>(c, 'identityId')) ??
+                      idToString(readProp<unknown>(c, 'towardsIdentity'));
+                    if (!towardsId) return null;
+                    return (
+                      <VStack key={`${towardsId}-${i}`} align="stretch" spacing={2}>
+                        <HStack spacing={2} fontSize="sm">
+                          <IdentityLink id={towardsId} dense />
+                          <Text color="gray.400" fontSize="xs">
+                            tally {Number(readProp<number | bigint>(c, 'voteTally') ?? 0)}
+                          </Text>
+                        </HStack>
+                        <ContenderVoters
+                          contractId={contractId}
+                          docType={docType}
+                          indexName={indexName}
+                          indexValues={indexValues}
+                          contestantId={towardsId}
+                          isFinished={isFinished}
+                        />
+                      </VStack>
+                    );
+                  })}
+                </VStack>
+              </InfoBlock>
+            ) : null}
 
             <InfoBlock>
               <Heading size="sm" color="gray.100" mb={3}>

@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react';
 import {
+  Badge,
   Box,
   Button,
   HStack,
@@ -20,7 +21,8 @@ import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { Identifier } from '@components/data/Identifier';
 import { BigNumberDisplay } from '@components/data/BigNumber';
-import { useTokenIdentityBalances } from '@sdk/queries';
+import { useTokenIdentityBalances, useTokenIdentityTokenInfos } from '@sdk/queries';
+import { readProp } from '@util/sdk-shape';
 import { WELL_KNOWN } from '@constants/well-known';
 import { isBase58Identifier } from '@util/identifier';
 
@@ -38,6 +40,8 @@ export function IdentityTokensTab({ identityId }: { identityId: string }) {
   );
 
   const q = useTokenIdentityBalances(identityId, all.length > 0 ? all : undefined);
+  const infosQ = useTokenIdentityTokenInfos(identityId, all.length > 0 ? all : undefined);
+  const infos = infosQ.data instanceof Map ? infosQ.data : undefined;
   const rows = useMemo(() => {
     if (!q.data || !(q.data instanceof Map)) return [];
     const out: Array<{ tokenId: string; balance: bigint }> = [];
@@ -66,6 +70,7 @@ export function IdentityTokensTab({ identityId }: { identityId: string }) {
             <Input
               size="sm"
               placeholder="Add token ID (base58 Identifier)"
+              aria-label="Token ID to add"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               fontFamily="mono"
@@ -101,12 +106,16 @@ export function IdentityTokensTab({ identityId }: { identityId: string }) {
         </InfoBlock>
       ) : (
         <InfoBlock>
+          {infosQ.isError ? (
+            <Box mb={3}><ErrorCard error={infosQ.error} onRetry={() => infosQ.refetch()} /></Box>
+          ) : null}
           <Box overflowX="auto">
             <Table size="sm">
               <Thead>
                 <Tr>
                   <Th color="gray.400" borderColor="gray.750">Token</Th>
                   <Th color="gray.400" borderColor="gray.750" isNumeric>Balance</Th>
+                  <Th color="gray.400" borderColor="gray.750">Frozen</Th>
                 </Tr>
               </Thead>
               <Tbody>
@@ -121,6 +130,17 @@ export function IdentityTokensTab({ identityId }: { identityId: string }) {
                     </Td>
                     <Td borderColor="gray.750" isNumeric>
                       <BigNumberDisplay value={r.balance} />
+                    </Td>
+                    <Td borderColor="gray.750">
+                      {infosQ.isLoading ? (
+                        <Text as="span" fontSize="xs" color="gray.500">…</Text>
+                      ) : infosQ.isError ? (
+                        <Text as="span" fontSize="xs" color="red.300">failed</Text>
+                      ) : readProp<boolean>(infos?.get(r.tokenId), 'isFrozen') === true ? (
+                        <Badge colorScheme="red">frozen</Badge>
+                      ) : (
+                        <Text as="span" fontSize="xs" color="gray.400">no</Text>
+                      )}
                     </Td>
                   </Tr>
                 ))}

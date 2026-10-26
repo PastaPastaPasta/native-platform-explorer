@@ -2,6 +2,13 @@
 
 import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
+import {
+  parseAsArrayOf,
+  parseAsJson,
+  parseAsNumberLiteral,
+  parseAsString,
+  useQueryStates,
+} from 'nuqs';
 import { Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
@@ -15,16 +22,33 @@ import {
 } from '@components/contract/DocumentsResultsTable';
 import { DocumentsFiltersPanel } from '@components/contract/DocumentsFiltersPanel';
 import { CursorPagination } from '@components/pagination/CursorPagination';
-import { type PageSize } from '@components/pagination/PageSizeSelector';
+import { PAGE_SIZES } from '@components/pagination/PageSizeSelector';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContract, useDocumentsQuery } from '@sdk/queries';
+import { usePlatformProtocolVersion } from '@sdk/health';
 import { shortId } from '@util/identifier';
 import {
   getDocumentTypeSchema,
   getIndicesForType,
   heuristicColumnsForType,
-  validateWhereAgainstIndices,
 } from '@util/schema';
+import {
+  buildDocumentsQuery,
+  isDocumentFilterList,
+  parseOrderBy,
+  serializeOrderBy,
+  type DocumentFilter,
+  type OrderBy,
+} from '@util/document-filters';
+
+// Filters, order, page size and the cursor stack live in the URL so a filtered
+// page is linkable and Back steps through pages.
+const URL_STATE = {
+  where: parseAsJson<DocumentFilter[]>((v) => (isDocumentFilterList(v) ? v : null)).withDefault([]),
+  order: parseAsString,
+  limit: parseAsNumberLiteral(PAGE_SIZES).withDefault(25),
+  after: parseAsArrayOf(parseAsString).withDefault([]),
+};
 
 function extractRows(data: unknown): Array<Record<string, unknown>> {
   if (!data) return [];
@@ -63,28 +87,31 @@ function Content() {
   const indices = useMemo(() => getIndicesForType(docSchema), [docSchema]);
   const columns = useMemo(() => heuristicColumnsForType(docSchema), [docSchema]);
 
-  const [filters, setFilters] = useState<Record<string, string>>({});
-  const activeFields = Object.entries(filters)
-    .filter(([, v]) => v.trim().length > 0)
-    .map(([k]) => k);
-
-  const validation = useMemo(
-    () => validateWhereAgainstIndices(activeFields, indices),
-    [activeFields, indices],
-  );
-
-  const [limit, setLimit] = useState<PageSize>(25);
-  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
+  const [state, setState] = useQueryStates(URL_STATE, { history: 'push' });
+  const [resets, setResets] = useState(0);
+  const filtersKey = JSON.stringify(state.where);
+  // Value-keyed so the derived query is stable across renders.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const filters = useMemo(() => state.where, [filtersKey]);
+  const orderBy = parseOrderBy(state.order);
+  const orderKey = state.order ?? '';
+  const limit = state.limit;
+  const cursorStack = state.after;
   const startAfter = cursorStack[cursorStack.length - 1];
 
-  const whereClauses: unknown[] = activeFields.map((f) => [f, '==', filters[f]!.trim()]);
+  const protocolVersion = usePlatformProtocolVersion();
+  const built = useMemo(
+    () => buildDocumentsQuery(filters, parseOrderBy(orderKey || null), docSchema, indices, protocolVersion),
+    [filters, orderKey, docSchema, indices, protocolVersion],
+  );
 
   const queryParams =
-    validation.valid && id && type
+    built.errors.length === 0 && id && type && docSchema
       ? {
           dataContractId: id,
           documentTypeName: type,
-          where: whereClauses.length ? whereClauses : undefined,
+          where: built.where.length ? built.where : undefined,
+          orderBy: built.orderBy.length ? built.orderBy : undefined,
           limit,
           startAfter,
         }
@@ -105,9 +132,13 @@ function Content() {
     );
   }
 
+  // Any change to the query invalidates the cursor stack: a document ID is
+  // only a valid `startAfter` within the ordering that produced it.
+  const applyQuery = (next: DocumentFilter[], nextOrder: OrderBy | null) =>
+    void setState({ where: next, order: serializeOrderBy(nextOrder), after: [] });
   const resetFilters = () => {
-    setFilters({});
-    setCursorStack([undefined]);
+    setResets((n) => n + 1); // also discard unapplied draft rows
+    void setState({ where: [], order: null, after: [] });
   };
 
   return (
@@ -144,13 +175,17 @@ function Content() {
         ) : (
           <>
             <DocumentsFiltersPanel
+              key={`${filtersKey}|${orderKey}|${resets}`}
+              docSchema={docSchema}
               indices={indices}
               filters={filters}
-              onFiltersChange={setFilters}
-              activeFields={activeFields}
-              validation={validation}
+              orderBy={orderBy}
+              derivedOrderBy={built.orderByDerived ? built.orderBy[0] : null}
+              errors={built.errors}
+              warnings={built.warnings}
               limit={limit}
-              onLimitChange={setLimit}
+              onApply={applyQuery}
+              onLimitChange={(n) => void setState({ limit: n, after: [] })}
               onReset={resetFilters}
             />
 
@@ -172,13 +207,13 @@ function Content() {
                   {rows.length} document{rows.length === 1 ? '' : 's'} shown
                 </Text>
                 <CursorPagination
-                  pageIndex={cursorStack.length - 1}
-                  hasPrev={cursorStack.length > 1}
+                  pageIndex={cursorStack.length}
+                  hasPrev={cursorStack.length > 0}
                   hasNext={rows.length === limit}
-                  onPrev={() => setCursorStack((s) => s.slice(0, -1))}
+                  onPrev={() => void setState({ after: cursorStack.slice(0, -1) })}
                   onNext={() => {
                     const lastId = getLastDocId(rows);
-                    if (lastId) setCursorStack((s) => [...s, lastId]);
+                    if (lastId) void setState({ after: [...cursorStack, lastId] });
                   }}
                 />
               </HStack>

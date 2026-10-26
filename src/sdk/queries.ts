@@ -342,6 +342,17 @@ export function useIdentityContractNonce(id: string | undefined, contractId: str
   );
 }
 
+/** Keys the identity has bound to a contract (encryption / decryption keys
+ *  with contract bounds). Empty when it has none. */
+export function useIdentityContractKeys(id: string | undefined, contractId: string | undefined) {
+  const query = { identityIds: [id!], contractId: contractId! };
+  return useSdkQuery(
+    ['identities', 'contractKeys', id, contractId],
+    (sdk) => sdk.identities.contractKeys(query) as Promise<unknown>,
+    { enabled: !!id && !!contractId, staleTime: STRUCTURAL, withProofFn: (sdk) => sdk.identities.contractKeysWithProof(query), methodName: 'identities.contractKeys', methodParams: { identityIds: [id], contractId } },
+  );
+}
+
 export function useIdentityByPublicKeyHash(pkh: string | undefined) {
   return useSdkQuery(
     ['identities', 'byPublicKeyHash', pkh],
@@ -370,6 +381,7 @@ export function useContract(id: string | undefined) {
   );
 }
 
+/** The (at most 10) newest stored versions of a contract that keeps history. */
 export function useContractHistory(id: string | undefined) {
   return useSdkQuery(
     ['contracts', 'getHistory', id],
@@ -388,6 +400,28 @@ export function useDocument(
     ['documents', 'get', contractId, type, docId],
     (sdk) => sdk.documents.get(contractId!, type!, docId!) as Promise<unknown>,
     { enabled: !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.getWithProof(contractId!, type!, docId!), methodName: 'documents.get', methodParams: { contractId, documentType: type, documentId: docId } },
+  );
+}
+
+/** Drive's MAX_DOCUMENT_HISTORY_FETCH_LIMIT. */
+export const DOCUMENT_HISTORY_PAGE = 10;
+
+/** Up to 10 revisions (Platform's cap) of a document whose type keeps
+ *  history, oldest first after `startAfterMs`, keyed by block time (ms).
+ *  Platform only stores these when `documentsKeepHistory` is set; otherwise
+ *  the query fails its proof. */
+export function useDocumentHistory(
+  contractId: string | undefined,
+  type: string | undefined,
+  docId: string | undefined,
+  enabled = true,
+  startAfterMs = 0,
+) {
+  const query = { dataContractId: contractId!, documentTypeName: type!, documentId: docId!, startAtMs: startAfterMs, limit: DOCUMENT_HISTORY_PAGE };
+  return useSdkQuery(
+    ['documents', 'history', contractId, type, docId, startAfterMs],
+    (sdk) => sdk.documents.history(query) as Promise<unknown>,
+    { enabled: enabled && !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.historyWithProof(query), methodName: 'documents.history', methodParams: { dataContractId: contractId, documentTypeName: type, documentId: docId, startAtMs: startAfterMs, limit: DOCUMENT_HISTORY_PAGE } },
   );
 }
 
@@ -437,6 +471,31 @@ export function useTokenIdentityBalances(
     ['tokens', 'identityBalances', identityId, tokenIds?.join(',') ?? ''],
     (sdk) => sdk.tokens.identityBalances(identityId!, tokenIds!) as Promise<unknown>,
     { enabled: !!identityId && !!tokenIds && tokenIds.length > 0, staleTime: LIVE, withProofFn: (sdk) => sdk.tokens.identityBalancesWithProof(identityId!, tokenIds!), methodName: 'tokens.identityBalances', methodParams: { identityId, tokenIds } },
+  );
+}
+
+/** Per-token identity state; rc.2 exposes only `isFrozen`. Tokens for which the
+ *  identity has no stored info are absent from the map. */
+export function useTokenIdentityTokenInfos(
+  identityId: string | undefined,
+  tokenIds: string[] | undefined,
+) {
+  return useSdkQuery(
+    ['tokens', 'identityTokenInfos', identityId, tokenIds?.join(',') ?? ''],
+    (sdk) => sdk.tokens.identityTokenInfos(identityId!, tokenIds!) as Promise<unknown>,
+    { enabled: !!identityId && !!tokenIds && tokenIds.length > 0, staleTime: LIVE, withProofFn: (sdk) => sdk.tokens.identityTokenInfosWithProof(identityId!, tokenIds!), methodName: 'tokens.identityTokenInfos', methodParams: { identityId, tokenIds } },
+  );
+}
+
+export function usePerpetualDistributionLastClaim(
+  identityId: string | undefined,
+  tokenId: string | undefined,
+  enabled = true,
+) {
+  return useSdkQuery(
+    ['tokens', 'perpetualDistributionLastClaim', identityId, tokenId],
+    (sdk) => sdk.tokens.perpetualDistributionLastClaim(identityId!, tokenId!) as Promise<unknown>,
+    { enabled: enabled && !!identityId && !!tokenId, staleTime: LIVE, withProofFn: (sdk) => sdk.tokens.perpetualDistributionLastClaimWithProof(identityId!, tokenId!), methodName: 'tokens.perpetualDistributionLastClaim', methodParams: { identityId, tokenId } },
   );
 }
 
@@ -836,6 +895,52 @@ export function usePathElements(
   );
 }
 
+// ----- shielded pool -----
+export function useShieldedPoolState() {
+  return useSdkQuery(
+    ['shielded', 'poolState'],
+    (sdk) => sdk.shielded.poolState() as Promise<unknown>,
+    { staleTime: LIVE, withProofFn: (sdk) => sdk.shielded.poolStateWithProof(), methodName: 'shielded.poolState', methodParams: {} },
+  );
+}
+
+export function useShieldedMostRecentAnchor() {
+  return useSdkQuery(
+    ['shielded', 'mostRecentAnchor'],
+    (sdk) => sdk.shielded.mostRecentAnchor() as Promise<unknown>,
+    { staleTime: LIVE, withProofFn: (sdk) => sdk.shielded.mostRecentAnchorWithProof(), methodName: 'shielded.mostRecentAnchor', methodParams: {} },
+  );
+}
+
+/** Every currently valid anchor; Platform returns the whole set at once. */
+export function useShieldedAnchors() {
+  return useSdkQuery(
+    ['shielded', 'anchors'],
+    (sdk) => sdk.shielded.anchors() as Promise<unknown>,
+    { staleTime: LIVE, withProofFn: (sdk) => sdk.shielded.anchorsWithProof(), methodName: 'shielded.anchors', methodParams: {} },
+  );
+}
+
+/** Spent status for 32-byte nullifiers, given as hex. */
+export function useShieldedNullifiers(nullifiersHex: string[] | undefined) {
+  const bytes = () => nullifiersHex!.map((hex) => Uint8Array.from(hex.match(/../g)!.map((b) => parseInt(b, 16))));
+  return useSdkQuery(
+    ['shielded', 'nullifiers', nullifiersHex?.join(',') ?? ''],
+    (sdk) => sdk.shielded.nullifiers(bytes()) as Promise<unknown>,
+    { enabled: !!nullifiersHex && nullifiersHex.length > 0, staleTime: LIVE, withProofFn: (sdk) => sdk.shielded.nullifiersWithProof(bytes()), methodName: 'shielded.nullifiers', methodParams: { nullifiers: nullifiersHex } },
+  );
+}
+
+/** Encrypted notes from `startIndex`. The proof verifier needs `startIndex` to
+ *  be a multiple of the per-query cap (`SHIELDED_NOTES_WINDOW`). */
+export function useShieldedEncryptedNotes(startIndex: number | undefined, count: number) {
+  return useSdkQuery(
+    ['shielded', 'encryptedNotes', startIndex, count],
+    (sdk) => sdk.shielded.encryptedNotes(BigInt(startIndex!), count) as Promise<unknown>,
+    { enabled: startIndex !== undefined, staleTime: LIVE, withProofFn: (sdk) => sdk.shielded.encryptedNotesWithProof(BigInt(startIndex!), count), methodName: 'shielded.encryptedNotes', methodParams: { startIndex, count } },
+  );
+}
+
 // ----- protocol -----
 export function useProtocolVersionUpgradeState() {
   return useSdkQuery(
@@ -954,6 +1059,21 @@ export function useGroupActions(
   );
 }
 
+/** Members who signed a group action, with the power each contributed. */
+export function useGroupActionSigners(
+  contractId: string | undefined,
+  position: number | undefined,
+  status: 'ACTIVE' | 'CLOSED',
+  actionId: string | undefined,
+) {
+  const query = { dataContractId: contractId!, groupContractPosition: position!, status, actionId: actionId! };
+  return useSdkQuery(
+    ['group', 'actionSigners', contractId, position, status, actionId],
+    (sdk) => sdk.group.actionSigners(query) as Promise<unknown>,
+    { enabled: !!contractId && position !== undefined && !!actionId, staleTime: LIVE, withProofFn: (sdk) => sdk.group.actionSignersWithProof(query), methodName: 'group.actionSigners', methodParams: { dataContractId: contractId, groupContractPosition: position, status, actionId } },
+  );
+}
+
 export function useContestedResourceVoteState(
   contractId: string | undefined,
   documentTypeName: string | undefined,
@@ -970,6 +1090,33 @@ export function useContestedResourceVoteState(
     ['voting', 'contestedResourceVoteState', contractId, documentTypeName, indexName, JSON.stringify(indexValues ?? [])],
     (sdk) => sdk.voting.contestedResourceVoteState(query) as Promise<unknown>,
     { enabled: !!contractId && !!documentTypeName && !!indexName && !!indexValues, staleTime: LIVE, withProofFn: (sdk) => sdk.voting.contestedResourceVoteStateWithProof(query), methodName: 'voting.contestedResourceVoteState', methodParams: { contractId, documentTypeName, indexName, indexValues } },
+  );
+}
+
+/** Masternode voter identities that voted for one contender, a page at a
+ *  time. Platform deletes these votes once the contest is decided. */
+export function useContestedResourceVoters(
+  contractId: string | undefined,
+  documentTypeName: string | undefined,
+  indexName: string | undefined,
+  indexValues: unknown[] | undefined,
+  contestantId: string | undefined,
+  startAfterVoterId?: string,
+  limit = 50,
+) {
+  const query = {
+    dataContractId: contractId!,
+    documentTypeName: documentTypeName!,
+    indexName: indexName!,
+    indexValues: indexValues!,
+    contestantId: contestantId!,
+    limit,
+    ...(startAfterVoterId ? { startAtVoterId: startAfterVoterId, startAtIncluded: false } : {}),
+  };
+  return useSdkQuery(
+    ['group', 'contestedResourceVotersForIdentity', contractId, documentTypeName, indexName, JSON.stringify(indexValues ?? []), contestantId, startAfterVoterId ?? '', limit],
+    (sdk) => sdk.group.contestedResourceVotersForIdentity(query) as Promise<unknown>,
+    { enabled: !!contractId && !!documentTypeName && !!indexName && !!indexValues && !!contestantId, staleTime: LIVE, withProofFn: (sdk) => sdk.group.contestedResourceVotersForIdentityWithProof(query), methodName: 'group.contestedResourceVotersForIdentity', methodParams: { contractId, documentTypeName, indexName, indexValues, contestantId, startAfterVoterId, limit } },
   );
 }
 

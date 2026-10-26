@@ -13,6 +13,11 @@ export interface ContractShape {
   documentSchemas?: Record<string, unknown>;
   tokens?: Record<string, unknown>;
   groups?: Record<string, unknown>;
+  /** rs-dpp `DataContractConfig` (`keepsHistory`, `readonly`, defaults…). */
+  config?: Record<string, unknown>;
+  keywords?: string[];
+  description?: string;
+  formatVersion?: string;
   raw: unknown;
 }
 
@@ -36,7 +41,8 @@ export function toPlain(value: unknown): unknown {
   return value;
 }
 
-function toRecord(value: unknown): Record<string, unknown> | undefined {
+/** `toPlain`, keeping only plain (non-array) objects. */
+export function toRecord(value: unknown): Record<string, unknown> | undefined {
   const plain = toPlain(value);
   if (plain && typeof plain === 'object' && !Array.isArray(plain)) {
     return plain as Record<string, unknown>;
@@ -58,14 +64,36 @@ export function normaliseContract(input: unknown): ContractShape {
     toRecord(plain?.documentSchemas) ??
     toRecord(plain?.documents) ??
     toRecord(plain?.documentTypes);
+  // Prefer the contract's own toJSON(): the `tokens` / `groups` getters return
+  // WASM classes whose nested rules (AuthorizedActionTakers…) stay opaque.
   const tokens =
-    toRecord(readProp<unknown>(input, 'tokens')) ??
-    toRecord(readProp<unknown>(input, 'tokenConfigurations')) ??
     toRecord(plain?.tokens) ??
-    toRecord(plain?.tokenConfigurations);
+    toRecord(plain?.tokenConfigurations) ??
+    toRecord(readProp<unknown>(input, 'tokens')) ??
+    toRecord(readProp<unknown>(input, 'tokenConfigurations'));
   const groups =
-    toRecord(readProp<unknown>(input, 'groups')) ?? toRecord(plain?.groups);
-  return { id, ownerId, version, plain, documentSchemas, tokens, groups, raw: input };
+    toRecord(plain?.groups) ?? toRecord(readProp<unknown>(input, 'groups'));
+  const config = toRecord(plain?.config) ?? toRecord(readProp<unknown>(input, 'config'));
+  const keywords = Array.isArray(plain?.keywords)
+    ? (plain.keywords as unknown[]).filter((k): k is string => typeof k === 'string')
+    : undefined;
+  const description = typeof plain?.description === 'string' ? plain.description : undefined;
+  const fmt = plain?.$formatVersion;
+  const formatVersion = fmt === undefined || fmt === null ? undefined : String(fmt);
+  return { id, ownerId, version, plain, documentSchemas, tokens, groups, config, keywords, description, formatVersion, raw: input };
+}
+
+/** `config.keepsHistory`: Platform stores every contract version only when set. */
+export function contractKeepsHistory(c: ContractShape): boolean {
+  return c.config?.keepsHistory === true;
+}
+
+/** Whether documents of `type` keep their revision history: the type's
+ *  `documentsKeepHistory`, else the contract-wide default. */
+export function documentTypeKeepsHistory(c: ContractShape, type: string): boolean {
+  const schema = toRecord(c.documentSchemas?.[type]);
+  if (typeof schema?.documentsKeepHistory === 'boolean') return schema.documentsKeepHistory;
+  return c.config?.documentsKeepHistoryContractDefault === true;
 }
 
 export function documentTypeNames(c: ContractShape): string[] {
@@ -99,7 +127,8 @@ export interface TokenConfigShape {
   description?: string;
   baseSupply?: bigint | number | string;
   maxSupply?: bigint | number | string;
-  isStartedAsPaused?: boolean;
+  /** `startAsPaused`: the token was created paused. */
+  startAsPaused?: boolean;
   mainControlGroup?: number;
   /** Untouched raw value for callers who want to drill into full rules. */
   raw: unknown;
@@ -151,7 +180,7 @@ export function tokenConfigAt(c: ContractShape, position: number): TokenConfigSh
     description: readProp<string>(entry, 'description'),
     baseSupply: readProp<bigint | number | string>(entry, 'baseSupply'),
     maxSupply: readProp<bigint | number | string>(entry, 'maxSupply'),
-    isStartedAsPaused: readProp<boolean>(entry, 'isStartedAsPaused'),
+    startAsPaused: readProp<boolean>(entry, 'startAsPaused'),
     mainControlGroup: readProp<number>(entry, 'mainControlGroup'),
     raw: entry,
   };
@@ -187,4 +216,33 @@ export function contestedIndexes(c: ContractShape): ContestedIndex[] {
     }
   }
   return result;
+}
+
+export interface ContractHistoryEntry {
+  /** Block time (ms) of the update that produced this version. */
+  timestampMs: number;
+  version?: number;
+  /** The parts of the contract users define: schemas, tokens, groups, metadata. */
+  definition: Record<string, unknown>;
+}
+
+/** `contracts.getHistory` → versions sorted oldest first. */
+export function contractHistoryEntries(data: unknown): ContractHistoryEntry[] {
+  const entries: Array<[unknown, unknown]> =
+    data instanceof Map ? [...data.entries()] : data && typeof data === 'object' ? Object.entries(data) : [];
+  return entries
+    .map(([key, value]) => {
+      const c = normaliseContract(value);
+      const version = c.version === undefined ? undefined : Number(c.version);
+      const definition: Record<string, unknown> = { documentSchemas: c.documentSchemas ?? {} };
+      const schemaDefs = toRecord(c.plain?.schemaDefs);
+      if (schemaDefs) definition.schemaDefs = schemaDefs;
+      if (c.tokens && Object.keys(c.tokens).length) definition.tokens = c.tokens;
+      if (c.groups && Object.keys(c.groups).length) definition.groups = c.groups;
+      if (c.keywords?.length) definition.keywords = c.keywords;
+      if (c.description) definition.description = c.description;
+      return { timestampMs: Number(key), version: Number.isFinite(version) ? version : undefined, definition };
+    })
+    .filter((e) => Number.isFinite(e.timestampMs))
+    .sort((a, b) => a.timestampMs - b.timestampMs);
 }

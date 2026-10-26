@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import NextLink from 'next/link';
 import {
   Button,
@@ -15,8 +15,13 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { Identifier } from '@components/data/Identifier';
+import { BigNumberDisplay } from '@components/data/BigNumber';
 import { LoadingCard } from '@ui/LoadingCard';
+import { TokenPausedBadge, TokenPrice } from '@components/token/TokenPrice';
 import { useSdk } from '@sdk/hooks';
+import { useTokenDirectPurchasePrices, useTokenStatuses, useTokenTotalSupply } from '@sdk/queries';
+import { readProp } from '@util/sdk-shape';
+import { formatTokenAmount } from '@util/token-rules';
 import type { ContractShape } from '@util/contract';
 import { tokenConfigAt, tokenPositions } from '@util/contract';
 
@@ -33,6 +38,8 @@ interface DerivedToken {
  * through to the standalone token page. The derivation is deterministic
  * (`hash(contractId ‖ position)` — see `Token::calculate_token_id` in
  * `rs-drive`), so we can do it client-side without a network round-trip.
+ * Status and price are fetched for all tokens in one batched call each; total
+ * supply has no batch query, so each row asks for its own.
  */
 export function ContractTokensTab({
   contractId,
@@ -83,6 +90,15 @@ export function ContractTokensTab({
     };
   }, [contract, contractId, sdk, status]);
 
+  const tokenIds = useMemo(
+    () => (rows ?? []).map((r) => r.tokenId).filter((t): t is string => !!t),
+    [rows],
+  );
+  const statusesQ = useTokenStatuses(tokenIds.length ? tokenIds : undefined);
+  const pricesQ = useTokenDirectPurchasePrices(tokenIds.length ? tokenIds : undefined);
+  const statuses = statusesQ.data instanceof Map ? statusesQ.data : undefined;
+  const prices = pricesQ.data instanceof Map ? pricesQ.data : undefined;
+
   if (!contract) return null;
   if (error) {
     return <Text color="red.300" fontSize="sm">Failed to derive token IDs: {error}</Text>;
@@ -105,6 +121,9 @@ export function ContractTokensTab({
             <Th color="gray.400" borderColor="gray.750">Name</Th>
             <Th color="gray.400" borderColor="gray.750" isNumeric>Decimals</Th>
             <Th color="gray.400" borderColor="gray.750">Token ID</Th>
+            <Th color="gray.400" borderColor="gray.750" isNumeric>Total supply</Th>
+            <Th color="gray.400" borderColor="gray.750">Status</Th>
+            <Th color="gray.400" borderColor="gray.750">Direct-purchase price</Th>
             <Th color="gray.400" borderColor="gray.750"></Th>
           </Tr>
         </Thead>
@@ -122,6 +141,25 @@ export function ContractTokensTab({
               </Td>
               <Td borderColor="gray.750">
                 {r.tokenId ? <Identifier value={r.tokenId} dense /> : <Text color="gray.500">unknown</Text>}
+              </Td>
+              <Td borderColor="gray.750" isNumeric>
+                {r.tokenId ? <TokenSupplyCell tokenId={r.tokenId} decimals={r.decimals} /> : '—'}
+              </Td>
+              <Td borderColor="gray.750">
+                {statusesQ.isError ? (
+                  <Text as="span" color="red.300" fontSize="xs">failed</Text>
+                ) : (
+                  <TokenPausedBadge status={r.tokenId ? statuses?.get(r.tokenId) : undefined} loading={statusesQ.isLoading} />
+                )}
+              </Td>
+              <Td borderColor="gray.750">
+                {pricesQ.isLoading ? (
+                  <Text as="span" color="gray.500" fontSize="xs">…</Text>
+                ) : pricesQ.isError ? (
+                  <Text as="span" color="red.300" fontSize="xs">failed</Text>
+                ) : (
+                  <TokenPrice info={r.tokenId ? prices?.get(r.tokenId) : undefined} decimals={r.decimals} />
+                )}
               </Td>
               <Td borderColor="gray.750">
                 <HStack spacing={2}>
@@ -151,9 +189,19 @@ export function ContractTokensTab({
         </Tbody>
       </Table>
       <Text fontSize="xs" color="gray.500">
-        Token IDs are derived deterministically from <code>(contractId, position)</code> —
-        no network call is made per row beyond loading the contract.
+        Token IDs are derived deterministically from <code>(contractId, position)</code>.
+        Supply and prices are shown per whole token, using the token&apos;s decimals; Platform
+        stores prices per smallest unit (hover for the raw value).
       </Text>
     </VStack>
   );
+}
+
+function TokenSupplyCell({ tokenId, decimals }: { tokenId: string; decimals?: number }) {
+  const q = useTokenTotalSupply(tokenId);
+  if (q.isLoading) return <Text as="span" color="gray.500" fontSize="xs">…</Text>;
+  if (q.isError) return <Text as="span" color="red.300" fontSize="xs">failed</Text>;
+  const total = readProp<bigint>(q.data, 'totalSupply');
+  if (total === undefined || total === null) return <BigNumberDisplay value={null} />;
+  return <Text as="span" fontFamily="mono" fontSize="xs" color="gray.100">{formatTokenAmount(total, decimals)}</Text>;
 }

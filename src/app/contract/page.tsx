@@ -3,6 +3,7 @@
 import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import NextLink from 'next/link';
+import dynamic from 'next/dynamic';
 import {
   Button,
   Heading,
@@ -25,21 +26,29 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { DataContractDigestCard } from '@components/contract/DataContractDigestCard';
 import { ContractLanding } from '@components/contract/ContractLanding';
 import { ContractTokensTab } from '@components/contract/ContractTokensTab';
-import { CodeBlock } from '@components/data/CodeBlock';
+import { ContractGroupsTab } from '@components/contract/ContractGroupsTab';
+import { ContractInternalTab } from '@components/contract/ContractInternalTab';
+import { SchemaNavigator } from '@components/contract/SchemaNavigator';
 import { WriteActions } from '@components/broadcast/WriteActions';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
-import {
-  useContract,
-  useContractHistory,
-  useGroupsDataContracts,
-} from '@sdk/queries';
+import { useTabParam } from '@hooks/useTabParam';
+import { useContract, useContractHistory } from '@sdk/queries';
 import { shortId } from '@util/identifier';
 import {
+  contractKeepsHistory,
   documentTypeNames,
   groupPositions,
   normaliseContract,
   tokenPositions,
 } from '@util/contract';
+
+// The diff view only matters for the few contracts that keep history.
+const ContractHistoryTimeline = dynamic(
+  () => import('@components/contract/ContractHistoryTimeline').then((m) => m.ContractHistoryTimeline),
+  { loading: () => <LoadingCard lines={3} /> },
+);
+
+const TABS = ['schema', 'documents', 'tokens', 'groups', 'history', 'internal'] as const;
 
 function Content() {
   const params = useSearchParams();
@@ -52,11 +61,13 @@ function Content() {
   ]);
 
   const contractQ = useContract(id || undefined);
-  const groupsQ = useGroupsDataContracts(id ? [id] : undefined);
+  const tabs = useTabParam(TABS);
 
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
-  const hasHistory = Number(contract?.version ?? 0) > 1;
-  const historyQ = useContractHistory(hasHistory ? id : undefined);
+  // Platform keeps old versions only when `config.keepsHistory` is set; for
+  // any other contract `getHistory` fails its proof, so it is not asked.
+  const keepsHistory = contract ? contractKeepsHistory(contract) : false;
+  const historyQ = useContractHistory(keepsHistory && tabs.tab === 'history' ? id : undefined);
 
   if (!id) {
     return <ContractLanding />;
@@ -106,7 +117,7 @@ function Content() {
               ]}
             />
 
-            <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
+            <Tabs variant="soft-rounded" colorScheme="blue" isLazy index={tabs.index} onChange={tabs.onChange}>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">
                 <Tab fontSize="sm">Schema</Tab>
                 <Tab fontSize="sm">Document types ({docTypes.length})</Tab>
@@ -122,9 +133,7 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       JSON Schema
                     </Heading>
-                    <CodeBlock
-                      value={contract.documentSchemas ?? contract.plain ?? contract.raw}
-                    />
+                    <SchemaNavigator key={id} schemas={contract.documentSchemas} />
                   </InfoBlock>
                 </TabPanel>
 
@@ -183,27 +192,7 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       Groups
                     </Heading>
-                    <HStack spacing={3} flexWrap="wrap">
-                      {groups.length === 0 ? (
-                        <Text color="gray.400" fontSize="sm">
-                          This contract does not define any groups.
-                        </Text>
-                      ) : (
-                        groups.map((pos) => (
-                          <Button
-                            key={pos}
-                            as={NextLink}
-                            href={`/groups/detail/?contractId=${encodeURIComponent(id)}&position=${pos}`}
-                            size="sm"
-                            variant="outline"
-                            colorScheme="blue"
-                          >
-                            Group #{pos}
-                          </Button>
-                        ))
-                      )}
-                    </HStack>
-                    {groupsQ.data ? <CodeBlock value={groupsQ.data} /> : null}
+                    <ContractGroupsTab contractId={id} declared={contract.groups} />
                   </InfoBlock>
                 </TabPanel>
 
@@ -212,16 +201,18 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       Version history
                     </Heading>
-                    {!hasHistory ? (
+                    {!keepsHistory ? (
                       <Text color="gray.400" fontSize="sm">
-                        This contract is at version 1 and has never been updated.
+                        This contract does not keep history (<code>config.keepsHistory</code> is
+                        off), so Platform stores only its current version
+                        {contract.version !== undefined ? ` (version ${String(contract.version)})` : ''}.
                       </Text>
                     ) : historyQ.isLoading ? (
                       <LoadingCard lines={3} />
                     ) : historyQ.isError ? (
                       <ErrorCard error={historyQ.error} onRetry={() => historyQ.refetch()} />
                     ) : (
-                      <CodeBlock value={historyQ.data ?? 'No history recorded.'} />
+                      <ContractHistoryTimeline history={historyQ.data} />
                     )}
                   </InfoBlock>
                 </TabPanel>
@@ -231,7 +222,7 @@ function Content() {
                     <Heading size="sm" mb={3} color="gray.100">
                       Internal config
                     </Heading>
-                    <CodeBlock value={contract.plain ?? contract.raw} />
+                    <ContractInternalTab contract={contract} />
                   </InfoBlock>
                 </TabPanel>
               </TabPanels>

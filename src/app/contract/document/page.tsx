@@ -25,13 +25,18 @@ import { InfoLine } from '@components/data/InfoLine';
 import { DateBlock } from '@components/data/DateBlock';
 import { NotActive } from '@components/data/NotActive';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
-import { useDocument } from '@sdk/queries';
+import { useContract, useDocument } from '@sdk/queries';
+import { DocumentHistorySection } from '@components/contract/DocumentHistorySection';
+import { useTabParam } from '@hooks/useTabParam';
+import { documentTypeKeepsHistory, normaliseContract } from '@util/contract';
 import { WriteActions } from '@components/broadcast/WriteActions';
 import { shortId } from '@util/identifier';
 import { idToString, readProp } from '@util/sdk-shape';
 import { ShareLinkButton } from '@components/exploration/EntityActions';
 import { useSdk } from '@sdk/hooks';
 import { withNetwork } from '@util/exploration';
+
+const TABS = ['data', 'metadata', 'history'] as const;
 
 function Content() {
   const params = useSearchParams();
@@ -55,6 +60,9 @@ function Content() {
   ]);
 
   const q = useDocument(id || undefined, type || undefined, docId || undefined);
+  const contractQ = useContract(id || undefined);
+  const tabs = useTabParam(TABS);
+  const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
 
   if (!id || !type || !docId) {
     return (
@@ -155,10 +163,11 @@ function Content() {
               </VStack>
             </InfoBlock>
 
-            <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
+            <Tabs variant="soft-rounded" colorScheme="blue" isLazy index={tabs.index} onChange={tabs.onChange}>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">
                 <Tab fontSize="sm">Data</Tab>
                 <Tab fontSize="sm">Metadata</Tab>
+                <Tab fontSize="sm">Revision history</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel px={0}>
@@ -180,6 +189,25 @@ function Content() {
                         value={<DateBlock value={transferredAt ?? null} />}
                       />
                     </HStack>
+                  </InfoBlock>
+                </TabPanel>
+                <TabPanel px={0}>
+                  <InfoBlock>
+                    {contractQ.isLoading ? (
+                      <LoadingCard lines={2} />
+                    ) : contractQ.isError ? (
+                      <ErrorCard error={contractQ.error} onRetry={() => contractQ.refetch()} />
+                    ) : contract ? (
+                      <DocumentHistorySection
+                        key={`${id}/${type}/${docId}`}
+                        contractId={id}
+                        type={type}
+                        docId={docId}
+                        keepsHistory={documentTypeKeepsHistory(contract, type)}
+                      />
+                    ) : (
+                      <Text fontSize="sm" color="gray.400">The contract could not be loaded.</Text>
+                    )}
                   </InfoBlock>
                 </TabPanel>
               </TabPanels>

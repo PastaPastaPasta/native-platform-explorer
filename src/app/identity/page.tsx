@@ -1,13 +1,8 @@
 'use client';
 
-import { Suspense, useState } from 'react';
+import { Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
-  Button,
-  HStack,
-  Input,
-  InputGroup,
-  InputRightElement,
   Tab,
   TabList,
   TabPanel,
@@ -28,15 +23,15 @@ import { IdentityGroupsTab } from '@components/identity/IdentityGroupsTab';
 import { IdentityVotesTab } from '@components/identity/IdentityVotesTab';
 import { ViewedIdentitiesBanner } from '@components/identity/ViewedIdentitiesBanner';
 import { IdentityLanding } from '@components/identity/IdentityLanding';
-import { AliasesList } from '@components/data/AliasesList';
-import { CodeBlock } from '@components/data/CodeBlock';
+import { IdentityDpnsNames } from '@components/identity/IdentityDpnsNames';
+import { IdentityContractLookup } from '@components/identity/IdentityContractLookup';
 import { ProofFailureBanner } from '@components/data/ProofFailureBanner';
 import { WriteActions } from '@components/broadcast/WriteActions';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { useTabParam } from '@hooks/useTabParam';
 import {
   useIdentity,
   useIdentityBalanceAndRevision,
-  useIdentityContractNonce,
   useIdentityKeys,
   useIdentityNonce,
   useDpnsUsernames,
@@ -52,48 +47,7 @@ function TabHeading({ label }: { label: string }) {
   );
 }
 
-function AdvancedNonceLookup({ identityId }: { identityId: string }) {
-  const [contractId, setContractId] = useState('');
-  const [target, setTarget] = useState<string | undefined>(undefined);
-  const q = useIdentityContractNonce(identityId, target);
-  return (
-    <VStack align="stretch" spacing={3}>
-      <Text fontSize="sm" color="gray.250">
-        Look up this identity&apos;s nonce for a specific contract.
-      </Text>
-      <InputGroup size="sm">
-        <Input
-          placeholder="Contract ID"
-          aria-label="Contract ID for nonce lookup"
-          value={contractId}
-          onChange={(e) => setContractId(e.target.value)}
-          fontFamily="mono"
-          bg="gray.800"
-          borderColor="gray.700"
-        />
-        <InputRightElement width="5rem">
-          <Button
-            size="xs"
-            colorScheme="blue"
-            onClick={() => setTarget(contractId.trim() || undefined)}
-            isDisabled={contractId.trim().length === 0}
-          >
-            Look up
-          </Button>
-        </InputRightElement>
-      </InputGroup>
-      {q.isLoading ? (
-        <Text fontSize="xs" color="gray.400">
-          Resolving…
-        </Text>
-      ) : q.isError ? (
-        <ErrorCard error={q.error} onRetry={() => q.refetch()} />
-      ) : target && q.data !== undefined ? (
-        <CodeBlock value={{ identityId, contractId: target, nonce: String(q.data ?? null) }} />
-      ) : null}
-    </VStack>
-  );
-}
+const TABS = ['keys', 'dpns', 'tokens', 'groups', 'votes', 'advanced'] as const;
 
 function Content() {
   const params = useSearchParams();
@@ -110,6 +64,7 @@ function Content() {
   const keysQ = useIdentityKeys(id || undefined);
   const nonceQ = useIdentityNonce(id || undefined);
   const aliasesQ = useDpnsUsernames(id || undefined);
+  const tabs = useTabParam(TABS);
 
   if (!id) {
     return <IdentityLanding />;
@@ -207,7 +162,7 @@ function Content() {
               ]}
             />
 
-            <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
+            <Tabs variant="soft-rounded" colorScheme="blue" isLazy index={tabs.index} onChange={tabs.onChange}>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">
                 <Tab fontSize="sm">Keys</Tab>
                 <Tab fontSize="sm">DPNS</Tab>
@@ -234,7 +189,7 @@ function Content() {
                 <TabPanel px={0}>
                   <InfoBlock>
                     <TabHeading label="DPNS names" />
-                    {aliasesQ.isLoading ? <LoadingCard lines={2} /> : <AliasesList names={aliases} />}
+                    {aliasesQ.isLoading ? <LoadingCard lines={2} /> : <IdentityDpnsNames names={aliases} />}
                   </InfoBlock>
                 </TabPanel>
 
@@ -251,9 +206,7 @@ function Content() {
                 <TabPanel px={0}>
                   <InfoBlock>
                     <TabHeading label="Advanced" />
-                    <HStack align="flex-start" spacing={8} flexWrap="wrap">
-                      <AdvancedNonceLookup identityId={id} />
-                    </HStack>
+                    <IdentityContractLookup identityId={id} />
                   </InfoBlock>
                 </TabPanel>
               </TabPanels>
