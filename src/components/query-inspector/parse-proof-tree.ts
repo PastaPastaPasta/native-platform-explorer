@@ -21,12 +21,12 @@
 import { decodeGroveKey, type DecodedKey, type GroveContext } from './grovedb-schema';
 
 export type OpKind =
-  | 'kv'              // Push(KV(key, value)) / KVCount — data item proven by the query
+  | 'kv'              // Push(KV(key, value)) / KVCount / KVSum / KVCountSum — data item proven by the query
   | 'kvValueHash'     // Push(KVValueHash(key, value, HASH)) and the FeatureType variants
-  | 'kvRefValueHash'  // Push(KVRefValueHash(key, value, HASH)) — reference resolved to its value
-  | 'kvDigest'        // Push(KVDigest(key, HASH)) — sibling (value omitted)
-  | 'kvHash'          // Push(KVHash(HASH)) — sibling
-  | 'hash'            // Push(Hash(HASH)) — deep sibling
+  | 'kvRefValueHash'  // Push(KVRefValueHash(key, value, HASH)) and its Count/Sum forms — reference resolved to its value
+  | 'kvDigest'        // Push(KVDigest(key, HASH)) and its Count/Sum forms — sibling (value omitted)
+  | 'kvHash'          // Push(KVHash(HASH)) and its Count/Sum forms — sibling
+  | 'hash'            // Push(Hash(HASH)) and HashWithCount/Sum/CountAndSum — deep sibling
   | 'combine';        // Parent / Child stack-combine op
 
 export interface OpNode {
@@ -47,8 +47,15 @@ export interface OpNode {
   treeValue?: string;
   /** True when the op's element is a tree, i.e. it opens a nested layer. */
   isTree?: boolean;
-  /** For ops carrying a hash, the 32-byte hash as hex. */
+  /** For ops carrying a hash, the 32-byte hash as hex. For HashWith* nodes
+   *  this is the node's kv_hash; the node hash is derived from it. */
   hash?: string;
+  /** Count committed by a provable count tree node (`KVCount`, `KVHashCount`,
+   *  `HashWithCount`, the *CountSum forms, …), as printed (a u64). */
+  count?: string;
+  /** Sum committed by a provable sum tree node (`KVSum`, `KVDigestSum`,
+   *  `HashWithSum`, the *CountSum forms, …), as printed (an i64). */
+  sum?: string;
   /** For combine ops, which kind. */
   combine?: 'Parent' | 'Child' | 'ParentInverted' | 'ChildInverted';
 }
@@ -286,66 +293,134 @@ function parseOpLine(line: string): { op?: OpNode; issue?: string } | null {
   const base = { index, raw: line, variant, ...(push === 'PushInverted' ? { inverted: true } : {}) };
 
   // Reference: grovedb-query/src/proofs/mod.rs `enum Node`, as printed by
-  // node_to_string. The *Count variants carry a trailing u64 we show but
-  // otherwise ignore; every variant pushes exactly one node.
-  switch (variant) {
-    case 'KV':
-    case 'KVCount': {
-      const [key, rest] = splitKey(inner);
-      const parts = splitTopLevelArgs(rest);
-      if (parts.length < 1 || (variant === 'KVCount' && parts.length < 2)) break;
-      const count = variant === 'KVCount' ? ` (count=${parts[parts.length - 1]})` : '';
-      const value = (variant === 'KVCount' ? parts.slice(0, -1) : parts).join(', ');
-      return { op: { ...base, kind: 'kv', key, value: value + count } };
-    }
-    case 'KVValueHash':
-    case 'KVValueHashFeatureType':
-    case 'KVValueHashFeatureTypeWithChildHash':
-    case 'KVRefValueHash':
-    case 'KVRefValueHashCount': {
-      const [key, rest] = splitKey(inner);
-      const parts = splitTopLevelArgs(rest);
-      if (parts.length < 2) break;
-      const element = parts[0]!;
-      const extra =
-        variant === 'KVRefValueHashCount' && parts[2] ? ` (count=${parts[2]})` :
-        variant.startsWith('KVValueHashFeatureType') && parts[2] ? ` ${parts[2]}` :
-        '';
-      const hash = extractHash(parts[1]!);
-      if (variant.startsWith('KVRef')) {
-        return { op: { ...base, kind: 'kvRefValueHash', key, value: element + extra, hash } };
-      }
-      return {
-        op: {
-          ...base,
-          kind: 'kvValueHash',
-          key,
-          treeValue: element + extra,
-          isTree: TREE_ELEMENT.test(element),
-          hash,
-        },
-      };
-    }
-    case 'KVDigest':
-    case 'KVDigestCount': {
-      const [key, rest] = splitKey(inner);
-      return { op: { ...base, kind: 'kvDigest', key, hash: extractHash(rest) } };
-    }
-    case 'KVHash':
-    case 'KVHashCount':
-      return { op: { ...base, kind: 'kvHash', hash: extractHash(inner) } };
-    case 'Hash':
-      return { op: { ...base, kind: 'hash', hash: extractHash(inner) } };
-    default:
-      return {
-        op: { ...base, kind: 'hash' },
-        issue: `Op ${index} uses the unrecognized node variant ${variant}; it is drawn as an opaque sibling.`,
-      };
+  // node_to_string in grovedb/src/operations/proof/mod.rs. Provable count and
+  // sum trees add *Count / *Sum / *CountSum forms of the base variants that
+  // also carry the node's aggregate; it is split off here and otherwise the
+  // node is read like its base variant. Every variant pushes exactly one node.
+  // `variant` is any \w+ the parser printed, so skip inherited keys like `constructor`.
+  const shape = Object.hasOwn(NODE_SHAPES, variant) ? NODE_SHAPES[variant] : undefined;
+  if (!shape) {
+    return {
+      op: { ...base, kind: 'hash' },
+      issue: `Op ${index} uses the unrecognized node variant ${variant}; it is drawn as an opaque sibling.`,
+    };
   }
+  const parsed = parseNode(shape, inner);
+  if (parsed) return { op: { ...base, ...parsed } };
   return {
     op: { ...base, kind: 'hash' },
     issue: `Op ${index} (${variant}) has an unexpected shape and is drawn as an opaque sibling: ${body.slice(0, 120)}`,
   };
+}
+
+/** How a node variant prints: its base form plus the aggregates it carries. */
+interface NodeShape {
+  base: 'kv' | 'kvValueHash' | 'kvRefValueHash' | 'kvDigest' | 'kvHash' | 'hash' | 'hashWith';
+  count?: boolean;
+  sum?: boolean;
+}
+
+const NODE_SHAPES: Record<string, NodeShape> = {
+  KV: { base: 'kv' },
+  KVCount: { base: 'kv', count: true },
+  KVSum: { base: 'kv', sum: true },
+  KVCountSum: { base: 'kv', count: true, sum: true },
+  // A backward-references item: its value plus the hash of the referrer list.
+  KVBackwardsReferencesValueHash: { base: 'kvRefValueHash' },
+  KVValueHash: { base: 'kvValueHash' },
+  KVValueHashFeatureType: { base: 'kvValueHash' },
+  KVValueHashFeatureTypeWithChildHash: { base: 'kvValueHash' },
+  KVRefValueHash: { base: 'kvRefValueHash' },
+  KVRefValueHashCount: { base: 'kvRefValueHash', count: true },
+  KVRefValueHashSum: { base: 'kvRefValueHash', sum: true },
+  KVRefValueHashCountSum: { base: 'kvRefValueHash', count: true, sum: true },
+  KVDigest: { base: 'kvDigest' },
+  KVDigestCount: { base: 'kvDigest', count: true },
+  KVDigestSum: { base: 'kvDigest', sum: true },
+  KVDigestCountSum: { base: 'kvDigest', count: true, sum: true },
+  KVHash: { base: 'kvHash' },
+  KVHashCount: { base: 'kvHash', count: true },
+  KVHashSum: { base: 'kvHash', sum: true },
+  KVHashCountSum: { base: 'kvHash', count: true, sum: true },
+  Hash: { base: 'hash' },
+  // A whole subtree compressed to its root: kv_hash, child hashes, aggregate.
+  HashWithCount: { base: 'hashWith', count: true },
+  HashWithSum: { base: 'hashWith', sum: true },
+  HashWithCountAndSum: { base: 'hashWith', count: true, sum: true },
+};
+
+type ParsedNode = Omit<OpNode, 'index' | 'raw' | 'variant' | 'inverted'>;
+
+/**
+ * Remove the trailing aggregate args. Single-aggregate variants print a bare
+ * number (`KVSum(k, v, 5)`); the CountSum and HashWith* forms print
+ * `count=N` / `sum=N`. Returns null when the args don't end that way.
+ */
+function takeAggregates(shape: NodeShape, parts: string[]): { rest: string[]; count?: string; sum?: string } | null {
+  const names = [...(shape.count ? ['count'] : []), ...(shape.sum ? ['sum'] : [])];
+  if (parts.length < names.length) return null;
+  const rest = parts.slice(0, parts.length - names.length);
+  const tail = parts.slice(parts.length - names.length);
+  const out: { rest: string[]; count?: string; sum?: string } = { rest };
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i]!;
+    const m = tail[i]!.match(/^(?:(count|sum)=)?(-?\d+)$/);
+    if (!m || (m[1] !== undefined && m[1] !== name) || (m[1] === undefined && names.length > 1)) return null;
+    out[name as 'count' | 'sum'] = m[2]!;
+  }
+  return out;
+}
+
+/** ` (count=N)`, ` (sum=N)` or ` (count=N, sum=M)`, appended to printed values. */
+function aggregateSuffix(agg: { count?: string; sum?: string }): string {
+  const parts = [
+    ...(agg.count !== undefined ? [`count=${agg.count}`] : []),
+    ...(agg.sum !== undefined ? [`sum=${agg.sum}`] : []),
+  ];
+  return parts.length ? ` (${parts.join(', ')})` : '';
+}
+
+function parseNode(shape: NodeShape, inner: string): ParsedNode | null {
+  const keyed = shape.base !== 'kvHash' && shape.base !== 'hash' && shape.base !== 'hashWith';
+  const [key, rest] = keyed ? splitKey(inner) : [undefined, inner];
+  const agg = takeAggregates(shape, splitTopLevelArgs(rest));
+  if (!agg) return null;
+  const { rest: parts, ...aggregates } = agg;
+  const suffix = aggregateSuffix(aggregates);
+  switch (shape.base) {
+    case 'kv':
+      if (parts.length < 1) return null;
+      return { kind: 'kv', key, value: parts.join(', ') + suffix, ...aggregates };
+    case 'kvRefValueHash':
+      if (parts.length < 2) return null;
+      return { kind: 'kvRefValueHash', key, value: parts[0]! + suffix, hash: extractHash(parts[1]!), ...aggregates };
+    case 'kvValueHash': {
+      if (parts.length < 2) return null;
+      const element = parts[0]!;
+      // The FeatureType forms print the node's tree feature type third,
+      // e.g. `ProvableSummedMerkNode(12)`.
+      const feature = parts[2] ? ` ${parts[2]}` : '';
+      return {
+        kind: 'kvValueHash',
+        key,
+        treeValue: element + feature,
+        isTree: TREE_ELEMENT.test(element),
+        hash: extractHash(parts[1]!),
+      };
+    }
+    case 'kvDigest':
+      return { kind: 'kvDigest', key, hash: extractHash(parts.join(', ')), ...aggregates };
+    case 'kvHash':
+      return { kind: 'kvHash', hash: extractHash(parts.join(', ')), ...aggregates };
+    case 'hash':
+      return { kind: 'hash', hash: extractHash(parts.join(', ')) };
+    case 'hashWith': {
+      // `kv_hash=HASH[..], left=HASH[..], right=HASH[..]`
+      const kvHash = parts.find((p) => p.startsWith('kv_hash='));
+      if (parts.length !== 3 || !kvHash) return null;
+      return { kind: 'hash', hash: extractHash(kvHash), ...aggregates };
+    }
+  }
 }
 
 function extractHash(s: string): string | undefined {

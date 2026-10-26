@@ -1,0 +1,97 @@
+# Rebuilding the vendored GroveDB proof parser
+
+`grovedb_proof_parser_bg.wasm` (also copied verbatim to
+`public/wasm/grovedb_proof_parser_bg.wasm`; keep the two identical) and its glue
+come from the standalone crate
+[PastaPastaPasta/grovedb-proof-parser](https://github.com/PastaPastaPasta/grovedb-proof-parser)
+at commit `2e2bf0e`, with its dependencies bumped as described below. `src/lib.rs` is
+unchanged. It decodes the bytes with `bincode::decode_from_slice` (standard
+config, big-endian, no limit) into `GroveDBProof` and returns its `Display` text.
+
+## Current build
+
+| | |
+|---|---|
+| grovedb | `dashpay/grovedb` rev `2128ea18f9b1c2f9502f99967b1b1c6485c91f8b` (v6.1.1, the rev testnet Drive 5.0.0-rc.8 pins) |
+| bincode | `grovedb-bincode =2.1.0` (grovedb 6.x's bincode fork; it must be the same crate grovedb derives `Decode` with) |
+| wasm-bindgen | crate and `wasm-bindgen-cli` both `=0.2.118` (the version that generated the previous glue) |
+| Rust | 1.99.1 stable, target `wasm32-unknown-unknown`, release profile `opt-level = "s"`, `lto = true` |
+| wasm-opt | binaryen `version_133`, `-O` (what `wasm-pack build` runs by default) |
+| Output | 199,718 bytes, sha256 `51bfb1301dcd6a420313e8e8eb96ab2003a9ac20d290d4f7a70ae2fcd91bd38d` |
+
+The previous build used grovedb rev `8f25b20d` and produced 145,970 bytes. That
+grovedb predates the provable-sum-tree proof nodes (`KVSum`, `KVDigestSum`,
+`HashWithSum`, `KVCountSum`, …). It traps on real SUM/AVG proofs from testnet.
+
+### Why this grovedb rev
+
+The proof wire format only gains variants over time. Comparing
+`grovedb-query/src/proofs/encoding.rs`, `tree_feature_type.rs` and
+`grovedb/src/operations/proof/mod.rs` across the revs the servers use:
+
+- Platform v4.0.0-rc.2 (grovedb `fc814983`, 4.0.0) and mainnet Drive 4.1.2
+  (grovedb `6bb2ebff`, v5.0.1) have identical op opcode tables. Both already
+  have the sum/count-sum nodes (opcodes `0x1e`–`0x1f`, `0x30`–`0x3d` and
+  `0x40`–`0x4d`) and tree feature types 0–8.
+- Testnet Drive 5.0.0-rc.8 (grovedb `2128ea18`, 6.1.1) keeps every opcode
+  body unchanged and only appends `KVBackwardsReferencesValueHash`
+  (`0x50`–`0x53`). It also appends `ProofBytes` variants after `CommitmentTree`
+  and leaves `GroveDBProof` V0/V1, `LayerProof` and `ProveOptions` unchanged.
+  `node_to_string` only gains arms for the new nodes. The only text change
+  is that the op list now stops after the first `Error decoding op` line.
+
+So 6.1.1 decodes proofs from all three. The testnet DPNS fixtures decode to the
+same text as before.
+
+## Steps
+
+```bash
+mkdir -p /work/scratch/grovedb-parser && cd /work/scratch/grovedb-parser
+git clone https://github.com/PastaPastaPasta/grovedb-proof-parser
+cd grovedb-proof-parser && git checkout 2e2bf0e
+```
+
+Replace the `[dependencies]` block in `Cargo.toml` with:
+
+```toml
+grovedb = { git = "https://github.com/dashpay/grovedb", rev = "2128ea18f9b1c2f9502f99967b1b1c6485c91f8b", default-features = false, features = ["verify"] }
+bincode = { package = "grovedb-bincode", version = "=2.1.0" }
+wasm-bindgen = "=0.2.118"
+console_error_panic_hook = "0.1"
+```
+
+Then build:
+
+```bash
+rustup target add wasm32-unknown-unknown
+cargo install wasm-bindgen-cli --version 0.2.118 --locked
+# wasm-opt: binaryen release version_133 (x86_64-linux tarball from GitHub)
+CARGO_BUILD_JOBS=4 cargo build --release --target wasm32-unknown-unknown
+wasm-bindgen --target web --out-dir pkg target/wasm32-unknown-unknown/release/grovedb_proof_parser.wasm
+wasm-opt -O pkg/grovedb_proof_parser_bg.wasm -o pkg/grovedb_proof_parser_bg.opt.wasm
+```
+
+Copy `pkg/grovedb_proof_parser_bg.opt.wasm` to both
+`src/lib/grovedb-proof-parser/grovedb_proof_parser_bg.wasm` and
+`public/wasm/grovedb_proof_parser_bg.wasm`.
+
+## Local edits to the generated glue
+
+Diff the freshly generated `pkg/grovedb_proof_parser.js` and `.d.ts` against
+the vendored copies, then re-apply these edits:
+
+- `grovedb_proof_parser.js`: a `/* eslint-disable */` first line. Also the
+  `__resetInstance()` function, added to the final `export { … }` list. It
+  clears `wasm`, `wasmModule` and the cached memory views, then returns the
+  compiled module. `src/lib/grovedb-proof-parser.ts` uses it to start a fresh
+  instance after a trap.
+- `grovedb_proof_parser.d.ts`: the matching
+  `export function __resetInstance(): WebAssembly.Module | undefined;`.
+
+With wasm-bindgen 0.2.118 those are the only differences, so the glue can be
+reused as-is when only the grovedb rev changes. The generated `_bg.wasm.d.ts`
+is used unmodified.
+
+Afterwards, run `pnpm vitest run src/components/query-inspector src/lib`. The
+fixtures in `src/components/query-inspector/__tests__/fixtures` must decode to
+their `.txt` files.

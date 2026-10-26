@@ -43,6 +43,16 @@ describe('ProofTreeView', () => {
     expect(badges.filter((b) => b.startsWith('TARGET'))).toHaveLength(3);
   });
 
+  it('draws a real sum-tree proof and labels nodes with their sums', () => {
+    const { container } = renderWithProviders(<ProofTreeView text={proofText('testnet-release-range-sum')} />);
+    expect(screen.queryByText(/could not be fully reconstructed/)).not.toBeInTheDocument();
+    const texts = Array.from(container.querySelectorAll('svg text')).map((t) => t.textContent ?? '');
+    expect(texts).toContain('sum=2');
+    expect(texts).toContain('sum=1');
+    const titles = Array.from(container.querySelectorAll('svg title')).map((t) => t.textContent ?? '');
+    expect(titles.find((t) => t.includes('HashWithSum'))).toMatch(/kv hash: +13b1c739[\s\S]*sum: +1$/);
+  });
+
   it('shows an incomplete-tree notice for a malformed layer', () => {
     renderWithProviders(<ProofTreeView text={merkLayer(['Push(Hash(HASH[aa]))', 'Push(Hash(HASH[bb]))', 'Child', 'Child)'])} />);
     expect(screen.getByRole('status')).toHaveTextContent('1 layer could not be fully reconstructed');

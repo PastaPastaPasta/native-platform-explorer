@@ -187,6 +187,11 @@ export function ProofExplainer({ text }: { text: string }) {
             body="Same idea, even more compact: just the node hash, no key — used for nodes far from the query path."
           />
           <LegendRow
+            symbol="…Count(…) / …Sum(…) / HashWith…(…)"
+            name="count / sum tree node"
+            body="In provable count and sum trees every node also commits to the count and/or sum of its subtree, so each variant above has a Count, Sum or CountSum form carrying that total (KVSum is a data item, KVDigestSum and KVHashSum are siblings). HashWithCount / HashWithSum / HashWithCountAndSum stand in for a whole subtree inside an aggregate query's range, so the proof need not list its elements."
+          />
+          <LegendRow
             symbol="Parent / Child"
             name="stack-combine op"
             body="Pop two items off the stack and combine them into a parent-child pair, hashing them together. This is how the verifier rebuilds the tree shape."

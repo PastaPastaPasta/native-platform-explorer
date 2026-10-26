@@ -103,6 +103,44 @@ describe('parseProofTree on real testnet proofs', () => {
   });
 });
 
+describe('parseProofTree on a real testnet sum-tree proof', () => {
+  const SUM = proofText('testnet-release-range-sum');
+
+  it('reconstructs every layer and reads the ProvableSumTree nodes', () => {
+    const root = parseProofTree(SUM)!;
+    const layers = flattenLayers(root);
+    for (const layer of layers) {
+      expect(buildLayerTree(layer).issues, `layer ${layer.layerIndex}`).toEqual([]);
+    }
+    expect(layers.reduce((n, l) => n + l.ops.length, 0)).toBe(printedOps(SUM, /^\d+: /));
+
+    const tags = layerByKey(root, 'tagName');
+    expect(tags.ops).toEqual([
+      expect.objectContaining({ kind: 'kvDigest', variant: 'KVDigestSum', key: 'e2e-rel2a-cli-p2-20261017', sum: '2', hash: expect.stringMatching(/^ce1b3240[0-9a-f]{56}$/) }),
+      expect.objectContaining({ kind: 'hash', variant: 'HashWithSum', sum: '1', hash: expect.stringMatching(/^13b1c739[0-9a-f]{56}$/) }),
+      expect.objectContaining({ kind: 'combine', combine: 'Child' }),
+    ]);
+    expect(tags.ops[0]!.count).toBeUndefined();
+    const tree = buildLayerTree(tags);
+    expect(tree.root).toMatchObject({ kind: 'sibling', op: { variant: 'KVDigestSum' }, right: { op: { variant: 'HashWithSum' } } });
+  });
+
+  it('decodes the document path down to the summed index and descends into the sum tree', () => {
+    const root = parseProofTree(SUM)!;
+    expect(layerByKey(root, 'release').decodedParentKey?.name).toBe("'release' (document type)");
+    expect(layerByKey(root, 'repoId').decodedParentKey?.name).toBe("'repoId' (index property)");
+    expect(layerByKey(root, 'tagName').context).toBe('index-property');
+    const parent = flattenLayers(root).find((l) => l.children.has('tagName'))!;
+    const sumTree = parent.ops.find((op) => op.key === 'tagName')!;
+    expect(sumTree).toMatchObject({ kind: 'kvValueHash', isTree: true });
+    expect(sumTree.treeValue).toMatch(/^ProvableSumTree\([0-9a-f]+, 2\)$/);
+    const summary = summarizeProof(root);
+    expect(summary.totals.issues).toBe(0);
+    // An aggregate proof attests to totals, not to individual documents.
+    expect(summary.totals.kv).toBe(0);
+  });
+});
+
 describe('parseProofTree op variants and layouts', () => {
   it('parses the V0 merk_proof layout', () => {
     // Synthetic: GroveDBProofV0 Display layout with hand-written ops.
@@ -149,6 +187,59 @@ describe('parseProofTree op variants and layouts', () => {
     const tree = buildLayerTree(root);
     expect(tree.root).toMatchObject({ kind: 'subtree', op: { key: 'counts', isTree: true, hash: 'aa' } });
     expect(root.children.get('counts')!.ops[0]).toMatchObject({ kind: 'kv', value: 'Item(0x01) (count=1)' });
+  });
+
+  it('classifies every count and sum node variant like its base variant', () => {
+    const H = (c: string) => `HASH[${c.repeat(64)}]`;
+    const ops = [
+      `Push(KVSum(a, Item(0x01), -5))`,
+      `Push(KVCountSum(b, SumItem(7), count=3, sum=21))`,
+      `Push(KVRefValueHashSum(c, Item(0x02), ${H('1')}, 9))`,
+      `Push(KVRefValueHashCountSum(d, Item(0x03), ${H('2')}, count=1, sum=4))`,
+      `Push(KVDigestCount(e, ${H('3')}, 6))`,
+      `Push(KVDigestCountSum(f, ${H('4')}, count=2, sum=-8))`,
+      `Push(KVHashSum(${H('5')}, 12))`,
+      `Push(KVHashCountSum(${H('6')}, count=4, sum=40))`,
+      `Push(HashWithCount(kv_hash=${H('7')}, left=${H('0')}, right=${H('0')}, count=11))`,
+      `Push(HashWithCountAndSum(kv_hash=${H('8')}, left=${H('0')}, right=${H('9')}, count=5, sum=50))`,
+      `PushInverted(KVBackwardsReferencesValueHash(g, Item(0x04), ${H('a')}))`,
+    ];
+    const root = parseProofTree(['LayerProof {', '  proof: Merk(', ...ops.map((op, i) => `    ${i}: ${op}`), '}'].join('\n'))!;
+    expect(root.issues).toEqual([]);
+    expect(root.ops.map((op) => [op.variant, op.kind, op.key, op.count, op.sum])).toEqual([
+      ['KVSum', 'kv', 'a', undefined, '-5'],
+      ['KVCountSum', 'kv', 'b', '3', '21'],
+      ['KVRefValueHashSum', 'kvRefValueHash', 'c', undefined, '9'],
+      ['KVRefValueHashCountSum', 'kvRefValueHash', 'd', '1', '4'],
+      ['KVDigestCount', 'kvDigest', 'e', '6', undefined],
+      ['KVDigestCountSum', 'kvDigest', 'f', '2', '-8'],
+      ['KVHashSum', 'kvHash', undefined, undefined, '12'],
+      ['KVHashCountSum', 'kvHash', undefined, '4', '40'],
+      ['HashWithCount', 'hash', undefined, '11', undefined],
+      ['HashWithCountAndSum', 'hash', undefined, '5', '50'],
+      ['KVBackwardsReferencesValueHash', 'kvRefValueHash', 'g', undefined, undefined],
+    ]);
+    expect(root.ops.map((op) => op.value)).toEqual([
+      'Item(0x01) (sum=-5)', 'SumItem(7) (count=3, sum=21)', 'Item(0x02) (sum=9)', 'Item(0x03) (count=1, sum=4)',
+      undefined, undefined, undefined, undefined, undefined, undefined, 'Item(0x04)',
+    ]);
+    expect(root.ops.map((op) => op.hash?.[0])).toEqual([undefined, undefined, '1', '2', '3', '4', '5', '6', '7', '8', 'a']);
+    expect(root.ops.at(-1)!.inverted).toBe(true);
+    const summary = summarizeProof(root).totals;
+    expect(summary).toMatchObject({ kv: 5, kvHash: 4, hash: 2 });
+  });
+
+  it('flags count and sum nodes whose aggregate is missing or mislabeled', () => {
+    const root = parseProofTree([
+      'LayerProof {', '  proof: Merk(',
+      '    0: Push(KVSum(a, Item(0x01)))',
+      '    1: Push(KVHashCountSum(HASH[aa], sum=1, count=2))',
+      '    2: Push(HashWithSum(kv_hash=HASH[bb], sum=3))',
+      '}',
+    ].join('\n'))!;
+    expect(root.ops.map((op) => op.kind)).toEqual(['hash', 'hash', 'hash']);
+    expect(root.issues).toHaveLength(3);
+    expect(root.issues[0]).toBe('Op 0 (KVSum) has an unexpected shape and is drawn as an opaque sibling: Push(KVSum(a, Item(0x01)))');
   });
 
   it('reads keys containing brackets and an empty key', () => {
@@ -242,6 +333,9 @@ describe('buildLayerTree on malformed proofs', () => {
     const { root, issues } = buildLayerTree(layer(['Push(Hash(HASH[aa]))', 'Push(KVFuture(x, HASH[bb]))', 'Parent']));
     expect(root?.left?.op.index).toBe(0);
     expect(issues).toEqual(['Op 1 uses the unrecognized node variant KVFuture; it is drawn as an opaque sibling.']);
+    expect(buildLayerTree(layer(['Push(constructor(HASH[aa]))'])).issues).toEqual([
+      'Op 0 uses the unrecognized node variant constructor; it is drawn as an opaque sibling.',
+    ]);
   });
 
   it('builds a very deep chain without recursion', () => {

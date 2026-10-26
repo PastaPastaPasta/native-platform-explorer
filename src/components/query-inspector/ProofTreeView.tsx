@@ -7,6 +7,7 @@ import {
   buildLayerTree,
   parseProofTree,
   summarizeProof,
+  type OpNode,
   type ParsedLayer,
   type TreeNode,
 } from './parse-proof-tree';
@@ -65,15 +66,24 @@ function nodeLabels(node: TreeNode): { primary: string; secondary?: string } {
       secondary: value ? ellipsize(value, node.kind === 'kv' ? 10 : 14, node.kind === 'kv' ? 8 : 6) : undefined,
     };
   }
-  // sibling
+  // sibling; a provable count/sum tree node also shows the aggregate it commits to
+  const aggregate = aggregateLabel(op);
   if (op.kind === 'hash') {
-    return { primary: `HASH[${ellipsize(op.hash, 6, 4)}]` };
+    return { primary: `HASH[${ellipsize(op.hash, 6, 4)}]`, secondary: aggregate };
   }
   if (op.kind === 'kvHash') {
-    return { primary: `KVHash[${ellipsize(op.hash, 6, 4)}]` };
+    return { primary: `KVHash[${ellipsize(op.hash, 6, 4)}]`, secondary: aggregate };
   }
   // kvDigest
-  return { primary: ellipsize(op.key, 8, 6), secondary: `HASH[${ellipsize(op.hash, 6, 4)}]` };
+  return { primary: ellipsize(op.key, 8, 6), secondary: aggregate ?? `HASH[${ellipsize(op.hash, 6, 4)}]` };
+}
+
+function aggregateLabel(op: OpNode): string | undefined {
+  const parts = [
+    ...(op.count !== undefined ? [`count=${op.count}`] : []),
+    ...(op.sum !== undefined ? [`sum=${op.sum}`] : []),
+  ];
+  return parts.length ? ellipsize(parts.join(' '), 12, 6) : undefined;
 }
 
 function nodeTooltip(node: TreeNode): string {
@@ -83,7 +93,9 @@ function nodeTooltip(node: TreeNode): string {
   if (op.key !== undefined) lines.push(`key:        ${op.key}`);
   if (op.value) lines.push(`value:      ${op.value}`);
   if (op.treeValue) lines.push(`subtree:    ${op.treeValue}`);
-  if (op.hash) lines.push(`hash:       ${op.hash}`);
+  if (op.hash) lines.push(`${op.variant?.startsWith('HashWith') ? 'kv hash:   ' : 'hash:      '} ${op.hash}`);
+  if (op.count !== undefined) lines.push(`count:      ${op.count}`);
+  if (op.sum !== undefined) lines.push(`sum:        ${op.sum}`);
   return lines.join('\n');
 }
 

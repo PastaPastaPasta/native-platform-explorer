@@ -38,6 +38,18 @@ describe('parseGrovedbProof', () => {
     expect(text.trim()).toBe(proofText('testnet-dpns-domain-desc').trim());
   });
 
+  it('parses a real testnet sum-tree proof', async () => {
+    // A range SUM over a rangeSummable index: the last layer is a
+    // ProvableSumTree, whose nodes the previous parser build (grovedb 8f25b20d) trapped on.
+    const { parseGrovedbProof } = await freshParser();
+    const text = await parseGrovedbProof(proofBytes('testnet-release-range-sum'));
+    expect(text.trim()).toBe(proofText('testnet-release-range-sum').trim());
+    expect(text).toContain('Push(KVDigestSum(e2e-rel2a-cli-p2-20261017, HASH[ce1b3240');
+    expect(text).toMatch(/Push\(HashWithSum\(kv_hash=HASH\[13b1c739[0-9a-f]+\], left=HASH\[0{64}\], right=HASH\[0{64}\], sum=1\)\)/);
+    expect(text).toContain('ProvableSumTree(');
+    expect(text).not.toContain('Error decoding op');
+  });
+
   it('normalizes parser failures to friendly errors', async () => {
     const { parseGrovedbProof, ProofParseError } = await freshParser();
     await expect(parseGrovedbProof(new Uint8Array())).rejects.toThrow('No proof bytes to parse.');
