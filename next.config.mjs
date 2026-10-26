@@ -106,6 +106,9 @@ const nextConfig = {
     // Exposed to client code via process.env; see src/version.ts.
     NEXT_PUBLIC_EVO_SDK_VERSION: evoSdkVersion,
     NEXT_PUBLIC_GIT_COMMIT: gitCommit,
+    // Always inlined: unset would leave a runtime process.env lookup while
+    // CI's empty value inlines "", so the two builds differed.
+    NEXT_PUBLIC_BASE_PATH: basePath,
   },
   images: {
     unoptimized: true,
