@@ -15,7 +15,15 @@ import { useContract } from '@sdk/queries';
 import { parseSqlMulti, resolveContractId } from '@util/sql-parser';
 import { quoteSqlIdentifier } from '@util/query-workspace';
 import { documentTypeNames, normaliseContract } from '@util/contract';
-import { getDocumentTypeSchema, getIndicesForType } from '@util/schema';
+import { getDocumentTypeAggregates, getDocumentTypeSchema, getIndicesForType, type SchemaIndex } from '@util/schema';
+
+/** Aggregate capabilities of an index, as declared in the contract. */
+function indexFlags(index: SchemaIndex): string[] {
+  return [
+    index.countable ? (index.rangeCountable ? 'countable, range countable' : 'countable') : '',
+    index.summable ? `summable: ${index.summable}${index.rangeSummable ? ' (range)' : ''}` : '',
+  ].filter(Boolean);
+}
 
 export function SchemaAssistant({
   contractId,
@@ -46,6 +54,7 @@ export function SchemaAssistant({
       ? Object.entries(schema.properties as Record<string, Record<string, unknown>>)
       : [];
   const indices = getIndicesForType(schema);
+  const docAggregates = getDocumentTypeAggregates(schema);
   const from = first?.contractAlias
     ? `${quoteSqlIdentifier(first.contractAlias)}.${quoteSqlIdentifier(type)}`
     : quoteSqlIdentifier(type);
@@ -107,6 +116,19 @@ export function SchemaAssistant({
           System fields: $id, $ownerId, $revision, $createdAt, $updatedAt.
         </Text>
       )}
+      {!!schema && (
+        <Text fontSize="xs" color="gray.400">
+          Unfiltered aggregates:{' '}
+          {docAggregates.countable || docAggregates.summable
+            ? [
+                docAggregates.countable ? 'COUNT(*)' : '',
+                docAggregates.summable ? `SUM(${docAggregates.summable})` : '',
+                docAggregates.countable && docAggregates.summable ? `AVG(${docAggregates.summable})` : '',
+              ].filter(Boolean).join(', ')
+            : 'none (the document type is not documentsCountable or documentsSummable)'}
+          . Filtered COUNT, SUM and AVG need an index with the matching flag below.
+        </Text>
+      )}
       {indices.map((index) => (
         <HStack key={index.name} flexWrap="wrap" spacing={2}>
           <Text fontSize="xs" color="gray.400">
@@ -116,6 +138,11 @@ export function SchemaAssistant({
           <Code fontSize="xs">
             {index.properties.map((property) => `${property.field} ${property.order}`).join(', ')}
           </Code>
+          {indexFlags(index).map((flag) => (
+            <Text key={flag} as="span" fontSize="2xs" color="brand.light" borderWidth="1px" borderColor="gray.700" borderRadius="sm" px={1}>
+              {flag}
+            </Text>
+          ))}
           <Button
             size="xs"
             variant="ghost"
