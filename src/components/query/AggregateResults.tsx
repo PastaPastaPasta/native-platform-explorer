@@ -234,6 +234,13 @@ export function AggregateResults({
               <Code fontSize="2xs">{mergedFields.join(', ')}</Code> value for separate rows.
             </Text>
           )}
+          {rows.length === 1 && rows[0]!.key === '' && (
+            <Text role="note" fontSize="xs" color="orange.300">
+              This GROUP BY came back as one total instead of a row per{' '}
+              <Code fontSize="2xs">{groupField}</Code> value, as testnet does for two ranges, or IN with a range,
+              grouped by one field. Run one statement per value for separate totals.
+            </Text>
+          )}
           {truncated && (
             <Text role="status" fontSize="xs" color="orange.300">
               {merged

@@ -91,4 +91,11 @@ describe('AggregateResults', () => {
     renderWithProviders(<AggregateResults {...props} groupBound={{ limit: 7, entriesPerGroup: 3 }} />);
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
+
+  it('explains a GROUP BY that came back as one total', () => {
+    // Testnet answer for COUNT(*) WHERE class IN ('CS101','CS202') AND semester > 20241 GROUP BY class.
+    renderWithProviders(<AggregateResults {...base} groupBy={['class']} groupBySchemas={[{ type: 'string' }]} data={new Map([['', 42n]])} />);
+    expect(screen.getByRole('note')).toHaveTextContent('This GROUP BY came back as one total instead of a row per class value');
+    expect(screen.getByText('(all)')).toBeInTheDocument();
+  });
 });
