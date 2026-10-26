@@ -183,6 +183,7 @@ describe('OperationShell', () => {
       sdk: useSdkMock().sdk,
       signer: useSignerMock().signer,
       options: initialOptions,
+      network: 'testnet',
       assertCurrent: expect.any(Function),
     });
     expect(execute.mock.calls[0]?.[0].options).not.toBe(initialOptions);

@@ -30,6 +30,7 @@ import { ContractGroupsTab } from '@components/contract/ContractGroupsTab';
 import { ContractInternalTab } from '@components/contract/ContractInternalTab';
 import { SchemaNavigator } from '@components/contract/SchemaNavigator';
 import { WriteActions } from '@components/broadcast/WriteActions';
+import { writeModeEnabled } from '@/config';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useTabParam } from '@hooks/useTabParam';
 import { useContract, useContractHistory } from '@sdk/queries';
@@ -162,16 +163,18 @@ function Content() {
                               >
                                 {t}
                               </Button>
-                              <Button
-                                as={NextLink}
-                                href={`/broadcast/?op=document.create&contract=${encodeURIComponent(id)}&type=${encodeURIComponent(t)}`}
-                                size="sm"
-                                variant="ghost"
-                                colorScheme="blue"
-                                title={`Create a ${t} document`}
-                              >
-                                + new
-                              </Button>
+                              {writeModeEnabled() ? (
+                                <Button
+                                  as={NextLink}
+                                  href={`/broadcast/?op=document.create&contract=${encodeURIComponent(id)}&type=${encodeURIComponent(t)}`}
+                                  size="sm"
+                                  variant="ghost"
+                                  colorScheme="blue"
+                                  title={`Create a ${t} document`}
+                                >
+                                  + new
+                                </Button>
+                              ) : null}
                             </HStack>
                           </WrapItem>
                         ))

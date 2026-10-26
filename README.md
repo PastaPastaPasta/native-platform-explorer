@@ -62,7 +62,7 @@ build time.
 | `NEXT_PUBLIC_DEFAULT_NETWORK` | Initial network: `mainnet`, `testnet` or a devnet name | `testnet` |
 | `NEXT_PUBLIC_QUORUM_URL_MAINNET` | Quorum service for mainnet (`https://`, or `http://` for localhost) | SDK default, `https://quorums.mainnet.networks.dash.org` |
 | `NEXT_PUBLIC_QUORUM_URL_TESTNET` | Quorum service for testnet | SDK default, `https://quorums.testnet.networks.dash.org` |
-| `NEXT_PUBLIC_DISABLE_WRITE_MODE` | `true` disables `/wallet` and `/broadcast` (they show a notice) for read-only deployments | `false` |
+| `NEXT_PUBLIC_DISABLE_WRITE_MODE` | `true` makes a read-only deployment: `/wallet` and `/broadcast` show a notice and every link into them is hidden | `false` |
 | `NEXT_PUBLIC_RATE_PROVIDER` | DASH/USD rate: `coinbase`, `kucoin` (needs a CORS proxy) or `none` | `coinbase` |
 | `NEXT_PUBLIC_WELL_KNOWN_URL` | Extra well-known registry JSON loaded at runtime | unset |
 | `NEXT_PUBLIC_BRIDGE_URL` | Bridge for identity create/top-up shortcuts; empty disables them | `https://bridge.dashhq.org` |
@@ -109,7 +109,8 @@ Custom and disabled bridge URLs are covered by the utility unit tests.
 ## Write mode
 
 Opt-in. `NEXT_PUBLIC_DISABLE_WRITE_MODE=true` turns it off: `/wallet` and
-`/broadcast` then show a write-mode-disabled notice.
+`/broadcast` then show a write-mode-disabled notice, and the sidebar Write
+links, owner shortcuts, token Actions row and contest vote link are hidden.
 `/broadcast` lists the operations; each one goes Build → Review → Sign +
 broadcast → Result.
 
@@ -140,8 +141,8 @@ voting key with its ProTxHash, or none for an already-signed transition.
 - Nothing secret is persisted. Local signers keep keys in tab memory and wipe
   owned byte arrays on disconnect, after ten minutes without user input
   (visible or hidden tab), when leaving `/wallet` and `/broadcast`, and on
-  unload. Automatic clears keep only the signer kind and public identity ID as
-  a reconnect hint. JavaScript strings and SDK-internal copies cannot be
+  unload. Automatic clears keep only the signer kind, public identity ID and
+  network as a reconnect hint, shown only on that network. JavaScript strings and SDK-internal copies cannot be
   reliably zeroed.
 - Secret fields are masked text fields, so browsers don't offer to save them,
   and Review never shows them.
@@ -150,19 +151,25 @@ voting key with its ProTxHash, or none for an already-signed transition.
   extra acknowledgement.
 - Writes are refused when the SDK session's protocol version differs from the
   network's.
+- An asset-lock create, top-up or fund is refused before submission unless
+  the asset-lock key controls the locked output (checked against the proof's
+  transaction, or for a chain-lock proof the transaction fetched from Insight
+  and matched to its txid).
 - Errors before submission are "not submitted". Anything after submission
   starts is "outcome unknown", with no Retry: check the affected identity or
   address first, because a retry may spend twice.
 
 **Tested.** Run end to end on testnet through the served export, with proved
 read-back: every Platform-address operation, asset-lock identity create and
-top-up, raw broadcast (#47), and the token operations including group
-propose/co-sign (#48). A document create was checked from Node with the same
-inputs (#45). Not yet broadcast live: contract register/update, document
-replace/delete/transfer/set price/purchase, identity credit transfer,
-withdrawal and key updates, DPNS registration, masternode votes (no voting key
-was available), and pre-programmed or once-per-identity token claims. These are
-covered by unit and real-WASM tests. No write has been tested on mainnet.
+top-up, raw broadcast (#47); the token operations including group
+propose/co-sign (#48); contract register and update, document create, replace,
+delete, transfer, set price and purchase, identity credit transfer, withdrawal,
+adding and disabling keys, and non-contested DPNS registration
+(`fix/discrepancies-l`; document transfer, set price and purchase needed a
+revision fix found in that run). Not yet broadcast live: masternode votes (no
+voting key was available), contested DPNS registrations, and pre-programmed or
+once-per-identity token claims. These are covered by unit and real-WASM tests.
+No write has been tested on mainnet.
 
 Without a Core wallet, create or top up an identity through the bridge at
 `https://bridge.dashhq.org` (Mainnet and Testnet): choose Create New Identity,

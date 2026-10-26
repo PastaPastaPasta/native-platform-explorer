@@ -8,16 +8,18 @@ interface Preset {
   label: string;
   /** Resolve a system-contract testnet ID by registry key. */
   contractKey?: string;
-  /** Or pin a raw contract ID (used for the grades-on-devnet-paloma aggregates). */
+  /** Or pin a raw contract ID (used for the testnet grades aggregates). */
   contractId?: string;
   sql: string;
   /** Optional grouping tag for the preset row. */
   group?: 'docs' | 'aggregates';
 }
 
-// Grade contract registered on devnet-paloma; aggregate presets only return
-// real data when the user is connected to that devnet.
-const GRADES_CONTRACT_ID = 'C2SZQvHzzQ8XXM47muPHt9dLrf64Sc2aSSdAiyPhDT2i';
+// A published testnet contract with about 150 seeded `grade` documents (7 classes,
+// semesters 20241–20261) and countable, summable and averageable indexes.
+// The system-contract presets work on every network; this contract is on
+// testnet only.
+export const TESTNET_GRADES_CONTRACT_ID = '7DiE1W5YYgUXx7s68YTMGEM9UssZ5TFg7dXdGaDj8cet';
 
 const PRESETS: Preset[] = [
   {
@@ -48,46 +50,46 @@ const PRESETS: Preset[] = [
     group: 'docs',
     sql: 'SELECT * FROM rewardShare LIMIT 25',
   },
-  // ── Aggregates against the grades contract (devnet-paloma) ──────────
+  // ── Aggregates against the grades contract (testnet) ──────────
   {
     key: 'grades-total-count',
     label: 'grades: global COUNT',
-    contractId: GRADES_CONTRACT_ID,
+    contractId: TESTNET_GRADES_CONTRACT_ID,
     group: 'aggregates',
     sql: 'SELECT COUNT(*) FROM grade',
   },
   {
     key: 'grades-total-avg',
     label: 'grades: global AVG(score)',
-    contractId: GRADES_CONTRACT_ID,
+    contractId: TESTNET_GRADES_CONTRACT_ID,
     group: 'aggregates',
     sql: 'SELECT AVG(score) FROM grade',
   },
   {
     key: 'grades-per-class-count',
     label: 'grades: COUNT GROUP BY class',
-    contractId: GRADES_CONTRACT_ID,
+    contractId: TESTNET_GRADES_CONTRACT_ID,
     group: 'aggregates',
     sql: "SELECT COUNT(*) FROM grade WHERE class IN ('CS101','CS202','MATH150','MATH250','PHYS200','BIO110','ENG101') GROUP BY class",
   },
   {
     key: 'grades-per-class-avg',
     label: 'grades: AVG(score) GROUP BY class',
-    contractId: GRADES_CONTRACT_ID,
+    contractId: TESTNET_GRADES_CONTRACT_ID,
     group: 'aggregates',
     sql: "SELECT AVG(score) FROM grade WHERE class IN ('CS101','CS202','MATH150','MATH250','PHYS200','BIO110','ENG101') GROUP BY class",
   },
   {
     key: 'grades-cs101-range-avg',
     label: 'grades: CS101 rolling-window AVG (range)',
-    contractId: GRADES_CONTRACT_ID,
+    contractId: TESTNET_GRADES_CONTRACT_ID,
     group: 'aggregates',
     sql: "SELECT AVG(score) FROM grade WHERE class == 'CS101' AND semester BETWEEN 20251 AND 20253",
   },
   {
     key: 'grades-cs101-per-semester',
     label: 'grades: CS101 AVG per semester (RangeDistinct)',
-    contractId: GRADES_CONTRACT_ID,
+    contractId: TESTNET_GRADES_CONTRACT_ID,
     group: 'aggregates',
     sql: "SELECT AVG(score) FROM grade WHERE class == 'CS101' AND semester BETWEEN 20241 AND 20262 GROUP BY semester ORDER BY semester ASC",
   },
@@ -139,7 +141,7 @@ export function QueryPresets({ onSelect }: QueryPresetsProps) {
   return (
     <VStack align="stretch" spacing={2}>
       {renderRow('Presets', docs)}
-      {renderRow('Aggregates (devnet-paloma grades)', aggregates)}
+      {renderRow('Aggregates (testnet grades contract)', aggregates)}
     </VStack>
   );
 }

@@ -13,7 +13,7 @@ import { fetchCurrentEpoch } from './current-epoch';
 import { withContractRefresh } from './contract-cache';
 import { getConfig } from '@/config';
 import { classifyProof, getQuorumKeySource, isProofFallbackBlocked, verificationForResponse, type ProofState } from './proofs';
-import { walkInstance } from '@util/wasm-json';
+import { identifierLeaf, walkInstance } from '@util/wasm-json';
 import { extractErrorMessage, isAbsentEntityError, isAllEndpointsFailure, normalizeError } from './errors';
 import {
   useQueryProofRecorder,
@@ -244,20 +244,6 @@ function useSdkQuery<TData>(
   const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
   const proofState = classifyProof(q, { hasProofVariant });
   return overlayQueryResult(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled }) as SdkQueryResult<TData>;
-}
-
-function identifierLeaf(value: object): unknown {
-  const candidate = value as { __type?: unknown; toJSON?: () => unknown };
-  let type: unknown;
-  try { type = candidate.__type; }
-  catch { return undefined; } // The walker skips unreadable prototype getters.
-  if (type !== 'Identifier') return undefined;
-  const serialized = candidate.toJSON?.();
-  // rc.2 Identifier.toJSON() is canonical Base58, including 32 ones for zero.
-  if (typeof serialized !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(serialized)) {
-    throw new Error('SDK Identifier did not return a canonical JSON string.');
-  }
-  return serialized;
 }
 
 /**
@@ -505,6 +491,16 @@ export function useTokenIdentityBalances(
     ['tokens', 'identityBalances', identityId, tokenIds?.join(',') ?? ''],
     (sdk) => sdk.tokens.identityBalances(identityId!, tokenIds!) as Promise<unknown>,
     { enabled: !!identityId && !!tokenIds && tokenIds.length > 0, staleTime: LIVE, withProofFn: (sdk) => sdk.tokens.identityBalancesWithProof(identityId!, tokenIds!), methodName: 'tokens.identityBalances', methodParams: { identityId, tokenIds } },
+  );
+}
+
+/** One token's balances for a list of identities (the seeded holders view:
+ *  Platform has no holder index). Identities without a balance are absent. */
+export function useTokenBalances(identityIds: string[] | undefined, tokenId: string | undefined) {
+  return useSdkQuery(
+    ['tokens', 'balances', tokenId, identityIds?.join(',') ?? ''],
+    (sdk) => sdk.tokens.balances(identityIds!, tokenId!) as Promise<unknown>,
+    { enabled: !!tokenId && !!identityIds && identityIds.length > 0, staleTime: LIVE, withProofFn: (sdk) => sdk.tokens.balancesWithProof(identityIds!, tokenId!), methodName: 'tokens.balances', methodParams: { identityIds, tokenId } },
   );
 }
 

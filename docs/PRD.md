@@ -13,6 +13,7 @@ was decided against or deferred, it says so. Per-PR history is in
 | Date | Change |
 |---|---|
 | 2026-04 | Original PRD, written before implementation. It targeted Next 14 / React 18, evo-sdk 3.x, Montserrat/Open Sans/Roboto Mono, a dark-only theme copied from `platform-explorer`, `[param]` route segments, `react-markdown`, an optional untrusted mode, `NEXT_PUBLIC_DAPI_ADDRESSES_*`, an extension-first signer, and Vercel/IPFS deploys. The full text is in git history (`git log -- docs/PRD.md`). |
+| 2026-10-26 (later) | Discrepancy fixes from the #49 audit and the first live run of contract, document, identity-signed and DPNS writes through the UI (`fix/discrepancies-l`): write entry points hidden in read-only builds, asset-lock key checked before submission, token writes in the SDK reference, testnet aggregate presets, seeded holders through the proof layer, no `trusted` flag in share links; §13.4, §18 and §19 updated. |
 | 2026-10-26 | Rewritten to match what shipped through PR #48. Main differences from the original: Next.js 16 / React 19 and evo-sdk 5.0.0-rc.8; Fraunces/Geist/JetBrains Mono with light and dark modes; static-export query-parameter routes (`/identity?id=`); trusted-only sessions (untrusted mode removed); a quorum-service override instead of custom DAPI endpoints for mainnet/testnet; devnets; the SQL query workspace, Query Inspector, `/tools`, `/saved`, `/sdk-reference` and `/network/shielded`; the full write surface (contracts, documents, tokens, identities, Platform addresses, DPNS, masternode votes, raw broadcast); the well-known registry with network scope and remote loading; connection settings; GitHub Pages as the only deploy target; the original 12-facade list replaced by the generated page→SDK-call mapping. |
 
 ---
@@ -230,6 +231,9 @@ quorum service.
 | Shielded `encryptedNotes` starts must be multiples of 8192 (Drive needs multiples of 2048, the SDK verifier 4 × 2048). | Notes load on request, one 8192-note window at a time. |
 | Evonode block counts by id/range return empty maps for past epochs. | The current epoch walks every page; past epochs use the finalized record's `blockProposers`. |
 | `system.currentQuorumsInfo` is unproved and hard-codes `isVerified: true`. | The Verified column is not shown; type and threshold are marked inferred. |
+| `documents.transfer` / `setPrice` / `purchase` send the document's revision as given, and Drive requires the stored revision + 1 ("invalid revision Some(1). The desired revision is 1"). | The executors bump the fetched document's revision before these writes (found in the live run). |
+| `dpns.registerName` reports `fullDomainName` in the homograph-safe form (o → 0, i/l → 1), not the label as stored. | The receipt names the label as entered and adds the normalized form when it differs. |
+| Reading `AssetLockProof.instantLockProof` on a chain-lock proof (or the reverse) traps the WASM module. | The asset-lock key check branches on `lockType` first. |
 | Token configuration, `ResourceVote` and `GroupAction` JSON changed shape in 5.0 (internally tagged enums, `$kind`). | `enumVariant` and the readers accept both rc.2 and 5.0 shapes; unreadable rules show "unknown", not "on". |
 | Error kinds were renumbered in 5.0 (`ExecutionNotProved` inserted at 6). | `src/sdk/errors.ts` keys its map by enum name, and a test checks it against the installed enum. |
 | A gRPC NOT_FOUND from one node is an unproven answer. | Classified as retryable transport, not absence. Only structured SDK kinds (EpochNotFound, TotalCreditsNotFound, IdentityNonceNotFound) become `null`. |
@@ -357,9 +361,8 @@ A snapshot of live, verifiable state. No historical charts.
 Most SDK reads go through a hook that calls the `…WithProof` variant where one
 exists, so the card's proof chip and the Query Inspector have the proof.
 Paginated walks (proposers, protocol votes, epoch-range batches),
-`contracts.getMany` previews and the seeded holder balances call the plain
-method, which the trusted SDK still verifies internally, but no proof bytes are
-captured (§12.4).
+and `contracts.getMany` previews call the plain method, which the trusted SDK
+still verifies internally, but no proof bytes are captured (§12.4).
 
 ### 10.1 Identity — `/identity/?id=`
 
@@ -430,9 +433,12 @@ token ID alone. Tabs:
 4. **Holders**: points to `/token/holders`. Platform has no holder index, so
    holders are a **seeded list**: pasted identity IDs or DPNS names, plus
    identities viewed in this browser if the user opted in
-   (`tokens.balances([ids], tokenId)`).
+   (`tokens.balancesWithProof([ids], tokenId)`, with a proof chip and Query
+   Inspector entry).
 5. **Balance lookup**: balance, frozen flag and last perpetual claim for an
-   entered identity (`?holder=`).
+   entered identity (`?holder=`). Without one it shows the identity last
+   connected on `/wallet` in this tab on this network (the public reconnect
+   hint).
 
 An **Actions** row offers the token writes the connected or remembered
 identity could plausibly perform under the token's rules (§13.3).
@@ -540,7 +546,8 @@ not a general SQL engine. Details: [design/query-workspace.md](design/query-work
   cursors. A full page triggers a one-document probe to decide whether Next is
   enabled.
 - Saved queries (per network and contract, opt-in, local), share links
-  (SQL, contract, network), JSON/CSV export of the current page, generated SDK
+  (SQL, contract, network; the `trusted` flag older links carry is ignored),
+  JSON/CSV export of the current page, generated SDK
   examples.
 
 ### 11.2 Query Inspector
@@ -564,8 +571,10 @@ decoding), and a `system.pathElements` reader.
 The page→SDK-call mapping generated from TypeScript symbols by
 `scripts/generate-sdk-reference.mjs` into `src/data/sdk-reference.json`. It
 lists calls reachable through each route's components and hooks, including
-conditional ones; shared connection setup and methods on returned SDK objects
-are out of scope. `pnpm build` fails on a stale mapping
+conditional ones. It follows functions passed as shorthand properties
+(`{ execute }`) and `const` aliases or destructuring of SDK facades
+(`const tokens = sdk.tokens`); shared connection setup and methods on returned
+SDK objects are out of scope. `pnpm build` fails on a stale mapping
 (`pnpm generate:sdk-reference` updates it).
 
 ### 11.5 Saved items — `/saved`
@@ -632,9 +641,11 @@ fresh quorum list) instead of Retry.
 
 Opt-in. The default experience is read-only. With
 `NEXT_PUBLIC_DISABLE_WRITE_MODE=true`, `/broadcast` and `/wallet` show a
-"write mode is disabled" notice instead of their consoles. The sidebar links
-and the owner shortcuts on entity pages are still rendered and lead to that
-notice (§18).
+"write mode is disabled" notice instead of their consoles, and every link into
+them is hidden: the sidebar Write group, owner and create shortcuts on
+identity, contract and document pages, "Register a new contract", the token
+Actions row and the contest vote link. `/sdk-reference` lists the two pages
+without linking them.
 Design notes: [design/transaction-workflow.md](design/transaction-workflow.md),
 [design/signer-capabilities.md](design/signer-capabilities.md).
 
@@ -681,7 +692,9 @@ field, so browsers don't offer to save a key), with fallbacks where masking is
 unsupported. Local signers keep keys in tab memory only and clear them on
 disconnect, after ten minutes without input (visible or hidden tab), when
 leaving `/wallet` and `/broadcast`, and on unload. An automatic clear keeps only
-the signer kind and public identity ID in sessionStorage as a reconnect hint.
+the signer kind, public identity ID and network in sessionStorage as a
+reconnect hint, used only on that network (it also marks owner shortcuts and
+defaults the token balance lookup).
 JavaScript strings and SDK-internal copies cannot be reliably zeroed; the app
 zeroes byte arrays it owns.
 
@@ -689,7 +702,13 @@ zeroes byte arrays it owns.
 connected signer: Platform address keys, the one-time asset-lock key, a
 masternode voting key, or no key for an already-signed transition. Those keys
 are decoded, checked against the network, loaded into WASM, zeroed and freed
-when the operation settles.
+when the operation settles. Before an asset-lock create, top-up or fund is
+submitted, the asset-lock key must control the locked credit output: the P2PKH
+hash of that output (in the asset-lock payload) must equal the key's public key
+hash, or the operation fails as not submitted. InstantSend proofs carry the
+transaction; for chain-lock proofs it is fetched from the network's Insight
+API and must hash to the proof's txid (a network without Insight needs an
+InstantSend proof).
 
 Key selection (`capabilities.ts`, `resolveSigningCriteria`): document operations
 accept keys up to the type's `signatureSecurityLevelRequirement` (default HIGH)
@@ -728,23 +747,29 @@ asset-lock transactions.
 ### 13.4 Test status
 
 Run end to end on testnet through the served export, with proved read-back:
-every Platform-address operation, asset-lock identity create and top-up, and
-raw broadcast (#47); mint, burn, transfer, freeze, unfreeze, destroy frozen,
-pause/resume, single and tiered set price, direct purchase, perpetual claim,
-config updates, and group propose/co-sign of max-supply changes (#48). A
-document create was checked from Node with the inputs the form builds (#45),
-not through the explorer.
 
-Not yet broadcast live (unit- and real-WASM-tested, and built to Review on
-testnet in #41 where noted):
+- every Platform-address operation, asset-lock identity create and top-up, and
+  raw broadcast (#47);
+- mint, burn, transfer, freeze, unfreeze, destroy frozen, pause/resume, single
+  and tiered set price, direct purchase, perpetual claim, config updates, and
+  group propose/co-sign of max-supply changes (#48);
+- contract register (with `$defs`) and update (version 1 → 2, `$defs` kept);
+  document create, replace, delete, transfer, set price and purchase; identity
+  credit transfer, withdrawal to a Core address, adding a key with its private
+  key and disabling a key; DPNS registration of a non-contested name
+  (`fix/discrepancies-l`). Document transfer failed on the first run (revision
+  not bumped) and passed after the fix; set price and purchase ran only with
+  the fix. A contested-length label was built to Review to check its notice
+  but not submitted.
 
-- contract register and update (update built to Review);
-- document create through the UI, replace, delete, transfer, set price and
-  purchase;
-- identity credit transfer, withdrawal and key updates (key update and
-  withdrawal built to Review);
-- DPNS registration (built to Review);
+The asset-lock key check was run live only on its refusal path (a consumed
+chain-lock proof with the wrong key: not submitted). Registering a contract
+and updating it each cost about 0.12 tDASH on testnet.
+
+Not yet broadcast live (unit- and real-WASM-tested):
+
 - **masternode votes**: no voting key is available;
+- contested DPNS registrations (0.2 DASH contest fee);
 - pre-programmed and once-per-identity token claims, and group co-signing of
   token actions other than config updates;
 - **anything on mainnet**.
@@ -1004,7 +1029,7 @@ list). `NEXT_PUBLIC_EVO_SDK_VERSION` is set by `next.config.mjs`, not by users.
 | State-transition result | ✓ (no proof) | `stateTransitions.waitForStateTransitionResult` |
 | Proof chips, failure banner, Query Inspector, evidence export | ✓ | `…WithProof` variants |
 | Deserializers and path elements | ✓ | WASM classes, `system.pathElements` |
-| Write mode (§13.3) | ✓ (live-tested on testnet for address, asset-lock, raw and token writes only; see §13.4) | write facades |
+| Write mode (§13.3) | ✓ (live-tested on testnet except masternode votes, contested DPNS and some token claims; see §13.4) | write facades |
 | Extension signer | Detection only | — |
 | Custom DAPI endpoints (mainnet/testnet) | ✗ — quorum-service override instead | — |
 | Untrusted mode | ✗ — removed | — |
@@ -1024,14 +1049,14 @@ list). `NEXT_PUBLIC_EVO_SDK_VERSION` is set by `next.config.mjs`, not by users.
 | History caps (10) and no contract-history offset | Drive / SDK limits | Pages where possible; says when older entries can't be shown |
 | Protocol "no vote yet" denominator is an estimate | Platform exposes no masternode list | Denominator stated: voters plus recent proposers |
 | Version mismatches block writes | Session protocol version only ratchets up | Notice on /network/status; Clear SDK cache |
-| Several writes not broadcast live (contract, most document and identity-signed operations, DPNS, masternode votes, some token claims, all of mainnet) | No funded run yet; no voting key | Unit and real-WASM tests; see §13.4 |
-| Asset-lock key not checked against the lock's output before submission | Not implemented | The transition's signature must come from the key that locked the funds, so Platform rejects a wrong key; the explorer reports the error after submission rather than before |
+| Some writes not broadcast live (masternode votes, contested DPNS, some token claims, all of mainnet) | No voting key; contest fee; no funded mainnet run | Unit and real-WASM tests; see §13.4 |
+| Chain-lock asset-lock proofs need Insight for the key check | The proof has no transaction | Networks without an Insight API need an InstantSend proof |
 | Extension signer unusable | Extension API not stable | Detection-only tab; bridge backup, mnemonic or WIF |
 | No i18n | Deferred | English strings only |
 | Single ORDER BY in the documents browser | UI scope | Warning when a range and an `in` filter both need ordering |
 | Large SDK download (~9 MB gzip) | SDK size | Loaded lazily; shell works meanwhile |
 | devnet-paloma unreachable | Its quorum service doesn't resolve | Custom devnets |
-| Write kill switch leaves links | `NEXT_PUBLIC_DISABLE_WRITE_MODE` is checked only by the two write pages | Links lead to the disabled notice; nothing can be signed |
+| Contract schema typos reach Drive | The WASM build's `fullValidation` does not run the document meta-schema (e.g. `documentsTransferable` for `transferable` passed locally) | Drive rejects at check_tx; the receipt says "outcome unknown" because a broadcast that reached Platform is never presumed rejected |
 
 ---
 
@@ -1043,12 +1068,10 @@ list). `NEXT_PUBLIC_EVO_SDK_VERSION` is set by `next.config.mjs`, not by users.
    is stable?
 3. **Masternode voting acceptance.** A live vote with a real voting key before
    calling it tested.
-4. **Asset-lock key check.** Compare the asset-lock key with the lock's output
-   script before submission, for a clearer error?
-5. **Unused 5.0 facades.** Which of `contractGroups`, `encryptedFor`,
+4. **Unused 5.0 facades.** Which of `contractGroups`, `encryptedFor`,
    moderation, ranked/composite document queries and key-limit updates are worth
    surfacing?
-6. **Embeddable widgets** (e.g. an identity card): deferred.
+5. **Embeddable widgets** (e.g. an identity card): deferred.
 
 ---
 
@@ -1071,7 +1094,7 @@ or reads inside write flows). Omitted for brevity: `dpns.isContestedUsername`¹
 | `/contract/documents/` | `contracts.fetch`, `documents.query`, `dpns.username`, `system.status`¹ |
 | `/contract/document/` | `contracts.fetch`, `documents.get`, `documents.history`, `dpns.username` |
 | `/contract/token/`, `/token/` | `contracts.fetch`, `tokens.calculateId`¹ (contract route), `documents.query` (token route), `dpns.username`, `tokens.contractInfo`, `tokens.directPurchasePrices`, `tokens.identityBalances`, `tokens.identityTokenInfos`, `tokens.perpetualDistributionLastClaim`, `tokens.statuses`, `tokens.totalSupply` |
-| `/token/holders/` | `dpns.resolveName`¹, `dpns.username`, `tokens.balances`¹ |
+| `/token/holders/` | `dpns.resolveName`¹, `dpns.username`, `tokens.balances` / `balancesWithProof` |
 | `/address/` | `addresses.get` |
 | `/dpns/` | `dpns.getUsernameByName`, `dpns.isNameAvailable`¹, `dpns.isValidUsername`¹, `dpns.resolveName`¹, `dpns.username` |
 | `/dpns/search/` | `contracts.fetch`¹, `documents.query`, `dpns.username` |
@@ -1094,9 +1117,6 @@ or reads inside write flows). Omitted for brevity: `dpns.isContestedUsername`¹
 | `/tools/` | `contracts.fetch`, `system.pathElements`; WASM `DataContract`, `Document`, `Identity`, `StateTransition` `.fromBytes`, `PlatformVersion.latest` |
 | `/settings/` | `system.status`¹, `version`¹, `EvoSDK.getLatestVersionNumber` |
 | `/wallet/` | `identities.fetch`¹, `dpns.username`; `wallet.deriveKeyFromSeedWithPath`, `wallet.keyPairFromWif`, `wallet.validateMnemonic`, `PrivateKey.fromBytes` |
-| `/broadcast/` | **Writes:** `contracts.publish`, `contracts.update`, `documents.create` / `replace` / `delete` / `transfer` / `setPrice` / `purchase`, `identities.create` / `topUp` / `creditTransfer` / `creditWithdrawal` / `update`, `addresses.transfer` / `transferFromIdentity` / `topUpIdentity` / `withdraw` / `fundFromAssetLock` / `createIdentity`, `dpns.registerName`, `voting.masternodeVote`, `stateTransitions.broadcastStateTransition` / `waitForResponse` / `waitForAffectedState`, and the token writes `tokens.mint` / `burn` / `transfer` / `freeze` / `unfreeze` / `destroyFrozen` / `emergencyAction` / `setPrice` / `directPurchase` / `claim` / `configUpdate` (²). **Reads:** `addresses.get`, `contracts.fetch`, `documents.get`, `dpns.username`, `epoch.epochsInfo`, `group.actions`, `group.actionSigners`, `identities.balance` / `balances` / `byPublicKeyHash` / `fetch`, `system.totalCreditsInPlatformWithProof`, `tokens.balances` / `calculateId` / `contractInfo` / `directPurchasePrices` / `identitiesTokenInfos` / `statuses` / `totalSupplyWithProof`, `version`, `voting.contestedResourceVoteState`. **Utilities:** `AssetLockProof.*`, `CoreScript.fromP2PKH` / `fromP2SH`, `Identifier.*`, `PrivateKey.fromBytes`, `ResourceVoteChoice.*`, `StateTransition.fromBytes` / `fromHex`, `wallet.*` |
+| `/broadcast/` | **Writes:** `contracts.publish`, `contracts.update`, `documents.create` / `replace` / `delete` / `transfer` / `setPrice` / `purchase`, `identities.create` / `topUp` / `creditTransfer` / `creditWithdrawal` / `update`, `addresses.transfer` / `transferFromIdentity` / `topUpIdentity` / `withdraw` / `fundFromAssetLock` / `createIdentity`, `dpns.registerName`, `voting.masternodeVote`, `stateTransitions.broadcastStateTransition` / `waitForResponse` / `waitForAffectedState`, and the token writes `tokens.mint` / `burn` / `transfer` / `freeze` / `unfreeze` / `destroyFrozen` / `emergencyAction` / `setPrice` / `directPurchase` / `claim` / `configUpdate`. **Reads:** `addresses.get`, `contracts.fetch`, `documents.get`, `dpns.username`, `epoch.epochsInfo`, `group.actions`, `group.actionSigners`, `identities.balance` / `balances` / `byPublicKeyHash` / `fetch`, `system.totalCreditsInPlatformWithProof`, `tokens.balances` / `calculateId` / `contractInfo` / `directPurchasePrices` / `identitiesTokenInfos` / `statuses` / `totalSupplyWithProof`, `version`, `voting.contestedResourceVoteState`. **Utilities:** `AssetLockProof.*`, `CoreScript.fromP2PKH` / `fromP2SH`, `Identifier.*`, `PrivateKey.fromBytes`, `ResourceVoteChoice.*`, `StateTransition.fromBytes` / `fromHex`, `wallet.*` |
 | `/about/`, `/saved/`, `/sdk-reference/` | none |
 
-² `executors/tokens.ts` calls the token writes through a local alias
-(`const tokens = sdk.tokens`), which the generator does not follow, so they are
-missing from `sdk-reference.json` and the `/sdk-reference` page.

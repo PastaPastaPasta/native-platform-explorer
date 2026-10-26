@@ -446,6 +446,7 @@ export function OperationShell<TOptions, TResult>({
         signer: submitted.signer,
         options: submitted.options,
         signingKeyId: reviewSigningKey?.key?.id,
+        network: submitted.network,
         assertCurrent: () => {
           if (!isCurrent(submitted))
             throw new OperationNotSubmittedError(

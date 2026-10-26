@@ -27,13 +27,19 @@ const noteSchema: SchemaObject = {
 };
 
 describe('emptyValueFor', () => {
-  it('initialises strings to empty and booleans to false', () => {
+  it('leaves strings and numbers unset and initialises booleans to false', () => {
+    // An optional field left blank must not be submitted as "".
     const v = emptyValueFor(noteSchema);
-    expect(v.title).toBe('');
+    expect(v).not.toHaveProperty('title');
+    expect(v).not.toHaveProperty('body');
     expect(v.pinned).toBe(false);
-    expect(v.priority).toBe('');
-    expect(v.tags).toEqual([]);
-    expect(v.author).toEqual({});
+    expect(v).not.toHaveProperty('priority');
+    // Optional objects and lists stay unset, so author.name (required inside
+    // the optional author) does not block an untouched form.
+    expect(v).not.toHaveProperty('tags');
+    expect(v).not.toHaveProperty('author');
+    expect(issuesToErrorMap(validateAgainstSchema(noteSchema, { ...v, title: 'x' }))).toEqual({});
+    expect(emptyValueFor({ ...noteSchema, required: ['title', 'tags', 'author'] })).toMatchObject({ tags: [], author: {} });
   });
 
   it('skips $-prefixed system fields', () => {
@@ -42,10 +48,10 @@ describe('emptyValueFor', () => {
       properties: {
         $id: { type: 'string' },
         $ownerId: { type: 'string' },
-        name: { type: 'string' },
+        flag: { type: 'boolean' },
       },
     });
-    expect(v).toEqual({ name: '' });
+    expect(v).toEqual({ flag: false });
     expect('$id' in v).toBe(false);
   });
 });

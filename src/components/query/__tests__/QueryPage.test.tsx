@@ -69,7 +69,7 @@ describe('Query workspace execution', () => {
     await screen.findByText('updated');
     expect(query).toHaveBeenCalledTimes(2);
     expect(navigation.replace).toHaveBeenLastCalledWith(
-      expect.stringContaining('network=testnet&trusted=1'),
+      expect.stringMatching(/&network=testnet$/),
       { scroll: false },
     );
   });
@@ -85,28 +85,17 @@ describe('Query workspace execution', () => {
     expect(screen.queryByTestId('sql-hint')).not.toBeInTheDocument();
   });
 
-  it('tells a recipient when a shared link came from a different trust mode', async () => {
-    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '0' });
-    // Running the shared query rewrites the address with the recipient's mode.
+  it.each(['0', '1'])('runs an old share link with trusted=%s, ignoring the removed flag', async (trusted) => {
+    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', network: 'testnet', trusted });
+    // Running the shared query rewrites the address without the flag.
     navigation.replace.mockImplementation((url: string) => { navigation.search = new URLSearchParams(url.split('?')[1]); });
     const query = vi.fn().mockResolvedValue({ data: [] });
-    const { unmount } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
-    await waitFor(() => expect(navigation.search.get('trusted')).toBe('1'));
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
     await screen.findByText('0 documents returned');
-    expect(screen.getByText(/This link was shared from untrusted mode, but trusted mode\s+is on here/)).toHaveTextContent(
-      'Results here are proof-verified.',
-    );
+    await waitFor(() => expect(navigation.search.has('trusted')).toBe(false));
+    expect(navigation.search.get('q')).toBe('SELECT * FROM domain LIMIT 1');
+    expect(screen.queryByText(/This link was shared from|trusted mode/)).not.toBeInTheDocument();
     navigation.replace.mockReset();
-    unmount();
-    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '1' });
-    const { unmount: unmountSame } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
-    expect(screen.queryByText(/This link was shared from/)).not.toBeInTheDocument();
-    unmountSame();
-    // The parameter is only a claim about the link, never about the sender's results.
-    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query), trusted: false } });
-    const notice = await screen.findByText(/This link was shared from trusted mode, but trusted mode\s+is off here/);
-    expect(notice).toHaveTextContent('Results here are not proof-verified.');
-    expect(notice).not.toHaveTextContent(/sender/);
   });
 
   it('bounds statement execution and cancels queued and late results', async () => {

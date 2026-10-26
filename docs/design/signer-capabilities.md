@@ -69,8 +69,8 @@ live signer is cleared there; the broadcast console still requires a live signer
 already returned to an executor owns a separate WASM copy and is released when
 that operation settles; disconnect does not cancel an in-flight operation in this
 PR. JavaScript cannot guarantee erasure of every secret copy. Session storage
-contains only the signer kind and public identity ID for a
-reconnect hint; blocked storage does not disable in-memory signing.
+contains only the signer kind, public identity ID and network for a
+reconnect hint (ignored on other networks); blocked storage does not disable in-memory signing.
 
 ## Validation
 

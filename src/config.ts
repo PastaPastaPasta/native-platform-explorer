@@ -7,7 +7,6 @@ export interface AppConfig {
   /** Build-time trusted quorum service overrides for the built-in networks
    *  (`NEXT_PUBLIC_QUORUM_URL_MAINNET` / `_TESTNET`). */
   quorumUrls: { mainnet: string | null; testnet: string | null };
-  disableWriteMode: boolean;
   rateProvider: RateProvider;
   wellKnownUrl: string | null;
 }
@@ -51,6 +50,13 @@ function parseRateProvider(raw: string | undefined): RateProvider {
   return 'coinbase';
 }
 
+/** False when the build set `NEXT_PUBLIC_DISABLE_WRITE_MODE=true`. Then
+ *  /wallet and /broadcast show a notice, and read pages hide every link into
+ *  them (sidebar, owner shortcuts, token actions, vote links). */
+export function writeModeEnabled(): boolean {
+  return !parseBool(process.env.NEXT_PUBLIC_DISABLE_WRITE_MODE, false);
+}
+
 export function getConfig(): AppConfig {
   const rawNet = process.env.NEXT_PUBLIC_DEFAULT_NETWORK;
   // Final validation against the registry happens in SdkProvider; here we just
@@ -63,7 +69,6 @@ export function getConfig(): AppConfig {
       mainnet: parseQuorumUrl('NEXT_PUBLIC_QUORUM_URL_MAINNET', process.env.NEXT_PUBLIC_QUORUM_URL_MAINNET),
       testnet: parseQuorumUrl('NEXT_PUBLIC_QUORUM_URL_TESTNET', process.env.NEXT_PUBLIC_QUORUM_URL_TESTNET),
     },
-    disableWriteMode: parseBool(process.env.NEXT_PUBLIC_DISABLE_WRITE_MODE, false),
     rateProvider: parseRateProvider(process.env.NEXT_PUBLIC_RATE_PROVIDER),
     wellKnownUrl: process.env.NEXT_PUBLIC_WELL_KNOWN_URL || null,
   };

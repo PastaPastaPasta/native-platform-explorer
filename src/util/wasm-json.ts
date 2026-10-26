@@ -6,6 +6,32 @@
 // `{"__wbg_ptr": …}`.  The helpers here walk the prototype chain to
 // surface the real data.
 
+/** Leaf converter for `walkInstance`: an SDK Identifier as its canonical
+ *  base58 text (its value is not exposed through getters), undefined for
+ *  anything else. Throws when an Identifier serializes unexpectedly. */
+export function identifierLeaf(value: object): unknown {
+  const candidate = value as { __type?: unknown; toJSON?: () => unknown };
+  let type: unknown;
+  try { type = candidate.__type; }
+  catch { return undefined; } // The walker skips unreadable prototype getters.
+  if (type !== 'Identifier') return undefined;
+  const serialized = candidate.toJSON?.();
+  // rc.2 Identifier.toJSON() is canonical Base58, including 32 ones for zero.
+  if (typeof serialized !== 'string' || !/^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(serialized)) {
+    throw new Error('SDK Identifier did not return a canonical JSON string.');
+  }
+  return serialized;
+}
+
+/** For display: an Identifier that fails to serialize is walked as usual. */
+function displayIdentifierLeaf(value: object): unknown {
+  try {
+    return identifierLeaf(value);
+  } catch {
+    return undefined;
+  }
+}
+
 /** Walk an object/WASM class instance into a plain JSON-serialisable form.
  *  Handles three sources of state that JSON.stringify would otherwise miss:
  *    1) enumerable own properties (plain objects, wasm-bindgen direct fields)
@@ -124,7 +150,7 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     const isWasmShell =
       value != null && typeof value === 'object' && '__wbg_ptr' in (value as object);
     if (rendered === undefined || rendered === '{}' || isWasmShell || Array.isArray(value)) {
-      const walked = walkInstance(value);
+      const walked = walkInstance(value, 0, displayIdentifierLeaf);
       return JSON.stringify(walked, wasmReplacer, indent) ?? String(value);
     }
     return rendered;
@@ -132,7 +158,7 @@ export function safeStringify(value: unknown, indent: number = 2): string {
     // JSON.stringify threw (typically circular references on WASM classes).
     // Fall back to a shallow walk.
     try {
-      return JSON.stringify(walkInstance(value), wasmReplacer, indent) ?? String(value);
+      return JSON.stringify(walkInstance(value, 0, displayIdentifierLeaf), wasmReplacer, indent) ?? String(value);
     } catch {
       return String(value);
     }

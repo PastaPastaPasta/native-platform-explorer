@@ -17,6 +17,8 @@ import { useSdk } from '@sdk/hooks';
 export interface SignerStash {
   kind: SignerKind;
   identityId: string;
+  /** The network the identity was connected on; the hint shows only there. */
+  network: string;
 }
 
 interface SignerContextValue {
@@ -46,9 +48,10 @@ function readStash(): SignerStash | null {
         parsed.kind === 'mnemonic' ||
         parsed.kind === 'wif' ||
         parsed.kind === 'backup') &&
-      typeof parsed.identityId === 'string'
+      typeof parsed.identityId === 'string' &&
+      typeof parsed.network === 'string'
     ) {
-      return { kind: parsed.kind, identityId: parsed.identityId };
+      return { kind: parsed.kind, identityId: parsed.identityId, network: parsed.network };
     }
   } catch {
     /* noop */
@@ -56,10 +59,10 @@ function readStash(): SignerStash | null {
   return null;
 }
 
-function writeStash(kind: SignerKind, identityId: string) {
+function writeStash(stash: SignerStash) {
   if (typeof window === 'undefined') return;
   try {
-    window.sessionStorage.setItem(STASH_KEY, JSON.stringify({ kind, identityId }));
+    window.sessionStorage.setItem(STASH_KEY, JSON.stringify(stash));
   } catch {
     /* Storage may be blocked; the live signer still works. */
   }
@@ -150,8 +153,9 @@ export function SignerProvider({ children }: { children: ReactNode }) {
       generationRef.current += 1;
       setConnectionGeneration(generationRef.current);
       setSigner(next);
-      writeStash(next.kind, next.identityId);
-      setStash({ kind: next.kind, identityId: next.identityId });
+      const hint = { kind: next.kind, identityId: next.identityId, network };
+      writeStash(hint);
+      setStash(hint);
     },
     [sdk, network, trusted, sessionId, sessionSignal, connectionGeneration],
   );
@@ -226,9 +230,11 @@ export function SignerProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
+  // An identity connected on another network is not this network's.
+  const currentStash = stash?.network === network ? stash : null;
   const value = useMemo<SignerContextValue>(
-    () => ({ signer, stash, connect, disconnect, clearStash: clearStashOnly }),
-    [signer, stash, connect, disconnect, clearStashOnly],
+    () => ({ signer, stash: currentStash, connect, disconnect, clearStash: clearStashOnly }),
+    [signer, currentStash, connect, disconnect, clearStashOnly],
   );
 
   return <SignerContext.Provider value={value}>{children}</SignerContext.Provider>;

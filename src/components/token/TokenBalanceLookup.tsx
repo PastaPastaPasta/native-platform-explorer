@@ -14,6 +14,7 @@ import {
   useTokenIdentityTokenInfos,
 } from '@sdk/queries';
 import { useSigner } from '@/signer/SignerProvider';
+import { writeModeEnabled } from '@/config';
 import { isBase58Identifier } from '@util/identifier';
 import { readProp } from '@util/sdk-shape';
 import { formatTokenAmount } from '@util/token-rules';
@@ -40,10 +41,13 @@ export function TokenBalanceLookup({
   decimals?: number;
   hasPerpetualDistribution: boolean;
 }) {
-  // Read-only: the connected signer's identity is only a default.
-  const { signer } = useSigner();
+  // Read-only: the signer's identity is only a default. Signers are cleared
+  // outside /wallet and /broadcast, so on this page the default is the public
+  // reconnect hint (signer kind and identity ID, no keys) kept for the tab.
+  const { signer, stash } = useSigner();
   const [holder, setHolder] = useQueryState('holder', parseAsString);
-  const identityId = holder ?? signer?.identityId ?? undefined;
+  const ownIdentityId = signer?.identityId ?? stash?.identityId;
+  const identityId = holder ?? ownIdentityId;
   const [input, setInput] = useState('');
   const trimmed = input.trim();
 
@@ -81,15 +85,19 @@ export function TokenBalanceLookup({
               Look up
             </Button>
           </HStack>
-          {!holder && signer ? (
-            <Text fontSize="xs" color="gray.400">Showing the connected signer&apos;s identity.</Text>
+          {!holder && ownIdentityId ? (
+            <Text fontSize="xs" color="gray.400">Showing the identity you last connected on /wallet in this tab.</Text>
           ) : null}
         </VStack>
       </InfoBlock>
 
       {!identityId ? (
         <InfoBlock>
-          <Text fontSize="sm" color="gray.400">Enter an identity ID, or connect a signer to see your own balance.</Text>
+          <Text fontSize="sm" color="gray.400">
+            {writeModeEnabled()
+              ? 'Enter an identity ID, or connect an identity on /wallet to default to your own balance.'
+              : 'Enter an identity ID.'}
+          </Text>
         </InfoBlock>
       ) : (
         <InfoBlock>

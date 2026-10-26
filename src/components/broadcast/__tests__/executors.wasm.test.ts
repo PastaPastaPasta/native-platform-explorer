@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DataContract,
   DataContractUpdateTransition,
+  Document,
   Identity,
   IdentityPublicKey,
   IdentitySigner,
@@ -15,6 +16,7 @@ import { OperationNotSubmittedError, submitOperation } from '../outcomes';
 import { resolveSigningCriteria } from '../capabilities';
 import {
   executeContractUpdate,
+  executeDocumentTransfer,
   executeIdentityCreditWithdrawal,
   executeIdentityUpdateKeys,
 } from '../executors';
@@ -260,5 +262,32 @@ describe('executors with the real WASM SDK', () => {
     }, {}).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OperationNotSubmittedError);
     expect((error as Error).message).toMatch(/InvalidArgument/);
+  });
+
+  it('transfers the stored document at its next revision', async () => {
+    // Live testnet: Drive refused a transfer at the stored revision with
+    // "invalid revision Some(1). The desired revision is 1".
+    const stored = new Document({
+      properties: { title: 'x' },
+      documentTypeName: 'note',
+      dataContractId: OWNER,
+      ownerId: OWNER,
+      id: OWNER,
+      revision: 1n,
+    });
+    const transfer = vi.fn().mockResolvedValue(undefined);
+    await executeDocumentTransfer({
+      sdk: {
+        ...protocol(),
+        contracts: { fetch: vi.fn().mockResolvedValue(onChainContract()) },
+        documents: { get: vi.fn().mockResolvedValue(stored), transfer },
+      } as never,
+      signer: createMockSigner({
+        identityId: OWNER,
+        prepareSdk: vi.fn().mockResolvedValue(createSigningMaterial({ identityId: OWNER })),
+      }),
+      options: { contractId: OWNER, documentType: 'note', documentId: OWNER, recipientId: OWNER },
+    });
+    expect((transfer.mock.calls[0]![0].document as Document).revision).toBe(2n);
   });
 });

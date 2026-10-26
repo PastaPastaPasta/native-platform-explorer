@@ -72,8 +72,10 @@ export const DEVNET_PALOMA: NetworkConfig = {
   label: 'Devnet-paloma',
   devnetName: 'paloma',
   // No `quorumUrl` override: the SDK derives
-  // https://quorums.paloma.networks.dash.org from `devnetName` and that
-  // host is now deployed (serves /quorums, /masternodes, /previous).
+  // https://quorums.paloma.networks.dash.org from `devnetName`. That host did
+  // not resolve in DNS when checked in #45 and again on 2026-10-26, so
+  // sessions on this devnet currently fail to start; it stays listed for when
+  // the devnet returns.
   dapiAddresses: [
     'https://68.67.122.198:1443',
     'https://68.67.122.199:1443',

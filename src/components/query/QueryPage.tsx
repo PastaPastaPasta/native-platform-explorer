@@ -25,7 +25,6 @@ interface QueryRun {
   sql: string;
   contractId: string;
   network: string;
-  trusted: boolean;
   sdk: EvoSDK;
   queries: ParsedQuery[];
   states: StatementState[];
@@ -34,7 +33,7 @@ interface QueryRun {
 export function QueryPage() {
   const router = useRouter();
   const params = useSearchParams();
-  const { sdk, status, network, trusted } = useSdk();
+  const { sdk, status, network } = useSdk();
   const toast = useToast();
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Query' }]);
 
@@ -47,17 +46,15 @@ export function QueryPage() {
   const [parseHints, setParseHints] = useState<ParseHint[]>([]);
   const [notice, setNotice] = useState('');
   const initialQueryPending = useRef(!!params.get('q'));
-  // Links record the sender's trust setting. Anyone can edit the URL, so the
-  // notice describes the link and this session, never the sender's results.
-  // Captured once: running the shared query rewrites the URL with ours.
-  const [sharedTrusted] = useState(() => params.get('trusted'));
 
+  // Links made before untrusted mode was removed (#40) also carry
+  // `trusted=1|0`; it is ignored, since every session is trusted.
   const queryPath = useCallback(
     (sql: string, contractId: string) => {
-      const qp = new URLSearchParams({ q: sql, contract: contractId, network, trusted: trusted ? '1' : '0' });
+      const qp = new URLSearchParams({ q: sql, contract: contractId, network });
       return `/query/?${qp.toString()}`;
     },
-    [network, trusted],
+    [network],
   );
 
   const startRun = useCallback(
@@ -78,14 +75,13 @@ export function QueryPage() {
         sql,
         contractId,
         network,
-        trusted,
         sdk,
         queries: parsed.queries,
         states: parsed.queries.map(() => 'queued'),
       });
       router.replace(queryPath(sql, contractId), { scroll: false });
     },
-    [sdk, status, network, trusted, router, queryPath],
+    [sdk, status, network, router, queryPath],
   );
 
   // Shared queries run only after the selected SDK session is ready.
@@ -101,7 +97,6 @@ export function QueryPage() {
     run.sql === sqlText &&
     run.contractId === pickerContractId &&
     run.network === network &&
-    run.trusted === trusted &&
     run.sdk === sdk
       ? run
       : null;
@@ -180,15 +175,6 @@ export function QueryPage() {
                 );
               }}
             />
-            {(sharedTrusted === '1' || sharedTrusted === '0') && (sharedTrusted === '1') !== trusted && (
-              <Text fontSize="xs" color="orange.300">
-                This link was shared from {sharedTrusted === '1' ? 'trusted' : 'untrusted'} mode, but trusted mode
-                is {trusted ? 'on' : 'off'} here.{' '}
-                {trusted
-                  ? 'Results here are proof-verified.'
-                  : 'Results here are not proof-verified.'}
-              </Text>
-            )}
             <HStack spacing={3} flexWrap="wrap">
               <Text fontSize="xs" color="gray.400" role="status" aria-live="polite">
                 {isRunning

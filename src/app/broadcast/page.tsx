@@ -18,7 +18,7 @@ import {
   type OperationEntry,
   type OperationGroup,
 } from '@components/broadcast/operations';
-import { getConfig } from '@/config';
+import { writeModeEnabled } from '@/config';
 import { usePageTitle } from '@hooks/usePageTitle';
 
 function GroupCard({
@@ -160,8 +160,7 @@ function Hub() {
 }
 
 export default function Page() {
-  const config = getConfig();
-  if (config.disableWriteMode) {
+  if (!writeModeEnabled()) {
     return <WriteModeDisabled context="broadcast" />;
   }
   return (

@@ -20,7 +20,7 @@ test.beforeEach(async ({ page }) => {
 
 test('wallet explains unsupported extension signing and dismisses reconnect hints', async ({ page }) => {
   await page.addInitScript((id) => {
-    window.sessionStorage.setItem('npe:signer-kind', JSON.stringify({ kind: 'wif', identityId: id }));
+    window.sessionStorage.setItem('npe:signer-kind', JSON.stringify({ kind: 'wif', identityId: id, network: 'testnet' }));
   }, identityId);
   await page.goto('wallet/');
   await expect(page.getByText(/You were previously connected via/)).toBeVisible();

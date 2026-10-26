@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { getConfig } from './config';
+import { getConfig, writeModeEnabled } from './config';
 
 const ENV_KEYS = [
   'NEXT_PUBLIC_DEFAULT_NETWORK',
@@ -24,10 +24,10 @@ describe('getConfig', () => {
     expect(getConfig()).toMatchObject({
       defaultNetwork: 'testnet',
       quorumUrls: { mainnet: null, testnet: null },
-      disableWriteMode: false,
       rateProvider: 'coinbase',
       wellKnownUrl: null,
     });
+    expect(writeModeEnabled()).toBe(true);
   });
 
   it('parses public runtime toggles without rejecting custom devnets', () => {
@@ -40,10 +40,10 @@ describe('getConfig', () => {
     expect(getConfig()).toEqual({
       defaultNetwork: 'devnet-paloma',
       quorumUrls: { mainnet: null, testnet: 'https://quorums.example.test' },
-      disableWriteMode: true,
       rateProvider: 'kucoin',
       wellKnownUrl: 'https://example.test/well-known.json',
     });
+    expect(writeModeEnabled()).toBe(false);
   });
 
   it('ignores the removed trusted-mode toggle and invalid quorum URLs', () => {

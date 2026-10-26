@@ -4,6 +4,7 @@ import { Box, VStack } from '@chakra-ui/react';
 import NextLink from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Eyebrow } from '@ui/Eyebrow';
+import { writeModeEnabled } from '@/config';
 
 interface NavItem {
   href: string;
@@ -87,12 +88,18 @@ export function activeHref(pathname: string): string | undefined {
   return ALL_HREFS.filter((href) => matches(pathname, href)).sort((a, b) => b.length - a.length)[0];
 }
 
+/** The groups to show: a build with write mode disabled drops the Write
+ *  group, whose pages would only show the disabled notice. */
+export function visibleNavGroups(): ReadonlyArray<NavGroup> {
+  return writeModeEnabled() ? NAV_GROUPS : NAV_GROUPS.filter((g) => g.title !== 'Write');
+}
+
 export function SidebarNavBody({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
   const current = activeHref(pathname ?? '/');
   return (
     <VStack align="stretch" spacing={5}>
-      {NAV_GROUPS.map((g) => (
+      {visibleNavGroups().map((g) => (
         <Box key={g.title}>
           <Eyebrow mb={2} pl={3}>
             {g.title}
