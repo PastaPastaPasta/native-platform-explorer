@@ -71,7 +71,7 @@ export function* sdkErrorChain(error: unknown): Generator<SdkErrorFields> {
  * proof labels:
  * - `not-found`: the SDK reported an absence by kind (pinned rc.2
  *   TotalCreditsNotFound=12, EpochNotFound=13, IdentityNonceNotFound=23,
- *   NotFound=27), raised after it checked the proof.
+ *   NotFound=27), raised after a proven fetch or a local schema check.
  * - `timeout` / `transport`: no usable answer from DAPI; worth retrying. This
  *   includes a gRPC NOT_FOUND status, which is one node's unproven answer.
  * - `missing-quorum`: the response names a quorum the trusted context does not
@@ -96,6 +96,9 @@ const KIND = {
   totalCreditsNotFound: 12, epochNotFound: 13, timeout: 14, cancelled: 19, staleNode: 20,
   identityNonceNotFound: 23, invalidArgument: 25, serialization: 26, notFound: 27, notImplemented: 28,
 } as const;
+// Only proven paths raise these in the app. rc.2's unproved getIdentityUnproved
+// and getIdentityKeys({ type: 'search' }) also raise NotFound from one node's
+// answer; using either would need its own classification.
 const NOT_FOUND_KINDS = new Set<number>([KIND.totalCreditsNotFound, KIND.epochNotFound, KIND.identityNonceNotFound, KIND.notFound]);
 const TIMEOUT_KINDS = new Set<number>([KIND.timeout]);
 // Kinds naming the absent entity itself. Generic NotFound (27) is also raised

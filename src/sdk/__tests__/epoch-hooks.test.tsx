@@ -50,7 +50,7 @@ function mountProbe(context: SdkContextValue, kind: 'detail' | 'finalized' | 'ra
 afterEach(() => { clients.forEach((client) => client.clear()); clients.length = 0; });
 
 describe('epoch hook SDK arguments and capture', () => {
-  it.each(['raw', 'normalized', 'wrapped'])('exports actual trusted-off WASM context unavailability without fallback (%s)', async (shape) => {
+  it.each(['raw', 'normalized', 'wrapped'])('exports actual WASM context unavailability without fallback (%s)', async (shape) => {
     const native = nativeProofError(SDK_PROOF_CONTEXT_MESSAGE);
     const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Epoch read failed', { cause: native });
     const epochsInfo = vi.fn().mockRejectedValue(error);

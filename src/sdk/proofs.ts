@@ -113,7 +113,7 @@ export function describeProofState(s: ProofState): string {
         case 'timeout':
           return `Platform did not answer in time; nothing was verified. Retry may succeed: ${s.error}`;
         case 'transport':
-          return `Could not reach a Platform node; nothing was verified. Retry may succeed: ${s.error}`;
+          return `No usable answer from a Platform node (unreachable, or an answer without a proof); nothing was verified. Retry may succeed: ${s.error}`;
         case 'missing-quorum':
           return `This response names a quorum that is not in the trusted quorum list, so its proof could not be checked. The list may predate a quorum rotation; Reconnect fetches a fresh one: ${s.error}`;
         case 'not-found':
