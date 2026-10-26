@@ -82,7 +82,39 @@ describe('broadcast executors', () => {
 
     await expect(execute({ sdk: {} as never, signer, options: {} as never })).rejects.toThrow('stop before broadcast');
     expect(prepareSdk).toHaveBeenCalledOnce();
-    expect(prepareSdk).toHaveBeenCalledWith(operationRequirement(id).criteria);
+    // Executors may narrow the declared requirement for the target, never widen it.
+    const used = prepareSdk.mock.calls[0]![0];
+    const declared = operationRequirement(id).criteria!;
+    expect(used.allowedSecurityLevels).toEqual(declared.allowedSecurityLevels);
+    expect([declared.purpose].flat()).toEqual(expect.arrayContaining([used.purpose].flat()));
+  });
+
+  it.each([
+    [undefined, 'OWNER'],
+    ['yAddress', 'TRANSFER'],
+  ])('signs withdrawals to %s with a %s key', async (toAddress, purpose) => {
+    const prepareSdk = vi.fn().mockRejectedValue(new Error('stop'));
+    await executeIdentityCreditWithdrawal({
+      sdk: {} as never,
+      signer: createMockSigner({ prepareSdk }),
+      options: { network: 'testnet', toAddress, amountCredits: 190_000n, coreFeePerByte: 1 },
+    }).catch(() => undefined);
+    expect(prepareSdk).toHaveBeenCalledWith({ purpose, allowedSecurityLevels: ['CRITICAL'] });
+  });
+
+  it.each([
+    [{ amountCredits: 0x10n }, /between 190,000/],
+    [{ coreFeePerByte: 4 }, /Fibonacci/],
+  ])('rejects invalid withdrawal parameters before submitting', async (patch, message) => {
+    const creditWithdrawal = vi.fn();
+    const execution = executeIdentityCreditWithdrawal({
+      sdk: { identities: { fetch: vi.fn(), creditWithdrawal } } as never,
+      signer: createMockSigner(),
+      options: { network: 'testnet', amountCredits: 190_000n, coreFeePerByte: 1, ...patch },
+    });
+    await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    await expect(execution).rejects.toThrow(message);
+    expect(creditWithdrawal).not.toHaveBeenCalled();
   });
 
   it.each([false, true])('releases all adapter-owned signing material (failure: %s)', async (fails) => {

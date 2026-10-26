@@ -264,10 +264,12 @@ export const OPERATIONS: OperationEntry[] = [
     {
       title: 'Withdraw credits',
       description:
-        'Withdraws credits to a Dash Core address. The withdrawal is queued ' +
-        'on-chain and settles as a Core transaction.',
+        'Withdraws credits to a Dash Core address, or a masternode owner identity to its ' +
+        'payout address. The withdrawal is queued on Platform and settles as a Core transaction.',
       FormComponent: IdentityCreditWithdrawalForm,
-      summarise: (o) => `Withdraw ${o.amountCredits} credits to ${o.toAddress}.`,
+      summarise: (o) =>
+        `Withdraw ${o.amountCredits} credits to ${o.toAddress ?? 'the masternode payout address'} ` +
+        `at ${o.coreFeePerByte} duff(s)/byte.`,
       execute: executeIdentityCreditWithdrawal,
     },
   ),

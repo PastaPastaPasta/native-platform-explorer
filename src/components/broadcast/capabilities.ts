@@ -1,4 +1,4 @@
-import { keyMeetsCriteria } from '@/signer/keys';
+import { describePurpose, keyMeetsCriteria } from '@/signer/keys';
 import type { ExplorerSigner, KeySelectionCriteria, SignerKeyDescriptor } from '@/signer/types';
 
 export interface OperationCapabilityRequirement {
@@ -34,10 +34,15 @@ export function operationRequirement(id: string): OperationCapabilityRequirement
           'Masternode vote broadcasting is unavailable in this explorer. Use a masternode voting tool.',
       };
     case 'identity.creditTransfer':
-    case 'identity.creditWithdrawal':
       return {
         status: 'available',
         criteria: { purpose: 'TRANSFER', allowedSecurityLevels: ['CRITICAL'] },
+      };
+    case 'identity.creditWithdrawal':
+      // TRANSFER keys withdraw to an address; OWNER keys only to the payout address.
+      return {
+        status: 'available',
+        criteria: { purpose: ['TRANSFER', 'OWNER'], allowedSecurityLevels: ['CRITICAL'] },
       };
     case 'identity.updateKeys':
       return {
@@ -92,7 +97,7 @@ export function resolveOperationCapability(
     return {
       status: 'requires-another-signer',
       reason:
-        `This operation needs an enabled ${requirement?.criteria?.purpose ?? 'eligible'} key` +
+        `This operation needs an enabled ${describePurpose(requirement?.criteria) ?? 'eligible'} key` +
         `${requirement?.criteria?.minSecurityLevel ? ` at ${requirement.criteria.minSecurityLevel} security or stronger` : ''}` +
         `${requirement?.criteria?.allowedSecurityLevels ? ` with ${requirement.criteria.allowedSecurityLevels.join(' or ')} security` : ''}` +
         '. Connect a signer with a matching on-chain key.',

@@ -78,4 +78,17 @@ describe('operation capabilities', () => {
       ),
     ).toBe(false);
   });
+
+  it('accepts CRITICAL transfer or owner keys for withdrawals', () => {
+    const criteria = operationRequirement('identity.creditWithdrawal').criteria;
+    for (const purpose of ['TRANSFER', 'OWNER'])
+      expect(keyMeetsCriteria({ id: 1, purpose, securityLevel: 'CRITICAL' }, criteria)).toBe(true);
+    expect(
+      keyMeetsCriteria({ id: 1, purpose: 'AUTHENTICATION', securityLevel: 'CRITICAL' }, criteria),
+    ).toBe(false);
+    expect(keyMeetsCriteria({ id: 1, purpose: 'OWNER', securityLevel: 'HIGH' }, criteria)).toBe(false);
+    expect(resolveOperationCapability(operationRequirement('identity.creditWithdrawal'), createMockSigner(), [AUTH]).reason).toMatch(
+      /TRANSFER or OWNER key/,
+    );
+  });
 });

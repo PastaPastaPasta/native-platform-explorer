@@ -20,8 +20,8 @@ export interface SignerKeyDescriptor {
 }
 
 export interface KeySelectionCriteria {
-  /** Desired key purpose, e.g. 'AUTHENTICATION', 'TRANSFER', 'OWNER'. */
-  purpose?: string;
+  /** Accepted key purpose(s), e.g. 'AUTHENTICATION', or ['TRANSFER', 'OWNER']. */
+  purpose?: string | string[];
   /**
    * Minimum security level the selected key must satisfy. MASTER is the
    * strongest, MEDIUM the weakest — a key at or stronger than the requested

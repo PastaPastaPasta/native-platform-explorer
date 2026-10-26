@@ -27,7 +27,11 @@ import type { DocumentTransferOptions } from './forms/DocumentTransfer';
 import type { DocumentSetPriceOptions } from './forms/DocumentSetPrice';
 import type { DocumentPurchaseOptions } from './forms/DocumentPurchase';
 import type { IdentityCreditTransferOptions } from './forms/IdentityCreditTransfer';
-import type { IdentityCreditWithdrawalOptions } from './forms/IdentityCreditWithdrawal';
+import {
+  validateCoreFeePerByte,
+  validateWithdrawalAmount,
+  type IdentityCreditWithdrawalOptions,
+} from './forms/IdentityCreditWithdrawal';
 import type { IdentityUpdateKeysOptions, NewIdentityKey } from './forms/IdentityUpdateKeys';
 import type { IdentityTopUpOptions } from './forms/IdentityTopUp';
 import { DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
@@ -602,32 +606,43 @@ export async function executeIdentityCreditWithdrawal(args: {
   options: IdentityCreditWithdrawalOptions;
 }): Promise<IdentityResult> {
   const { sdk, signer, options } = args;
-  return withSigningMaterial(
-    signer,
-    operationRequirement('identity.creditWithdrawal').criteria,
-    async (material, submit) => {
-      const identity = await fetchExistingIdentity(sdk, material.identityId);
-      const newBalance = await submit(
-        () =>
-          sdk.identities.creditWithdrawal({
-            identity,
-            amount: options.amountCredits,
-            toAddress: options.toAddress,
-            coreFeePerByte: options.coreFeePerByte,
-            signer: material.identitySigner,
-            signingKey: material.identityKey,
-          } as unknown as Parameters<typeof sdk.identities.creditWithdrawal>[0]),
-        { identityId: material.identityId },
-        args.assertCurrent,
-      );
-      return {
-        kind: 'identity' as const,
-        identityId: material.identityId,
-        message: `Withdrew ${options.amountCredits} credits to ${options.toAddress}.`,
-        newBalance: String(newBalance),
-      };
-    },
-  );
+  // Platform rejects an address on owner-key withdrawals; they pay the payout address.
+  const criteria = {
+    ...operationRequirement('identity.creditWithdrawal').criteria,
+    purpose: options.toAddress === undefined ? 'OWNER' : 'TRANSFER',
+  };
+  return withSigningMaterial(signer, criteria, async (material, submit) => {
+    const amount = validateWithdrawalAmount(String(options.amountCredits));
+    const fee = validateCoreFeePerByte(String(options.coreFeePerByte));
+    if (amount.error || fee.error) throw new Error(amount.error ?? fee.error);
+    if (options.toAddress !== undefined) {
+      const { wallet } = await import('@dashevo/evo-sdk');
+      if (!(await wallet.validateAddress(options.toAddress, options.network)))
+        throw new Error(`${options.toAddress} is not a valid ${options.network} Dash address.`);
+    }
+    const identity = await fetchExistingIdentity(sdk, material.identityId);
+    const newBalance = await submit(
+      () =>
+        sdk.identities.creditWithdrawal({
+          identity,
+          amount: options.amountCredits,
+          toAddress: options.toAddress,
+          coreFeePerByte: options.coreFeePerByte,
+          signer: material.identitySigner,
+          signingKey: material.identityKey,
+        }),
+      { identityId: material.identityId },
+      args.assertCurrent,
+    );
+    return {
+      kind: 'identity' as const,
+      identityId: material.identityId,
+      message: `Withdrew ${options.amountCredits} credits to ${
+        options.toAddress ?? 'the masternode payout address'
+      }.`,
+      newBalance: String(newBalance),
+    };
+  });
 }
 
 export async function executeIdentityUpdateKeys(args: {

@@ -11,7 +11,11 @@ import {
 } from '@dashevo/evo-sdk';
 import type { IdentityPublicKeyInCreation } from '@dashevo/evo-sdk';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
-import { executeContractUpdate, executeIdentityUpdateKeys } from '../executors';
+import {
+  executeContractUpdate,
+  executeIdentityCreditWithdrawal,
+  executeIdentityUpdateKeys,
+} from '../executors';
 
 // These tests use the real pinned WASM SDK. Only network reads and the final
 // SDK write call are replaced; the captured transition inputs are then signed
@@ -191,4 +195,21 @@ describe('executors with the real WASM SDK', () => {
       expect(release).toHaveBeenCalledOnce();
     });
   });
+
+  it.each(['mainnet', 'testnet'] as const)(
+    'refuses to withdraw to an address that is not a valid %s address',
+    async (network) => {
+      const pair = await wallet.keyPairFromHex(THROWAWAY_HEX, network === 'mainnet' ? 'testnet' : 'mainnet');
+      const otherNetwork = pair.address;
+      pair.free();
+      const creditWithdrawal = vi.fn();
+      const execution = executeIdentityCreditWithdrawal({
+        sdk: { identities: { fetch: vi.fn(), creditWithdrawal } } as never,
+        signer: createMockSigner(),
+        options: { network, toAddress: otherNetwork, amountCredits: 190_000n, coreFeePerByte: 1 },
+      });
+      await expect(execution).rejects.toMatchObject({ name: 'OperationNotSubmittedError' });
+      expect(creditWithdrawal).not.toHaveBeenCalled();
+    },
+  );
 });
