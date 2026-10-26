@@ -90,30 +90,6 @@ describe('SDK query proof flow', () => {
     });
   });
 
-  it('does not call proof transport when trusted mode is disabled', async () => {
-    const totalCreditsInPlatform = vi.fn().mockResolvedValue(77);
-    const totalCreditsInPlatformWithProof = vi.fn();
-    const sdk = createMockSdk({
-      system: {
-        totalCreditsInPlatform,
-        totalCreditsInPlatformWithProof,
-      },
-    });
-
-    renderWithProviders(<TotalCreditsProbe />, {
-      sdk: { sdk, trusted: false, status: 'ready' },
-    });
-
-    await waitFor(() => {
-      expect(screen.getByTestId('query-state')).toHaveTextContent(
-        'success:77:unverified-trusted-off',
-      );
-    });
-
-    expect(totalCreditsInPlatformWithProof).not.toHaveBeenCalled();
-    expect(totalCreditsInPlatform).toHaveBeenCalledOnce();
-  });
-
   it('keeps missing captured bytes independent from successful verification', async () => {
     const sdk = createMockSdk({ system: { totalCreditsInPlatformWithProof: vi.fn().mockResolvedValue({ data: 42, metadata: { height: 123 } }) } });
     renderWithProviders(<TotalCreditsProbe />, { sdk: { sdk, trusted: true } });

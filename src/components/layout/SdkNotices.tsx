@@ -55,7 +55,7 @@ export function SdkSessionNotice() {
         {derivedDevnetQuorum ? (
           <Text color="muted" fontSize="sm" maxW="70ch">
             This devnet has no quorum service URL saved, so the explorer used{' '}
-            <Text as="span" fontFamily="mono">{getQuorumKeySource(network, true)}</Text>. Every session now
+            <Text as="span" fontFamily="mono">{getQuorumKeySource(network)}</Text>. Every session now
             verifies proofs with a quorum service; DAPI addresses alone cannot connect. If the devnet runs
             its service elsewhere, remove it and add it again with that quorum service URL.
           </Text>

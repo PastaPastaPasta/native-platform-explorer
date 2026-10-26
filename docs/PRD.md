@@ -948,7 +948,7 @@ pnpm dev
 ```
 
 - `next dev` runs locally; SDK talks to testnet by default.
-- `.env.local` can override `NEXT_PUBLIC_NETWORK`, `NEXT_PUBLIC_DAPI_ADDRESSES`, `NEXT_PUBLIC_DISABLE_WRITE_MODE`.
+- `.env.local` can override `NEXT_PUBLIC_DEFAULT_NETWORK`, `NEXT_PUBLIC_QUORUM_URL_MAINNET` / `_TESTNET` and `NEXT_PUBLIC_DISABLE_WRITE_MODE` (see §15.5).
 
 ### 15.2 Production build
 
@@ -977,11 +977,11 @@ Fully static; deployable to any static host.
 | `NEXT_PUBLIC_DEFAULT_NETWORK` | `mainnet` or `testnet` | `testnet` |
 | `NEXT_PUBLIC_QUORUM_URL_TESTNET` | trusted quorum service (quorum keys + DAPI masternode list) | `https://quorums.testnet.networks.dash.org` |
 | `NEXT_PUBLIC_QUORUM_URL_MAINNET` | idem | `https://quorums.mainnet.networks.dash.org` |
-
-`NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported: untrusted sessions cannot query, and the SDK's trusted context replaces explicit addresses with the quorum service's list.
 | `NEXT_PUBLIC_DISABLE_WRITE_MODE` | hide `/broadcast` and `/wallet` | `'false'` |
 | `NEXT_PUBLIC_RATE_PROVIDER` | `kucoin` / `coinbase` / `none` | `kucoin` |
 | `NEXT_PUBLIC_WELL_KNOWN_URL` | optional override of `well-known.ts` (JSON at a URL) | — |
+
+Quorum URLs must use `https://` (`http://` only for localhost); other values are ignored with a console warning. `NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported: untrusted sessions cannot query, and the SDK's trusted context replaces explicit addresses with the quorum service's list.
 
 ---
 

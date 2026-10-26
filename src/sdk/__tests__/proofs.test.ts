@@ -10,7 +10,7 @@ describe('classifyProof', () => {
     const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Epoch read failed', { cause: native });
     expect(isProofVerificationError(error)).toBe(false);
     expect(isProofFallbackBlocked(error)).toBe(true);
-    const state = classifyProof({ status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 }, { trusted: false, hasProofVariant: true });
+    const state = classifyProof({ status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 }, { hasProofVariant: true });
     expect(state.kind).toBe('unavailable');
     expect(describeProofState(state)).toContain('proof verification was not completed');
   });
@@ -28,7 +28,7 @@ describe('classifyProof', () => {
     const error = shape === 'raw' ? native : shape === 'normalized' ? normalizeError(native) : new Error('Proof request failed', { cause: native });
     expect(isProofVerificationError(error)).toBe(false);
     expect(isProofFallbackBlocked(error)).toBe(true);
-    const state = classifyProof({ status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 }, { trusted: true, hasProofVariant: true });
+    const state = classifyProof({ status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 }, { hasProofVariant: true });
     expect(state.kind).toBe('unavailable');
     expect(describeProofState(state)).toContain('proof verification was not completed');
     expect(normalizeError(native).message).toBe(`Proof [-1]: ${SDK_PROOF_DECODE_MESSAGE}`);
@@ -62,23 +62,15 @@ describe('classifyProof', () => {
   it('returns unverified-no-variant when the method has no proof sibling', () => {
     const r = classifyProof(
       { status: 'success', data: 1, error: null, fetchStatus: 'idle', dataUpdatedAt: 1234 },
-      { trusted: true, hasProofVariant: false },
+      { hasProofVariant: false },
     );
     expect(r.kind).toBe('unverified-no-variant');
-  });
-
-  it('returns unverified-trusted-off when trusted mode is disabled', () => {
-    const r = classifyProof(
-      { status: 'success', data: 1, error: null, fetchStatus: 'idle', dataUpdatedAt: 1234 },
-      { trusted: false, hasProofVariant: true },
-    );
-    expect(r.kind).toBe('unverified-trusted-off');
   });
 
   it('distinguishes unavailable queries from failed verification', () => {
     const r = classifyProof(
       { status: 'error', data: undefined, error: new Error('x'), fetchStatus: 'idle', dataUpdatedAt: 1234 },
-      { trusted: true, hasProofVariant: true },
+      { hasProofVariant: true },
     );
     expect(r).toEqual({ kind: 'unavailable', error: 'x', reason: 'unknown' });
   });
@@ -86,7 +78,7 @@ describe('classifyProof', () => {
   it('returns in-flight while pending or fetching', () => {
     const r = classifyProof(
       { status: 'pending', data: undefined, error: null, fetchStatus: 'fetching', dataUpdatedAt: 0 },
-      { trusted: true, hasProofVariant: true },
+      { hasProofVariant: true },
     );
     expect(r.kind).toBe('unverified-in-flight');
   });
@@ -94,18 +86,18 @@ describe('classifyProof', () => {
   it('returns verified when trusted + variant + success', () => {
     const r = classifyProof(
       { status: 'success', data: { ok: true }, error: null, fetchStatus: 'idle', dataUpdatedAt: 1234 },
-      { trusted: true, hasProofVariant: true },
+      { hasProofVariant: true },
     );
     expect(r.kind).toBe('verified');
   });
   it('retains the original timestamp while refreshing cached data', () => {
     const query = { status: 'success' as const, data: null, error: null, fetchStatus: 'fetching' as const, dataUpdatedAt: 1234 };
-    expect(classifyProof(query, { trusted: true, hasProofVariant: true })).toEqual({ kind: 'verified', verifiedAt: 1234 });
-    expect(classifyProof(query, { trusted: true, hasProofVariant: true })).toEqual({ kind: 'verified', verifiedAt: 1234 });
+    expect(classifyProof(query, { hasProofVariant: true })).toEqual({ kind: 'verified', verifiedAt: 1234 });
+    expect(classifyProof(query, { hasProofVariant: true })).toEqual({ kind: 'verified', verifiedAt: 1234 });
   });
 
   it('only labels explicit verification errors as failed', () => {
-    expect(classifyProof({ status: 'error', data: undefined, error: new Error('Proof verification failed: root mismatch'), fetchStatus: 'idle', dataUpdatedAt: 0 }, { trusted: true, hasProofVariant: true }).kind).toBe('failed');
+    expect(classifyProof({ status: 'error', data: undefined, error: new Error('Proof verification failed: root mismatch'), fetchStatus: 'idle', dataUpdatedAt: 0 }, { hasProofVariant: true }).kind).toBe('failed');
     expect(isProofVerificationError(new Error('proof endpoint unavailable'))).toBe(false);
     expect(isProofVerificationError(new Error('failed to retrieve quorum public key'))).toBe(false);
     expect(isProofVerificationError({ kind: 'InvalidProof' })).toBe(true);
@@ -120,14 +112,14 @@ describe('classifyProof', () => {
     expect(isProofVerificationError({ kind: 6, name: 'DapiClientError', message: 'network failure' })).toBe(false);
   });
 
-  it('reports outages even on non-proof methods or with trusted mode off', () => {
-    expect(classifyProof({ status: 'error', data: undefined, error: new Error('offline'), fetchStatus: 'idle', dataUpdatedAt: 0 }, { trusted: false, hasProofVariant: false }).kind).toBe('unavailable');
+  it('reports outages even on non-proof methods', () => {
+    expect(classifyProof({ status: 'error', data: undefined, error: new Error('offline'), fetchStatus: 'idle', dataUpdatedAt: 0 }, { hasProofVariant: false }).kind).toBe('unavailable');
   });
 
   it('identifies the configured quorum-key service', () => {
-    expect(getQuorumKeySource('testnet', true)).toBe('https://quorums.testnet.networks.dash.org');
-    expect(getQuorumKeySource('devnet-paloma', true)).toBe('https://quorums.paloma.networks.dash.org');
-    expect(getQuorumKeySource('mainnet', false)).toContain('trusted mode off');
+    expect(getQuorumKeySource('testnet')).toBe('https://quorums.testnet.networks.dash.org');
+    expect(getQuorumKeySource('devnet-paloma')).toBe('https://quorums.paloma.networks.dash.org');
+    expect(getQuorumKeySource('mainnet', 'https://quorums.example.test')).toBe('https://quorums.example.test');
   });
 
 });
@@ -135,7 +127,6 @@ describe('classifyProof', () => {
 describe('aggregateProof', () => {
   const verified: ProofState = { kind: 'verified', verifiedAt: 0 };
   const unverifiedNoVariant: ProofState = { kind: 'unverified-no-variant', reason: 'no-proof-method' };
-  const unverifiedTrustedOff: ProofState = { kind: 'unverified-trusted-off', reason: 'trusted-mode-off' };
   const inFlight: ProofState = { kind: 'unverified-in-flight' };
   const failed: ProofState = { kind: 'failed', error: 'boom' };
 
@@ -149,10 +140,6 @@ describe('aggregateProof', () => {
 
   it('picks in-flight over unverified', () => {
     expect(aggregateProof([verified, unverifiedNoVariant, inFlight]).kind).toBe('unverified-in-flight');
-  });
-
-  it('picks trusted-off over no-variant', () => {
-    expect(aggregateProof([unverifiedNoVariant, unverifiedTrustedOff]).kind).toBe('unverified-trusted-off');
   });
 
   it('returns verified if every query is verified', () => {
@@ -179,7 +166,7 @@ function sdkError(kind: number, name: string, message: string): unknown {
 describe('SDK error kinds', () => {
   const unavailable = (error: unknown) => classifyProof(
     { status: 'error', data: undefined, error: normalizeError(error), fetchStatus: 'idle', dataUpdatedAt: 0 },
-    { trusted: true, hasProofVariant: true },
+    { hasProofVariant: true },
   );
 
   it.each([

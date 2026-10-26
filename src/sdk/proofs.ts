@@ -6,7 +6,6 @@ export type ProofState =
   | { kind: 'verified'; verifiedAt: number }
   | { kind: 'unverified-in-flight' }
   | { kind: 'unverified-no-variant'; reason: 'no-proof-method' }
-  | { kind: 'unverified-trusted-off'; reason: 'trusted-mode-off' }
   | { kind: 'failed'; error: string }
   | { kind: 'unavailable'; error: string; reason?: UnavailableReason }
   | { kind: 'unknown' };
@@ -14,8 +13,9 @@ export type ProofState =
 /** Why a query produced no verifiable answer. */
 export type UnavailableReason = Exclude<SdkErrorClass, 'verification'>;
 
+/** Every session is trusted: the pinned SDK cannot query without its
+ * trusted context, so there is no unverified "trusted mode off" state. */
 export interface ClassifyOptions {
-  trusted: boolean;
   /** True when the underlying SDK method has a `…WithProof` sibling. */
   hasProofVariant: boolean;
 }
@@ -38,6 +38,8 @@ export function isProofVerificationError(error: unknown): boolean {
 export type VerificationResult = 'verified' | 'not-verified' | 'failed' | 'unavailable';
 
 export function verificationForResponse(opts: ClassifyOptions & {
+  /** The session's trust flag, recorded in evidence; always true in the app. */
+  trusted: boolean;
   status: 'success' | 'error';
   error?: unknown;
 }): VerificationResult {
@@ -48,8 +50,7 @@ export function verificationForResponse(opts: ClassifyOptions & {
 }
 
 /** The configured trust anchor, not a claim that the browser validates Core consensus. */
-export function getQuorumKeySource(network: string, trusted: boolean, quorumUrlOverride?: string | null): string {
-  if (!trusted) return 'Not used (trusted mode off)';
+export function getQuorumKeySource(network: string, quorumUrlOverride?: string | null): string {
   const cfg = getNetwork(network);
   return quorumUrlOverride || cfg.quorumUrl || `https://quorums.${cfg.type === 'devnet' ? devnetShortName(cfg) : cfg.type}.networks.dash.org`;
 }
@@ -68,9 +69,6 @@ export function classifyProof<TData>(
   if (!opts.hasProofVariant) {
     return { kind: 'unverified-no-variant', reason: 'no-proof-method' };
   }
-  if (!opts.trusted) {
-    return { kind: 'unverified-trusted-off', reason: 'trusted-mode-off' };
-  }
   if (query.status === 'success' && query.data !== undefined) {
     return { kind: 'verified', verifiedAt: query.dataUpdatedAt };
   }
@@ -84,7 +82,6 @@ const SEVERITY: Record<ProofState['kind'], number> = {
   failed: 50,
   unavailable: 40,
   'unverified-in-flight': 30,
-  'unverified-trusted-off': 20,
   'unverified-no-variant': 10,
   unknown: 5,
   verified: 0,
@@ -109,8 +106,6 @@ export function describeProofState(s: ProofState): string {
       return 'Fetching — proof verification pending.';
     case 'unverified-no-variant':
       return 'This SDK method does not support proof verification.';
-    case 'unverified-trusted-off':
-      return 'Trusted mode is off. Data fetched without proof verification.';
     case 'failed':
       return `Proof verification failed: ${s.error}`;
     case 'unavailable':

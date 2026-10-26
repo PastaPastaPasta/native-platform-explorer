@@ -32,6 +32,10 @@ a URL-normalization cause. With this SDK, trusted context discovery replaces
 an address list supplied through `withAddresses`; that call does not pin the
 trusted endpoint.
 
+> **Note:** untrusted mode has since been removed: every session is trusted,
+> because the pinned SDK cannot run these queries without its trusted context.
+> The paragraph below records the observation that led to that removal.
+
 The trusted-off branch attempts ordinary explicit queries and would use the
 local clock after a successful genesis read, retaining an unverified status.
 Actual Mainnet controls with this pinned WASM SDK fail on that initial read:

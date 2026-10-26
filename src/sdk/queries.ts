@@ -129,7 +129,7 @@ function useSdkQuery<TData>(
     const { assertActive } = execution;
     const generation = proofStore.generation;
     const inspectorMethodName = methodName ?? `${String(key[0])}.${String(key[1])}`;
-    const quorumKeySource = getQuorumKeySource(network, trusted, quorumUrl);
+    const quorumKeySource = getQuorumKeySource(network, quorumUrl);
     const t0 = performance.now();
     const record = (
       status: 'success' | 'error',
@@ -241,7 +241,7 @@ function useSdkQuery<TData>(
   // forever waiting for a precondition the user hasn't met yet. A failed SDK
   // session surfaces as an error from the session query instead.
   const userEnabled = typeof rest.enabled === 'boolean' ? rest.enabled : true;
-  const proofState = classifyProof(q, { trusted, hasProofVariant });
+  const proofState = classifyProof(q, { hasProofVariant });
   return overlayQueryResult(q, { proofState, proofEntry, isLoading: q.isPending && userEnabled }) as SdkQueryResult<TData>;
 }
 

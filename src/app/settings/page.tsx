@@ -291,7 +291,7 @@ export default function Page() {
             />
             <InfoLine
               label="Quorum keys from"
-              value={<Text fontFamily="mono" wordBreak="break-all">{getQuorumKeySource(network, true, quorumUrl)}</Text>}
+              value={<Text fontFamily="mono" wordBreak="break-all">{getQuorumKeySource(network, quorumUrl)}</Text>}
             />
           </VStack>
         </InfoBlock>

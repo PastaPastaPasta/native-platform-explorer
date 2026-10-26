@@ -287,7 +287,7 @@ export function SdkProvider({ children }: { children: ReactNode }) {
         await measureSdkPhase('connect', attemptId, controller.signal, () => withDeadline(
           connectingSdk,
           settings.startupTimeoutMs,
-          () => new SdkSessionError('timeout', `Timed out after ${seconds} s connecting to Dash Platform: the trusted quorum service (${getQuorumKeySource(net, true, resolveQuorumUrl(net, settings))}) did not answer.`),
+          () => new SdkSessionError('timeout', `Timed out after ${seconds} s connecting to Dash Platform: the trusted quorum service (${getQuorumKeySource(net, resolveQuorumUrl(net, settings))}) did not answer.`),
         ));
       } catch (err) {
         settle();

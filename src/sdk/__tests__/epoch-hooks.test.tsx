@@ -69,20 +69,20 @@ describe('epoch hook SDK arguments and capture', () => {
     expect(evidence).not.toHaveProperty('metadata');
   });
 
-  it.each([true, false])('exports aggregate success with its actual trust outcome and limitation (trusted=%s)', async (trusted) => {
+  it('exports aggregate success with its actual trust outcome and limitation', async () => {
     const epochsInfo = vi.fn((query: EpochQuery) => Promise.resolve(new Map([[query.startEpoch!, { blockHeight: 100n }]])));
     const epochsInfoWithProof = vi.fn();
-    mountProbe(createSdkContextValue({ trusted, sdk: createMockSdk({ epoch: { epochsInfo, epochsInfoWithProof } }) }), 'range');
+    mountProbe(createSdkContextValue({ sdk: createMockSdk({ epoch: { epochsInfo, epochsInfoWithProof } }) }), 'range');
     await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:idle:0,10,20'));
     expect(epochsInfoWithProof).not.toHaveBeenCalled();
-    expect(screen.getByTestId('proof-state')).toHaveTextContent(trusted ? 'verified' : 'unverified-trusted-off');
+    expect(screen.getByTestId('proof-state')).toHaveTextContent('verified');
     const evidence = JSON.parse(screen.getByTestId('export').textContent!);
     expect(evidence.verification).toMatchObject({
-      outcome: trusted ? 'verified' : 'not-verified',
+      outcome: 'verified',
       proofAvailability: 'not-captured',
-      captureNote: `Combined results from separate ${trusted ? 'SDK-verified batches' : 'SDK calls'}. No single proof payload or response height covers this range.`,
+      captureNote: 'Combined results from separate SDK-verified batches. No single proof payload or response height covers this range.',
     });
-    expect(evidence.context).toMatchObject({ network: 'testnet', trustedMode: trusted });
+    expect(evidence.context).toMatchObject({ network: 'testnet', trustedMode: true });
     expect(evidence).not.toHaveProperty('proof');
     expect(evidence).not.toHaveProperty('metadata');
     expect(evidence.result).toEqual({ 0: { blockHeight: '100' }, 10: { blockHeight: '100' }, 20: { blockHeight: '100' } });

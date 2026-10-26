@@ -14,7 +14,7 @@ type EpochQuery = NonNullable<Parameters<EvoSDK['epoch']['epochsInfo']>[0]>;
 const DURATION = 788_400_000;
 const NOW = 1 + 84 * DURATION + 1;
 const BASE58_ID = 'US517G5965aydkZ46HS38QLi7UQiSojurfbQfKCELFx';
-const note = (trusted: boolean) => `Current epoch selected from separate ${trusted ? 'SDK-verified explicit queries and signed block time' : 'SDK calls and the local clock'}. No single proof payload or response height covers this selection.`;
+const NOTE = 'Current epoch selected from separate SDK-verified explicit queries and signed block time. No single proof payload or response height covers this selection.';
 
 function epoch(index: number) {
   return {
@@ -62,24 +62,23 @@ afterEach(() => { vi.restoreAllMocks(); });
 
 describe('combined current-epoch evidence', () => {
   // Transport doubles establish hook/recording behavior only, not successful
-  // cryptographic verification or live trusted-off WASM availability.
-  it.each([true, false])('records both explicit reads with honest aggregate trust and provenance (trusted=%s)', async (trusted) => {
+  // cryptographic verification.
+  it('records both explicit reads with honest aggregate trust and provenance', async () => {
     vi.spyOn(Date, 'now').mockReturnValue(NOW);
     const { sdk, epochsInfoWithProof, epochsInfo } = transports();
-    renderWithProviders(<Probe />, { sdk: { sdk, network: 'mainnet', trusted } });
-    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent(`success:${trusted ? 'verified' : 'unverified-trusted-off'}`));
-    const used = trusted ? epochsInfoWithProof : epochsInfo;
-    expect(used.mock.calls.map(([query]) => query)).toEqual([
+    renderWithProviders(<Probe />, { sdk: { sdk, network: 'mainnet' } });
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:verified'));
+    expect(epochsInfoWithProof.mock.calls.map(([query]) => query)).toEqual([
       { startEpoch: 0, count: 1, ascending: true },
       { startEpoch: 84, count: 1, ascending: true },
     ]);
-    expect(trusted ? epochsInfo : epochsInfoWithProof).not.toHaveBeenCalled();
+    expect(epochsInfo).not.toHaveBeenCalled();
     expect(sdk.epoch.current).not.toHaveBeenCalled();
     expect(sdk.epoch.currentWithProof).not.toHaveBeenCalled();
     const evidence = captured();
-    expect(evidence.context).toMatchObject({ network: 'mainnet', trustedMode: trusted });
+    expect(evidence.context).toMatchObject({ network: 'mainnet', trustedMode: true });
     expect(evidence.verification).toMatchObject({
-      outcome: trusted ? 'verified' : 'not-verified', proofAvailability: 'not-captured', captureNote: note(trusted),
+      outcome: 'verified', proofAvailability: 'not-captured', captureNote: NOTE,
     });
     expect(evidence.query.params).toMatchObject({ selection: 'genesis-and-time', network: 'mainnet' });
     expect(evidence.result).toMatchObject({ index: 84, firstBlockTime: String(1 + 84 * DURATION) });
@@ -155,16 +154,16 @@ describe('native Identifier in selected aggregate snapshots', () => {
     const write = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
     renderWithProviders(<Probe detail expected={selected} />, { sdk: { sdk, network: 'mainnet' } });
     await waitFor(() => expect(screen.getByTestId('selection')).toHaveTextContent('84:true'));
-    expect(screen.getByText(note(true))).toBeVisible();
+    expect(screen.getByText(NOTE)).toBeVisible();
     fireEvent.click(screen.getByRole('tab', { name: /^Result$/ }));
-    expect(screen.getByText(note(true))).toBeVisible();
+    expect(screen.getByText(NOTE)).toBeVisible();
     fireEvent.click(screen.getByRole('button', { name: 'Copy displayed data' }));
     expect(write).toHaveBeenCalledOnce();
     const copied = JSON.parse(write.mock.calls[0]![0]);
     const evidence = captured();
     expect(copied).toMatchObject({ index: 84, identifier: BASE58_ID, firstBlockTime: String(1 + 84 * DURATION) });
     expect(evidence.result).toEqual(copied);
-    expect(evidence.verification).toMatchObject({ outcome: 'verified', captureNote: note(true), proofAvailability: 'not-captured' });
+    expect(evidence.verification).toMatchObject({ outcome: 'verified', captureNote: NOTE, proofAvailability: 'not-captured' });
     expect(evidence).not.toHaveProperty('proof');
     expect(evidence).not.toHaveProperty('metadata');
     expect(epochsInfoWithProof).toHaveBeenCalledTimes(2);
