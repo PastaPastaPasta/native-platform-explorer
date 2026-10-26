@@ -262,12 +262,12 @@ test('an unchanged SQL run can be cancelled and started again during an endpoint
   await expect.poll(() => requests).toBeGreaterThan(backgroundRequests);
   expect(await page.evaluate(() => performance.timeOrigin)).toBe(timeOrigin);
   expect(await editor!.evaluate((element) => element.isConnected)).toBe(true);
-  const firstRunRequests = requests;
   await page.getByRole('button', { name: 'Cancel run' }).click();
   await expect(page.getByRole('status').filter({ hasText: /^Cancelled\./ })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Run', exact: true })).toBeEnabled();
   await page.getByRole('button', { name: 'Run', exact: true }).click();
-  await expect.poll(() => requests).toBeGreaterThan(firstRunRequests);
+  // evo-sdk 5.0 shares one in-flight contract lookup per contract, so the
+  // restarted run joins the held lookup instead of sending another request.
   await expect(page.getByRole('button', { name: 'Cancel run' })).toBeVisible();
   await page.getByRole('button', { name: 'Cancel run' }).click();
   const requestsBeforeRelease = requests;
