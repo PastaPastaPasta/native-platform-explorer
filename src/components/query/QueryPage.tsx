@@ -47,8 +47,8 @@ export function QueryPage() {
   const [parseHints, setParseHints] = useState<ParseHint[]>([]);
   const [notice, setNotice] = useState('');
   const initialQueryPending = useRef(!!params.get('q'));
-  // Links record the sender's trust setting so a recipient can tell whether
-  // the results they see were produced the same way.
+  // Links record the sender's trust setting. Anyone can edit the URL, so the
+  // notice describes the link and this session, never the sender's results.
   // Captured once: running the shared query rewrites the URL with ours.
   const [sharedTrusted] = useState(() => params.get('trusted'));
 
@@ -185,8 +185,8 @@ export function QueryPage() {
                 This link was shared from {sharedTrusted === '1' ? 'trusted' : 'untrusted'} mode, but trusted mode
                 is {trusted ? 'on' : 'off'} here.{' '}
                 {trusted
-                  ? 'Your results are proof-verified; the sender\'s were not.'
-                  : 'The sender\'s results were proof-verified; yours are not. Turn on trusted mode in Settings to verify them.'}
+                  ? 'Results here are proof-verified.'
+                  : 'Results here are not proof-verified; turn on trusted mode in Settings to verify them.'}
               </Text>
             )}
             <HStack spacing={3} flexWrap="wrap">

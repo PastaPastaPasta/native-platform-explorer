@@ -93,13 +93,19 @@ describe('Query workspace execution', () => {
     await waitFor(() => expect(navigation.search.get('trusted')).toBe('1'));
     await screen.findByText('0 documents returned');
     expect(screen.getByText(/This link was shared from untrusted mode, but trusted mode\s+is on here/)).toHaveTextContent(
-      "Your results are proof-verified; the sender's were not.",
+      'Results here are proof-verified.',
     );
     navigation.replace.mockReset();
     unmount();
     navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '1' });
-    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    const { unmount: unmountSame } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
     expect(screen.queryByText(/This link was shared from/)).not.toBeInTheDocument();
+    unmountSame();
+    // The parameter is only a claim about the link, never about the sender's results.
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query), trusted: false } });
+    const notice = await screen.findByText(/This link was shared from trusted mode, but trusted mode\s+is off here/);
+    expect(notice).toHaveTextContent('Results here are not proof-verified; turn on trusted mode in Settings to verify them.');
+    expect(notice).not.toHaveTextContent(/sender/);
   });
 
   it('bounds statement execution and cancels queued and late results', async () => {
