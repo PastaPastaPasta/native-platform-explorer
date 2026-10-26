@@ -41,6 +41,8 @@ export interface DpnsDomainRow {
   docId?: string;
   /** Display name, e.g. `Alice.dash`. */
   fqdn: string;
+  /** Homograph-safe label the DPNS index is keyed on, e.g. `a11ce`. */
+  normalizedLabel: string;
   /** Normalized name used in /dpns links, e.g. `a11ce.dash`. */
   normalizedFqdn: string;
   ownerId?: string;
@@ -56,12 +58,26 @@ export function dpnsDomainRows(data: unknown): DpnsDomainRow[] {
     const label = (props.label as string | undefined) ?? (props.normalizedLabel as string | undefined) ?? '';
     if (!label) continue;
     const records = props.records as Record<string, unknown> | undefined;
+    const normalizedLabel = (props.normalizedLabel as string | undefined) ?? convertToHomographSafeChars(label);
     rows.push({
       docId: idToString(readProp(doc, 'id')) ?? idToString(readProp(doc, '$id')),
       fqdn: `${label}.dash`,
-      normalizedFqdn: `${(props.normalizedLabel as string | undefined) ?? label.toLowerCase()}.dash`,
+      normalizedLabel,
+      normalizedFqdn: `${normalizedLabel}.dash`,
       ownerId: idToString(records?.identity) ?? idToString(readProp(doc, 'ownerId')),
     });
   }
   return rows;
+}
+
+/** Split prefix-search rows into those whose normalized label starts with
+ *  `normalizedPrefix` and a count of those that don't. The query already
+ *  filters on exactly this, so `outside` should always be 0; callers show it
+ *  instead of silently presenting a non-matching name as a match. */
+export function dpnsPrefixMatches(
+  rows: DpnsDomainRow[],
+  normalizedPrefix: string,
+): { rows: DpnsDomainRow[]; outside: number } {
+  const matching = rows.filter((row) => row.normalizedLabel.startsWith(normalizedPrefix));
+  return { rows: matching, outside: rows.length - matching.length };
 }

@@ -11,7 +11,7 @@ import { IdentityLink } from '@components/data/IdentityLink';
 import { useSdk } from '@sdk/hooks';
 import { useDpnsPrefixSearch } from '@sdk/queries';
 import { dpnsContractId } from '@constants/system-data-contracts';
-import { convertToHomographSafeChars, dpnsDomainRows, type DpnsDomainRow } from '@util/dpns';
+import { convertToHomographSafeChars, dpnsDomainRows, dpnsPrefixMatches, type DpnsDomainRow } from '@util/dpns';
 import { withNetwork } from '@util/exploration';
 
 export const INLINE_PREFIX_LIMIT = 10;
@@ -31,9 +31,10 @@ function NameRow({ row }: { row: DpnsDomainRow }) {
 export function DpnsPrefixResults({ prefix }: { prefix: string }) {
   const { network } = useSdk();
   const contractId = dpnsContractId(network);
-  const normalized = useMemo(() => convertToHomographSafeChars(prefix), [prefix]);
+  const normalized = useMemo(() => convertToHomographSafeChars(prefix.trim()), [prefix]);
   const q = useDpnsPrefixSearch(normalized, contractId, INLINE_PREFIX_LIMIT);
-  const rows = useMemo(() => dpnsDomainRows(q.data), [q.data]);
+  const docs = useMemo(() => dpnsDomainRows(q.data), [q.data]);
+  const { rows, outside } = useMemo(() => dpnsPrefixMatches(docs, normalized), [docs, normalized]);
   const moreHref = withNetwork(`/dpns/search/?q=${encodeURIComponent(prefix)}`, network);
 
   return (
@@ -49,12 +50,17 @@ export function DpnsPrefixResults({ prefix }: { prefix: string }) {
           <LoadingCard lines={3} />
         ) : q.isError ? (
           <ErrorCard error={q.error} onRetry={() => { void q.refetch(); }} />
-        ) : rows.length === 0 ? (
+        ) : docs.length === 0 ? (
           <Text fontSize="sm" color="muted">No DPNS names begin with <code>{prefix}</code>.</Text>
         ) : (
           <VStack align="stretch" spacing={0}>
             {rows.map((row) => <NameRow key={row.docId ?? row.fqdn} row={row} />)}
-            {rows.length === INLINE_PREFIX_LIMIT ? (
+            {outside > 0 ? (
+              <Text role="status" fontSize="xs" color="orange.300" pt={1}>
+                Hid {outside} returned name{outside === 1 ? '' : 's'} not starting with <code>{normalized}</code>.
+              </Text>
+            ) : null}
+            {docs.length === INLINE_PREFIX_LIMIT ? (
               <Text fontSize="xs" color="muted" pt={1}>Showing the first {INLINE_PREFIX_LIMIT}.</Text>
             ) : null}
           </VStack>

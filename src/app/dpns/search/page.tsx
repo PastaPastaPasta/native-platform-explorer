@@ -30,7 +30,7 @@ import { usePageTitle } from '@hooks/usePageTitle';
 import { useDpnsPrefixSearch } from '@sdk/queries';
 import { useSdk } from '@sdk/hooks';
 import { dpnsContractId } from '@constants/system-data-contracts';
-import { convertToHomographSafeChars, dpnsDomainRows } from '@util/dpns';
+import { convertToHomographSafeChars, dpnsDomainRows, dpnsPrefixMatches } from '@util/dpns';
 import { cursorStackParser, MAX_CURSOR_PAGES } from '@util/url-state';
 
 const LIMIT = 25;
@@ -61,6 +61,7 @@ function Content() {
   // DPNS indices key off the homograph-safe form (o→0, i/l→1) and are
   // always lowercased. Normalise the prefix the same way before querying.
   const normalizedPrefix = useMemo(() => convertToHomographSafeChars(q), [q]);
+  const typed = q.toLowerCase();
 
   const searchQ = useDpnsPrefixSearch(
     q ? normalizedPrefix : undefined,
@@ -68,7 +69,9 @@ function Content() {
     LIMIT,
     startAfter,
   );
-  const rows = useMemo(() => dpnsDomainRows(searchQ.data), [searchQ.data]);
+  // `docs` drives the cursor and "has next"; `rows` is what is shown.
+  const docs = useMemo(() => dpnsDomainRows(searchQ.data), [searchQ.data]);
+  const { rows, outside } = useMemo(() => dpnsPrefixMatches(docs, normalizedPrefix), [docs, normalizedPrefix]);
 
   const submit = () => {
     void setUrl({ q: input.trim() || null, after: null });
@@ -131,9 +134,9 @@ function Content() {
             <LoadingCard lines={3} />
           ) : searchQ.isError ? (
             <ErrorCard error={searchQ.error} onRetry={() => searchQ.refetch()} />
-          ) : rows.length === 0 ? (
+          ) : docs.length === 0 ? (
             <Text color="gray.400" fontSize="sm">
-              No DPNS names begin with <code>{q}</code>.
+              No {cursors.length > 0 ? 'more ' : ''}DPNS names begin with <code>{q}</code>.
             </Text>
           ) : (
             <Box overflowX="auto">
@@ -149,6 +152,12 @@ function Content() {
                     <Tr key={row.docId ?? row.fqdn} _hover={{ bg: 'gray.800' }}>
                       <Td borderColor="gray.750">
                         <DpnsNameLink fqdn={row.fqdn} normalizedFqdn={row.normalizedFqdn} />
+                        {/* Say why e.g. "airjordan" matches "al": both fold to "a1…". */}
+                        {!row.fqdn.toLowerCase().startsWith(typed) ? (
+                          <Text as="span" fontSize="xs" color="gray.400" ml={2}>
+                            matches as <code>{row.normalizedLabel}</code>
+                          </Text>
+                        ) : null}
                       </Td>
                       <Td borderColor="gray.750">
                         {row.ownerId ? <IdentityLink id={row.ownerId} dense /> : '—'}
@@ -157,16 +166,22 @@ function Content() {
                   ))}
                 </Tbody>
               </Table>
+              {outside > 0 ? (
+                <Text role="status" fontSize="xs" color="orange.300" mt={2}>
+                  Hid {outside} returned name{outside === 1 ? '' : 's'} not starting with{' '}
+                  <code>{normalizedPrefix}</code>.
+                </Text>
+              ) : null}
             </Box>
           )}
             <HStack justify="flex-end" mt={3}>
               <CursorPagination
                 pageIndex={cursors.length}
                 hasPrev={cursors.length > 0}
-                hasNext={rows.length === LIMIT && cursors.length < MAX_CURSOR_PAGES}
+                hasNext={docs.length === LIMIT && cursors.length < MAX_CURSOR_PAGES}
                 onPrev={() => void setUrl({ after: cursors.length > 1 ? cursors.slice(0, -1) : null })}
                 onNext={() => {
-                  const lastId = rows[rows.length - 1]?.docId;
+                  const lastId = docs[docs.length - 1]?.docId;
                   if (lastId) void setUrl({ after: [...cursors, lastId] });
                 }}
               />
@@ -174,7 +189,8 @@ function Content() {
           </InfoBlock>
         ) : null}
 
-        <DpnsDirectoryPanel />
+        {/* Unfiltered, so beside prefix results it reads as more results. */}
+        {!q ? <DpnsDirectoryPanel /> : null}
       </VStack>
     </Container>
   );
