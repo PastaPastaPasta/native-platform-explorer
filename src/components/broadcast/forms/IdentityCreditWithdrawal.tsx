@@ -14,10 +14,10 @@ export interface IdentityCreditWithdrawalOptions {
 }
 
 // Platform system limits (min_withdrawal_amount / max_withdrawal_amount).
-export const MIN_WITHDRAWAL_CREDITS = 190_000n;
-export const MAX_WITHDRAWAL_CREDITS = 50_000_000_000_000n;
+const MIN_WITHDRAWAL_CREDITS = 190_000n;
+const MAX_WITHDRAWAL_CREDITS = 50_000_000_000_000n;
 /** Platform requires a Fibonacci core fee per byte; cap it far above normal relay fees. */
-export const CORE_FEE_PER_BYTE_OPTIONS = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
+const CORE_FEE_PER_BYTE_OPTIONS = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
 
 export function validateCoreFeePerByte(text: string): { fee?: number; error?: string } {
   const fee = /^\d+$/.test(text.trim()) ? Number(text.trim()) : NaN;

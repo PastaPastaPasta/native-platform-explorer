@@ -75,7 +75,7 @@ function removeStash() {
 }
 
 /** Clear local signers after this long without user input, visible or hidden. */
-export const IDLE_TIMEOUT_MS = 10 * 60_000;
+const IDLE_TIMEOUT_MS = 10 * 60_000;
 const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'] as const;
 
 /** Routes that may hold a signer; navigating anywhere else clears it. */

@@ -126,11 +126,15 @@ export function DocumentReplaceForm({
   }, [activeSchema, properties]);
 
   useEffect(() => {
-    if (!validContract || !validDocId || !documentType || !activeSchema || !loaded || !isLoaded) {
-      onOptionsChange(null);
-      return;
-    }
-    if (Object.keys(errors).length > 0) {
+    if (
+      !validContract ||
+      !validDocId ||
+      !documentType ||
+      !activeSchema ||
+      !loaded ||
+      !isLoaded ||
+      Object.keys(errors).length > 0
+    ) {
       onOptionsChange(null);
       return;
     }

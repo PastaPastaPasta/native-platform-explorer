@@ -5,14 +5,14 @@ import { Box, Button, HStack, Input, Select, Text, Textarea, VStack } from '@cha
 import type { OperationFormProps } from '../OperationShell';
 
 /** Purposes and security levels Platform accepts for keys added by an identity update. */
-export const ADDABLE_KEY_LEVELS = {
+const ADDABLE_KEY_LEVELS = {
   AUTHENTICATION: ['MASTER', 'CRITICAL', 'HIGH', 'MEDIUM'],
   TRANSFER: ['CRITICAL'],
   ENCRYPTION: ['MEDIUM'],
   DECRYPTION: ['MEDIUM'],
 } as const;
 /** Platform's max_public_keys_in_creation. */
-export const MAX_ADDED_KEYS = 6;
+const MAX_ADDED_KEYS = 6;
 
 export type AddablePurpose = keyof typeof ADDABLE_KEY_LEVELS;
 export type AddableKeyType = 'ECDSA_SECP256K1' | 'ECDSA_HASH160';
@@ -110,11 +110,13 @@ export function IdentityUpdateKeysForm({
   const keyErrors = wifCheck?.keys === keys ? wifCheck.errors : null;
 
   useEffect(() => {
-    if (disable.error || keys.length > MAX_ADDED_KEYS || !keyErrors || keyErrors.some(Boolean)) {
-      onOptionsChange(null);
-      return;
-    }
-    if (!keys.length && !disable.ids?.length) {
+    if (
+      disable.error ||
+      keys.length > MAX_ADDED_KEYS ||
+      !keyErrors ||
+      keyErrors.some(Boolean) ||
+      (!keys.length && !disable.ids?.length)
+    ) {
       onOptionsChange(null);
       return;
     }

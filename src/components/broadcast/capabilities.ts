@@ -103,12 +103,7 @@ export const DPNS_CONTRACT_ID = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpn
  * type that requires MASTER cannot be signed at all.
  */
 export function documentSecurityLevels(requirement: unknown): SecurityLevelName[] {
-  const required =
-    requirement === undefined || requirement === null
-      ? 2
-      : typeof requirement === 'bigint'
-        ? Number(requirement)
-        : requirement;
+  const required = typeof requirement === 'bigint' ? Number(requirement) : (requirement ?? 2);
   if (typeof required !== 'number' || !Number.isInteger(required) || required < 0 || required > 3)
     throw new Error(`Unsupported signatureSecurityLevelRequirement ${String(requirement)}.`);
   if (required === 0)

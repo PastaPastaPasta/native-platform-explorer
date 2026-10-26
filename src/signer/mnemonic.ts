@@ -4,7 +4,7 @@ import { SignerUnavailableError } from './types';
 import { createLocalSigner, decodeWif, type ImportedPrivateKey } from './local';
 
 /** Key indexes scanned per identity; wallets and the bridge number keys from 0. */
-export const IDENTITY_KEY_SCAN_DEPTH = 16;
+const IDENTITY_KEY_SCAN_DEPTH = 16;
 
 /**
  * DIP-13 identity authentication key path (ECDSA key type 0):

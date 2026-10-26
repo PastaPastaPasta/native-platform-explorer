@@ -73,7 +73,6 @@ export interface IdentityResult {
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-
 // wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
 // only release on explicit `free()`. Every executor now goes through this
 // helper so the IdentitySigner is freed after the broadcast resolves (or
@@ -81,7 +80,7 @@ export interface IdentityResult {
 // adapters still have their IdentitySigner freed by the fallback here.
 async function withSigningMaterial<T>(
   signer: ExplorerSigner,
-  criteria: KeySelectionCriteria | undefined | (() => Promise<KeySelectionCriteria | undefined>),
+  criteria: () => Promise<KeySelectionCriteria | undefined>,
   fn: (material: SdkSigningMaterial, submit: typeof submitOperation) => Promise<T>,
 ): Promise<T> {
   if (!signer.prepareSdk) {
@@ -92,7 +91,7 @@ async function withSigningMaterial<T>(
   }
   let material: SdkSigningMaterial;
   try {
-    material = await signer.prepareSdk(typeof criteria === 'function' ? await criteria() : criteria);
+    material = await signer.prepareSdk(await criteria());
   } catch (error) {
     throw new OperationNotSubmittedError(error);
   }
