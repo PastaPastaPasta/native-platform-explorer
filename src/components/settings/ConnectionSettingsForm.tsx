@@ -174,9 +174,9 @@ export function ConnectionSettingsForm() {
       </SimpleGrid>
       <Text fontSize="xs" color="gray.400">
         Saved in this browser only. Saving starts a new SDK session. Explicit DAPI addresses
-        are not offered for Mainnet or Testnet: the pinned SDK replaces them with the quorum
-        service&apos;s masternode list, so pointing at another quorum service is how to use
-        different endpoints.
+        are not offered for Mainnet or Testnet: sessions use the quorum service&apos;s
+        masternode list, so pointing at another quorum service is how to use different
+        endpoints.
       </Text>
       <HStack>
         <Button size="sm" variant="outline" onClick={save}>Save &amp; reconnect</Button>

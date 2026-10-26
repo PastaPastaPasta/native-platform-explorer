@@ -145,8 +145,7 @@ export default function Page() {
               Devnets you&apos;ve added are stored in this browser only. They share testnet
               derivation paths. Each devnet needs a reachable quorums service (default:
               <code> https://quorums.&lt;name&gt;.networks.dash.org</code>) for quorum keys
-              and its masternode list; saved DAPI addresses are used only when that service
-              publishes no masternodes.
+              and, unless DAPI addresses are saved with the devnet, its masternode list.
             </Text>
             {customDevnets.length === 0 ? (
               <Text fontSize="sm" color="gray.400">

@@ -15,9 +15,10 @@ export interface NetworkConfig {
   insightApiUrl?: string;
   /** Faucet URL (devnets/testnet). */
   faucetBaseUrl?: string;
-  /** Custom DAPI masternode endpoints. Optional: every session prefetches
-   *  from the devnet's quorum service, whose published masternode list
-   *  replaces these; they are used only when it publishes none. */
+  /** Custom DAPI masternode endpoints. Optional: without them a session
+   *  uses the masternode list the devnet's quorum service publishes. When set
+   *  they replace that list (the SDK then skips the discovery request); quorum
+   *  keys still come from the service. */
   dapiAddresses?: string[];
   /** Devnet short name (no `devnet-` prefix). Passed to the SDK as
    *  `EvoSDK.devnet(name)` / `EvoSDK.devnetTrusted(name)`. Only meaningful
