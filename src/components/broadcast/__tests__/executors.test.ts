@@ -149,7 +149,7 @@ describe('broadcast executors', () => {
 
     it('is the only key the signer may use', async () => {
       const prepareSdk = vi.fn().mockResolvedValue(createSigningMaterial({ keyId: 3 }));
-      const create = vi.fn().mockResolvedValue(undefined);
+      const create = vi.fn().mockResolvedValue({ id: 'confirmed-document-id' });
       await run(createMockSigner({ prepareSdk }), create);
       expect(prepareSdk).toHaveBeenCalledWith(expect.objectContaining({ keyId: 3 }));
       expect(prepareSdk.mock.calls[0]![0]).toMatchObject({ purpose: 'AUTHENTICATION' });
@@ -214,7 +214,7 @@ describe('broadcast executors', () => {
     });
     const create = fails
       ? vi.fn().mockRejectedValue(new Error('broadcast failed'))
-      : vi.fn().mockResolvedValue(undefined);
+      : vi.fn().mockResolvedValue({ id: 'confirmed-document-id' });
     const execution = executeDocumentCreate({
       sdk: { contracts: noteContracts(), documents: { create } } as never,
       signer,
@@ -238,7 +238,9 @@ describe('broadcast executors', () => {
       identityId: 'owner-1',
       prepareSdk: vi.fn().mockResolvedValue(material),
     });
-    const create = vi.fn().mockResolvedValue(undefined);
+    // The SDK resolves to the document Platform stored, whose id (protocol 14)
+    // commits to the contract nonce rather than matching the submitted one.
+    const create = vi.fn().mockResolvedValue({ id: 'confirmed-document-id' });
     const sdk = {
       contracts: noteContracts(), documents: { create },
     };
@@ -270,7 +272,7 @@ describe('broadcast executors', () => {
       action: 'create',
       contractId: 'contract-1',
       documentType: 'note',
-      documentId: 'generated-document-id',
+      documentId: 'confirmed-document-id',
       ownerId: 'owner-1',
     });
   });
@@ -305,7 +307,7 @@ describe('broadcast executors', () => {
     expect(free).toHaveBeenCalledOnce();
   });
 
-  it('preserves the document identifier when the broadcast outcome is unknown', async () => {
+  it('omits the placeholder document id when the broadcast outcome is unknown', async () => {
     const sdk = {
       contracts: noteContracts(), documents: { create: vi.fn().mockRejectedValue(new Error('request timed out')) },
     };
@@ -315,11 +317,11 @@ describe('broadcast executors', () => {
       options: { contractId: 'contract-1', documentType: 'note', properties: {} },
     }).catch((error: unknown) => error);
     expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
+    // The stored id depends on the nonce the SDK assigned while submitting.
     expect((error as BroadcastOutcomeUnknownError).entities).toEqual({
       identityId: 'identity-1',
       contractId: 'contract-1',
       documentType: 'note',
-      documentId: 'generated-document-id',
     });
   });
 

@@ -366,7 +366,11 @@ export async function executeDocumentCreate(
       material.identityId,
       options.properties,
     );
-    await submit(
+    // From protocol 14 a new document's id commits to the identity contract
+    // nonce the SDK assigns while submitting, so the id built above is a
+    // placeholder: report the confirmed document's id, and no id when the
+    // outcome is unknown.
+    const created = await submit(
       () =>
         sdk.documents.create({
           document,
@@ -377,7 +381,6 @@ export async function executeDocumentCreate(
         identityId: material.identityId,
         contractId: options.contractId,
         documentType: options.documentType,
-        documentId: String(document.id),
       },
       args.assertCurrent,
     );
@@ -386,7 +389,7 @@ export async function executeDocumentCreate(
       action: 'create' as const,
       contractId: options.contractId,
       documentType: options.documentType,
-      documentId: String(document.id),
+      documentId: String(created.id),
       ownerId: material.identityId,
     };
   });
@@ -613,9 +616,10 @@ export async function executeIdentityCreditTransfer(
     () => resolveSigningCriteria('identity.creditTransfer', sdk, options),
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
-      // SDK rc.2 merges the facade's IdentityCreditTransferOptions with the raw
-      // transition's (which adds senderId/nonce). Type-check the real facade
-      // shape here, then cast only across that upstream declaration collision.
+      // The SDK (rc.2 and 5.0) merges the facade's IdentityCreditTransferOptions
+      // with the raw transition's (which adds senderId/nonce). Type-check the
+      // real facade shape here, then cast only across that upstream declaration
+      // collision.
       const transfer: CreditTransferFacadeOptions = {
         identity,
         recipientId: options.recipientId,
