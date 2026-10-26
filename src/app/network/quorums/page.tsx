@@ -5,7 +5,7 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import { CodeBlock } from '@components/data/CodeBlock';
+import { QuorumsTable } from '@components/network/QuorumsTable';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useCurrentQuorumsInfo } from '@sdk/queries';
 
@@ -26,7 +26,7 @@ export default function Page() {
           <ErrorCard error={q.error} onRetry={() => q.refetch()} />
         ) : (
           <InfoBlock>
-            <CodeBlock value={q.data ?? 'No quorums reported.'} />
+            <QuorumsTable data={q.data} />
           </InfoBlock>
         )}
       </VStack>

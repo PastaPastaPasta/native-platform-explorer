@@ -13,6 +13,15 @@ export function epochDurationMs(network: string): bigint {
   throw new Error('Current epoch is unavailable: this network has no verified epoch duration. Browse an explicit epoch instead.');
 }
 
+/** Configured epoch length in ms, or null for networks without one. */
+export function networkEpochDurationMs(network: string): number | null {
+  try {
+    return Number(epochDurationMs(network));
+  } catch {
+    return null;
+  }
+}
+
 function unsignedInteger(value: unknown): bigint {
   if (typeof value === 'bigint' && value >= 0n && value <= 0xffff_ffff_ffff_ffffn) return value;
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);

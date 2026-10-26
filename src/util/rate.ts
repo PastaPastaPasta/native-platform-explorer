@@ -1,5 +1,8 @@
-// Fetch DASH/USD from a public ticker. Kucoin primary, Coinbase fallback.
-// Returns null if both fail — the UI must degrade gracefully.
+// Fetch DASH/USD from a public ticker. Coinbase sends CORS headers, so it is
+// the default in browsers. KuCoin's public API sends none: browsers block the
+// request and log a console error on every page load. It stays selectable
+// (with Coinbase fallback) for deployments that proxy or rewrite it.
+// Returns null if every provider fails — the UI must degrade gracefully.
 
 export interface DashUsdRate {
   price: number;
@@ -37,7 +40,7 @@ async function fetchCoinbase(signal?: AbortSignal): Promise<number | null> {
 }
 
 export async function fetchDashUsdRate(
-  preferred: 'kucoin' | 'coinbase' | 'none' = 'kucoin',
+  preferred: 'kucoin' | 'coinbase' | 'none' = 'coinbase',
   signal?: AbortSignal,
 ): Promise<DashUsdRate | null> {
   if (preferred === 'none') return null;
@@ -51,7 +54,5 @@ export async function fetchDashUsdRate(
   }
   const c = await fetchCoinbase(signal);
   if (c !== null) return { price: c, fetchedAt: now, source: 'coinbase' };
-  const k = await fetchKucoin(signal);
-  if (k !== null) return { price: k, fetchedAt: now, source: 'kucoin' };
   return null;
 }

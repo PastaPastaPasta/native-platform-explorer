@@ -16,3 +16,10 @@ export function formatCredits(credits: bigint | number | string): string {
 export function formatNumber(value: number | string, decimals = 2): string {
   return new BigNumber(value).toFormat(decimals);
 }
+
+/** DASH amount with thousands separators and a fixed number of decimals, for
+ *  headline figures where the full 11-decimal value would not fit. */
+export function formatDashAmount(credits: bigint | number | string, decimals = 2): string {
+  const bn = new BigNumber(typeof credits === 'bigint' ? credits.toString() : credits);
+  return bn.dividedBy(CREDITS_PER_DASH).toFormat(decimals, BigNumber.ROUND_DOWN);
+}

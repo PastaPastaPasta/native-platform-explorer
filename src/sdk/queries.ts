@@ -744,23 +744,21 @@ export function useFinalizedEpochInfo(index: number | undefined) {
   );
 }
 
-export function useEvonodesBlocksByRange(epoch: number | undefined, limit = 100) {
-  const query = { epoch: epoch!, limit: Math.min(limit, 100) };
-  return useSdkQuery(
-    ['epoch', 'evonodesProposedBlocksByRange', epoch, limit],
-    (sdk) => sdk.epoch.evonodesProposedBlocksByRange(query) as Promise<unknown>,
-    { enabled: epoch !== undefined, staleTime: LIVE, withProofFn: (sdk) => sdk.epoch.evonodesProposedBlocksByRangeWithProof(query), methodName: 'epoch.evonodesProposedBlocksByRange', methodParams: { epoch, limit } },
-  );
-}
-
+/** Every proposer in an epoch (pages of 100 walked by proTxHash). A single
+ *  page is a proTxHash-ordered slice, so rankings must use this walk. Only
+ *  the current epoch has live proposer data; finalized epochs carry theirs in
+ *  `finalizedInfos().blockProposers`. */
 export function useAllEvonodeBlocksInEpoch(epoch: number | undefined) {
   return useSdkQuery(
     ['epoch', 'evonodesProposedBlocksByRange', 'all', epoch],
-    async (sdk) => {
+    async (sdk, execution) => {
       const { fetchAllEvonodeBlocks } = await import('@util/epoch');
-      return fetchAllEvonodeBlocks(sdk as never, epoch!);
+      return fetchAllEvonodeBlocks(sdk, epoch!, execution);
     },
-    { enabled: epoch !== undefined, staleTime: LIVE, methodName: 'epoch.evonodesProposedBlocksByRange', methodParams: { epoch, paginated: true } },
+    {
+      enabled: epoch !== undefined, staleTime: LIVE, methodName: 'epoch.evonodesProposedBlocksByRange', methodParams: { epoch, paginated: true },
+      captureNote: 'Combined results from separate paginated SDK calls. No single proof payload or response height covers the whole walk.',
+    },
   );
 }
 
@@ -830,11 +828,28 @@ export function useProtocolVersionUpgradeState() {
 export function useProtocolVersionUpgradeVoteStatus(
   startProTxHash: string | undefined,
   count: number,
+  enabled = true,
 ) {
   return useSdkQuery(
     ['protocol', 'versionUpgradeVoteStatus', startProTxHash ?? '', count],
     (sdk) => sdk.protocol.versionUpgradeVoteStatus(startProTxHash, count) as Promise<unknown>,
-    { staleTime: LIVE, withProofFn: (sdk) => sdk.protocol.versionUpgradeVoteStatusWithProof(startProTxHash, count), methodName: 'protocol.versionUpgradeVoteStatus', methodParams: { startProTxHash, count } },
+    { enabled, staleTime: LIVE, withProofFn: (sdk) => sdk.protocol.versionUpgradeVoteStatusWithProof(startProTxHash, count), methodName: 'protocol.versionUpgradeVoteStatus', methodParams: { startProTxHash, count } },
+  );
+}
+
+/** Every masternode's protocol vote (hex proTxHash → version), walked in
+ *  pages of 100. */
+export function useAllProtocolVotes() {
+  return useSdkQuery(
+    ['protocol', 'versionUpgradeVoteStatus', 'all'],
+    async (sdk, execution) => {
+      const { fetchAllProtocolVotes } = await import('@util/protocol-votes');
+      return fetchAllProtocolVotes(sdk, execution);
+    },
+    {
+      staleTime: LIVE, methodName: 'protocol.versionUpgradeVoteStatus', methodParams: { paginated: true, count: 100 },
+      captureNote: 'Combined results from separate paginated SDK calls. No single proof payload or response height covers the whole walk.',
+    },
   );
 }
 

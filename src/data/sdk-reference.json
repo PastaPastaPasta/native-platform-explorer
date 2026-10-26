@@ -12,7 +12,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 69,
+              "line": 78,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -23,7 +23,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 64,
+              "line": 73,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -33,42 +33,20 @@
           "kind": "facade",
           "sources": [
             {
-              "file": "src/sdk/queries.ts",
-              "line": 751,
-              "owner": "useEvonodesBlocksByRange"
+              "file": "src/util/epoch.ts",
+              "line": 143,
+              "owner": "fetchAllEvonodeBlocks"
             }
           ]
         },
         {
-          "method": "epoch.evonodesProposedBlocksByRangeWithProof",
+          "method": "protocol.versionUpgradeVoteStatus",
           "kind": "facade",
           "sources": [
             {
-              "file": "src/sdk/queries.ts",
-              "line": 752,
-              "owner": "useEvonodesBlocksByRange"
-            }
-          ]
-        },
-        {
-          "method": "protocol.versionUpgradeState",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/sdk/queries.ts",
-              "line": 825,
-              "owner": "useProtocolVersionUpgradeState"
-            }
-          ]
-        },
-        {
-          "method": "protocol.versionUpgradeStateWithProof",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/sdk/queries.ts",
-              "line": 826,
-              "owner": "useProtocolVersionUpgradeState"
+              "file": "src/util/protocol-votes.ts",
+              "line": 32,
+              "owner": "fetchAllProtocolVotes"
             }
           ]
         },
@@ -78,7 +56,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 787,
+              "line": 785,
               "owner": "useCurrentQuorumsInfo"
             }
           ]
@@ -89,7 +67,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 779,
+              "line": 777,
               "owner": "useSystemStatus"
             }
           ]
@@ -100,7 +78,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 795,
+              "line": 793,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -111,7 +89,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 796,
+              "line": 794,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -122,7 +100,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 857,
+              "line": 872,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -133,7 +111,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 858,
+              "line": 873,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1025,7 +1003,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 69,
+              "line": 78,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -1036,7 +1014,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 64,
+              "line": 73,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -1046,20 +1024,9 @@
           "kind": "facade",
           "sources": [
             {
-              "file": "src/sdk/queries.ts",
-              "line": 751,
-              "owner": "useEvonodesBlocksByRange"
-            }
-          ]
-        },
-        {
-          "method": "epoch.evonodesProposedBlocksByRangeWithProof",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/sdk/queries.ts",
-              "line": 752,
-              "owner": "useEvonodesBlocksByRange"
+              "file": "src/util/epoch.ts",
+              "line": 143,
+              "owner": "fetchAllEvonodeBlocks"
             }
           ]
         }
@@ -1096,20 +1063,9 @@
           "kind": "facade",
           "sources": [
             {
-              "file": "src/sdk/queries.ts",
-              "line": 751,
-              "owner": "useEvonodesBlocksByRange"
-            }
-          ]
-        },
-        {
-          "method": "epoch.evonodesProposedBlocksByRangeWithProof",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/sdk/queries.ts",
-              "line": 752,
-              "owner": "useEvonodesBlocksByRange"
+              "file": "src/util/epoch.ts",
+              "line": 143,
+              "owner": "fetchAllEvonodeBlocks"
             }
           ]
         },
@@ -1147,7 +1103,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 69,
+              "line": 78,
               "owner": "fetchCurrentEpoch"
             },
             {
@@ -1163,7 +1119,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 64,
+              "line": 73,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -1180,7 +1136,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 69,
+              "line": 78,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -1191,8 +1147,63 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 64,
+              "line": 73,
               "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByIds",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 768,
+              "owner": "useEvonodesBlocksByIds"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByIdsWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 769,
+              "owner": "useEvonodesBlocksByIds"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRange",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/util/epoch.ts",
+              "line": 143,
+              "owner": "fetchAllEvonodeBlocks"
+            }
+          ]
+        },
+        {
+          "method": "epoch.finalizedInfos",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 734,
+              "owner": "useFinalizedEpochInfo"
+            }
+          ]
+        },
+        {
+          "method": "epoch.finalizedInfosWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 741,
+              "owner": "useFinalizedEpochInfo"
             }
           ]
         },
@@ -1202,7 +1213,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 836,
+              "line": 835,
               "owner": "useProtocolVersionUpgradeVoteStatus"
             }
           ]
@@ -1213,7 +1224,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 837,
+              "line": 836,
               "owner": "useProtocolVersionUpgradeVoteStatus"
             }
           ]
@@ -1252,7 +1263,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 878,
+              "line": 893,
               "owner": "useContestedResources"
             }
           ]
@@ -1263,7 +1274,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 879,
+              "line": 894,
               "owner": "useContestedResources"
             }
           ]
@@ -1313,7 +1324,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 936,
+              "line": 951,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -1324,7 +1335,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 937,
+              "line": 952,
               "owner": "useContestedResourceVoteState"
             }
           ]
@@ -1335,7 +1346,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 857,
+              "line": 872,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1346,7 +1357,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 858,
+              "line": 873,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1363,7 +1374,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 857,
+              "line": 872,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1374,7 +1385,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 858,
+              "line": 873,
               "owner": "useVotePollsByEndDate"
             }
           ]
@@ -1391,7 +1402,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 887,
+              "line": 902,
               "owner": "useGroupInfos"
             }
           ]
@@ -1402,7 +1413,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 888,
+              "line": 903,
               "owner": "useGroupInfos"
             }
           ]
@@ -1452,7 +1463,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 917,
+              "line": 932,
               "owner": "useGroupActions"
             }
           ]
@@ -1463,7 +1474,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 918,
+              "line": 933,
               "owner": "useGroupActions"
             }
           ]
@@ -1474,7 +1485,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 895,
+              "line": 910,
               "owner": "useGroupInfo"
             }
           ]
@@ -1485,7 +1496,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 896,
+              "line": 911,
               "owner": "useGroupInfo"
             }
           ]
@@ -1496,7 +1507,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 904,
+              "line": 919,
               "owner": "useGroupMembers"
             }
           ]
@@ -1507,7 +1518,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 905,
+              "line": 920,
               "owner": "useGroupMembers"
             }
           ]
@@ -1866,7 +1877,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 803,
+              "line": 801,
               "owner": "usePrefundedSpecializedBalance"
             }
           ]
@@ -1877,7 +1888,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 804,
+              "line": 802,
               "owner": "usePrefundedSpecializedBalance"
             }
           ]
@@ -1888,7 +1899,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 795,
+              "line": 793,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -1899,7 +1910,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 796,
+              "line": 794,
               "owner": "useTotalCreditsInPlatform"
             }
           ]
@@ -1911,12 +1922,67 @@
       "source": "src/app/network/protocol/page.tsx",
       "calls": [
         {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 78,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 73,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.evonodesProposedBlocksByRange",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/util/epoch.ts",
+              "line": 143,
+              "owner": "fetchAllEvonodeBlocks"
+            }
+          ]
+        },
+        {
+          "method": "epoch.finalizedInfos",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 734,
+              "owner": "useFinalizedEpochInfo"
+            }
+          ]
+        },
+        {
+          "method": "epoch.finalizedInfosWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 741,
+              "owner": "useFinalizedEpochInfo"
+            }
+          ]
+        },
+        {
           "method": "protocol.versionUpgradeState",
           "kind": "facade",
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 825,
+              "line": 823,
               "owner": "useProtocolVersionUpgradeState"
             }
           ]
@@ -1927,7 +1993,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 826,
+              "line": 824,
               "owner": "useProtocolVersionUpgradeState"
             }
           ]
@@ -1937,20 +2003,9 @@
           "kind": "facade",
           "sources": [
             {
-              "file": "src/sdk/queries.ts",
-              "line": 836,
-              "owner": "useProtocolVersionUpgradeVoteStatus"
-            }
-          ]
-        },
-        {
-          "method": "protocol.versionUpgradeVoteStatusWithProof",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/sdk/queries.ts",
-              "line": 837,
-              "owner": "useProtocolVersionUpgradeVoteStatus"
+              "file": "src/util/protocol-votes.ts",
+              "line": 32,
+              "owner": "fetchAllProtocolVotes"
             }
           ]
         }
@@ -1966,7 +2021,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 787,
+              "line": 785,
               "owner": "useCurrentQuorumsInfo"
             }
           ]
@@ -1983,7 +2038,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 787,
+              "line": 785,
               "owner": "useCurrentQuorumsInfo"
             }
           ]
@@ -1994,7 +2049,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 779,
+              "line": 777,
               "owner": "useSystemStatus"
             }
           ]
@@ -2584,7 +2639,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 816,
+              "line": 814,
               "owner": "usePathElements"
             }
           ]
@@ -2595,7 +2650,7 @@
           "sources": [
             {
               "file": "src/sdk/queries.ts",
-              "line": 817,
+              "line": 815,
               "owner": "usePathElements"
             }
           ]

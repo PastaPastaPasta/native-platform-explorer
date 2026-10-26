@@ -14,6 +14,8 @@ export interface EpochHeaderProps {
   firstBlockHeight?: number | bigint | null;
   feesCollected?: number | bigint | null;
   showFeesCollected?: boolean;
+  /** The end time is derived from the configured epoch length. */
+  endEstimated?: boolean;
 }
 
 export function EpochHeaderCard({
@@ -24,6 +26,7 @@ export function EpochHeaderCard({
   firstBlockHeight,
   feesCollected,
   showFeesCollected = true,
+  endEstimated = false,
 }: EpochHeaderProps) {
   return (
     <InfoBlock emphasised>
@@ -52,7 +55,7 @@ export function EpochHeaderCard({
             <InfoLine label="Starts" value={<DateBlock value={startAt ?? null} />} />
           </WrapItem>
           <WrapItem>
-            <InfoLine label="Ends" value={<DateBlock value={endAt ?? null} />} />
+            <InfoLine label={endEstimated ? 'Ends (est.)' : 'Ends'} value={<DateBlock value={endAt ?? null} />} />
           </WrapItem>
           <WrapItem>
             <InfoLine

@@ -50,11 +50,14 @@ function Hash({ value, dim }: { value: string; dim?: boolean }) {
   );
 }
 
-/** Top-N block proposers for an epoch. Two readings of the same data:
+/** Top-N block proposers for an epoch. `entries` must be every proposer,
+ *  ranked; the note states totals over all of them, not just the rows shown.
+ *  Two readings of the same data:
  *  • Diverged — a ranked bar chart whose bars span the full width so small
  *    leads are actually visible, with the count called out at the end.
- *  • Tied (max === min, typical of a fresh epoch) — a plain roster; per-row
- *    counts/bars are dropped since they're identical and stated in the note. */
+ *  • Tied (every proposer equal, typical of a fresh epoch) — a plain roster;
+ *    per-row counts/bars are dropped since they're identical and stated in
+ *    the note. */
 export function EvonodesLeaderboard({
   entries,
   limit = 20,
@@ -74,16 +77,26 @@ export function EvonodesLeaderboard({
   }
 
   const max = top.reduce((m, e) => Math.max(m, e.blocks), 0) || 1;
-  const min = top.reduce((m, e) => Math.min(m, e.blocks), max);
-  const total = top.reduce((s, e) => s + e.blocks, 0);
+  const min = entries.reduce((m, e) => Math.min(m, e.blocks), max);
+  const total = entries.reduce((s, e) => s + e.blocks, 0);
   const flat = max === min;
+  // Competition rank, as on /evonode/: 1 + proposers with strictly more
+  // blocks. Entries are sorted by blocks, so a tie repeats the rank above.
+  const ranks: number[] = [];
+  top.forEach((e, i) => {
+    ranks.push(i > 0 && e.blocks === top[i - 1]!.blocks ? ranks[i - 1]! : i + 1);
+  });
+  const shown =
+    top.length < entries.length
+      ? `${top.length} of ${entries.length} proposers`
+      : `${entries.length} proposer${entries.length === 1 ? '' : 's'}`;
 
   if (flat) {
     return (
       <VStack align="stretch" spacing={0}>
         <Text fontSize="xs" color="muted" mb={2}>
-          {top.length} proposer{top.length === 1 ? '' : 's'} shown, tied at {max} block
-          {max === 1 ? '' : 's'} each — ranking emerges as the epoch fills.
+          {shown} shown, all tied at {max} block{max === 1 ? '' : 's'} each — ranking
+          emerges as the epoch fills.
         </Text>
         {top.map((e) => (
           <Row key={e.proTxHash} href={`/evonode/?proTxHash=${encodeURIComponent(e.proTxHash)}`}>
@@ -102,8 +115,8 @@ export function EvonodesLeaderboard({
   return (
     <VStack align="stretch" spacing={0}>
       <Text fontSize="xs" color="muted" mb={1}>
-        Top {top.length} proposer{top.length === 1 ? '' : 's'} · {total} block
-        {total === 1 ? '' : 's'} shown.
+        Top {shown} · {total.toLocaleString('en-US')} block{total === 1 ? '' : 's'} proposed
+        in total.
       </Text>
 
       {/* Column header */}
@@ -119,7 +132,7 @@ export function EvonodesLeaderboard({
       </HStack>
 
       {top.map((e, i) => {
-        const rank = i + 1;
+        const rank = ranks[i];
         const isTop = e.blocks === max;
         const pct = Math.max(2, Math.round((e.blocks / max) * 100));
         return (

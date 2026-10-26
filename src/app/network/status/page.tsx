@@ -19,6 +19,7 @@ import { CodeBlock } from '@components/data/CodeBlock';
 import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useCurrentQuorumsInfo, useSystemStatus } from '@sdk/queries';
+import { QuorumsTable } from '@components/network/QuorumsTable';
 import {
   CORE_LAG_DEGRADED,
   CORE_LAG_STALE,
@@ -343,7 +344,7 @@ export default function Page() {
         <InfoBlock>
           <HStack justify="space-between" mb={3}>
             <Heading size="sm" color="gray.100">
-              Current quorums (summary)
+              Current quorums
             </Heading>
           </HStack>
           {quorumsQ.isLoading ? (
@@ -351,7 +352,7 @@ export default function Page() {
           ) : quorumsQ.isError ? (
             <ErrorCard error={quorumsQ.error} onRetry={() => quorumsQ.refetch()} />
           ) : (
-            <CodeBlock value={quorumsQ.data ?? 'No quorums reported.'} />
+            <QuorumsTable data={quorumsQ.data} />
           )}
         </InfoBlock>
       </VStack>

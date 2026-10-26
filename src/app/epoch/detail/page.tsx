@@ -8,7 +8,7 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { HistoricalEpochView } from '@components/epoch/HistoricalEpochView';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
-import { useEpochInfo, useEvonodesBlocksByRange, useFinalizedEpochInfo } from '@sdk/queries';
+import { useAllEvonodeBlocksInEpoch, useEpochInfo, useFinalizedEpochInfo } from '@sdk/queries';
 import { isEpochIndex, MAX_EPOCH_INDEX } from '@sdk/epoch-queries';
 
 function Content() {
@@ -29,7 +29,7 @@ function Content() {
   // Finalized proposers are authoritative. Only query the live source once a
   // successful finalized lookup confirms that there is no finalized record.
   const liveIndex = valid && finalizedQ.status === 'success' && !finalizedEntry ? idx : undefined;
-  const evonodesQ = useEvonodesBlocksByRange(liveIndex, 100);
+  const evonodesQ = useAllEvonodeBlocksInEpoch(liveIndex);
 
   if (!valid) {
     return (

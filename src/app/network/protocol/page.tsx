@@ -1,10 +1,9 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import {
   Box,
   Heading,
-  HStack,
   SimpleGrid,
   Table,
   Tbody,
@@ -21,67 +20,90 @@ import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { InfoLine } from '@components/data/InfoLine';
 import { Identifier } from '@components/data/Identifier';
-import { CursorPagination } from '@components/pagination/CursorPagination';
-import { VoteTallyBar } from '@components/governance/VoteTallyBar';
+import { WalkCapNotice } from '@components/data/WalkCapNotice';
+import { VoteTallyBar, type TallySegment } from '@components/governance/VoteTallyBar';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
+  useAllEvonodeBlocksInEpoch,
+  useAllProtocolVotes,
+  useCurrentEpoch,
+  useFinalizedEpochInfo,
   useProtocolVersionUpgradeState,
-  useProtocolVersionUpgradeVoteStatus,
 } from '@sdk/queries';
+import { normaliseEpoch } from '@util/epoch';
+import { tallyProtocolVotes, upgradeCandidates } from '@util/protocol-votes';
 import { readProp } from '@util/sdk-shape';
+
+function versionColor(version: number, current: number | null): string {
+  if (current === null || version === current) return 'blue.400';
+  return version > current ? 'success' : 'danger';
+}
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Network' }, { label: 'Protocol' }]);
 
   const stateQ = useProtocolVersionUpgradeState();
-  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
-  const startAfter = cursorStack[cursorStack.length - 1];
-  const votesQ = useProtocolVersionUpgradeVoteStatus(startAfter, 100);
+  const currentQ = useCurrentEpoch();
+  const votesQ = useAllProtocolVotes();
 
-  const current = readProp<unknown>(stateQ.data, 'currentProtocolVersion');
-  const pending = readProp<unknown>(stateQ.data, 'nextProtocolVersion');
-  const activation = readProp<unknown>(stateQ.data, 'activationBlockHeight');
+  // The running version comes from the current epoch record. rc.2's
+  // versionUpgradeState() reports both versions relative to the SDK's
+  // built-in version, so it is only shown as a discrepancy note.
+  const epochIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : undefined;
+  const epochProtocol = readProp<number>(currentQ.data, 'protocolVersion');
+  const current = typeof epochProtocol === 'number' ? epochProtocol : null;
+  const reportedCurrent = readProp<number>(stateQ.data, 'currentProtocolVersion');
 
-  const votesEntries = useMemo(() => {
-    const m = votesQ.data;
-    if (!(m instanceof Map)) return [];
-    return [...m.entries()].map(([k, v]) => ({
-      proTxHash: typeof k === 'string' ? k : String(k),
-      vote: v,
-    }));
-  }, [votesQ.data]);
+  // Platform exposes no masternode list. Evonodes are known from their votes
+  // and from block proposals in the previous (finalized) and current epochs.
+  // Votes are cast by proposing blocks and reset each epoch (seen live on
+  // testnet: 25 voters at the end of one hourly epoch, 5 early in the next).
+  const prevIdx = epochIdx !== undefined && epochIdx > 0 ? epochIdx - 1 : undefined;
+  const liveQ = useAllEvonodeBlocksInEpoch(epochIdx);
+  const prevQ = useFinalizedEpochInfo(prevIdx);
+  const prevProposers = readProp<unknown>(
+    prevQ.data instanceof Map && prevIdx !== undefined ? prevQ.data.get(prevIdx) : undefined,
+    'blockProposers',
+  );
+  const knownReady = liveQ.isSuccess && (prevIdx === undefined || prevQ.isSuccess);
 
-  // ProtocolVersionUpgradeVoteStatus is a WASM class exposing `.version: number`
-  // and `.proTxHash`. Stringifying the instance gives `[object Object]`, so we
-  // classify by comparing the voted version against the current protocol
-  // version: a vote > current is "accepted", < current is "rejected",
-  // == current (or null) is "abstained".
-  const currentVersion = (() => {
-    const n = Number(current);
-    return Number.isFinite(n) ? n : null;
-  })();
-
+  const votes = votesQ.data;
   const tally = useMemo(() => {
-    let accepted = 0;
-    let abstained = 0;
-    let rejected = 0;
-    if (currentVersion === null) {
-      return { accepted: 0, abstained: votesEntries.length, rejected: 0 };
-    }
-    for (const { vote } of votesEntries) {
-      const raw = readProp<number | bigint>(vote, 'version');
-      if (raw === undefined || raw === null) {
-        abstained += 1;
-        continue;
-      }
-      const n = Number(raw);
-      if (!Number.isFinite(n)) abstained += 1;
-      else if (n > currentVersion) accepted += 1;
-      else if (n < currentVersion) rejected += 1;
-      else abstained += 1;
-    }
-    return { accepted, abstained, rejected };
-  }, [votesEntries, currentVersion]);
+    if (!votes) return null;
+    const known: string[] = [];
+    if (liveQ.data instanceof Map) known.push(...liveQ.data.keys());
+    if (prevProposers instanceof Map) for (const k of prevProposers.keys()) known.push(String(k));
+    return tallyProtocolVotes(votes, known);
+  }, [votes, liveQ.data, prevProposers]);
+
+  // A pending upgrade is any voted version above the current one; the
+  // most-voted is the likeliest next version. Unknown without both inputs.
+  const candidates = tally && current !== null ? upgradeCandidates(tally, current) : null;
+  const pending = candidates?.[0] ?? null;
+  const others = (candidates ?? []).slice(1).map((c) => `v${c.version} (${c.count})`);
+  const nextNote =
+    candidates === null
+      ? currentQ.isError ? 'needs the current version' : undefined
+      : pending
+        ? `most-voted version above v${current}${others.length > 0 ? `; also voted: ${others.join(', ')}` : ''}`
+        : `no recorded vote above v${current} this epoch`;
+
+  const segments: TallySegment[] = tally
+    ? [
+        ...tally.byVersion.map(({ version, count }) => ({
+          label: `v${version}${version === current ? ' (current)' : version === pending?.version ? ' (next)' : ''}`,
+          count,
+          color: versionColor(version, current),
+        })),
+        ...(knownReady ? [{ label: 'no vote yet', count: tally.unvoted, color: 'gray.600' }] : []),
+      ]
+    : [];
+  const unknownText = (q: { isLoading: boolean }) => (q.isLoading ? '…' : 'unknown');
+
+  const rows = useMemo(
+    () => (votes ? [...votes.entries()].sort(([a], [b]) => (a < b ? -1 : 1)) : []),
+    [votes],
+  );
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -92,77 +114,118 @@ export default function Page() {
           </Heading>
         </InfoBlock>
 
-        {stateQ.isLoading ? (
-          <LoadingCard />
-        ) : stateQ.isError ? (
-          <ErrorCard error={stateQ.error} onRetry={() => stateQ.refetch()} />
-        ) : (
-          <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
-            <InfoBlock>
-              <InfoLine
-                label="Current version"
-                value={
-                  <Text fontFamily="mono" fontSize="2xl" color="gray.100">
-                    {current !== undefined ? String(current) : '—'}
-                  </Text>
-                }
-              />
-            </InfoBlock>
-            <InfoBlock>
-              <InfoLine
-                label="Pending version"
-                value={
-                  <Text fontFamily="mono" fontSize="2xl" color={pending ? 'warning' : 'gray.400'}>
-                    {pending !== undefined ? String(pending) : '—'}
-                  </Text>
-                }
-              />
-            </InfoBlock>
-            <InfoBlock>
-              <InfoLine
-                label="Activation height"
-                value={
-                  <Text fontFamily="mono" fontSize="md" color="gray.100">
-                    {activation !== undefined ? String(activation) : '—'}
-                  </Text>
-                }
-              />
-            </InfoBlock>
-          </SimpleGrid>
-        )}
+        {currentQ.isError ? (
+          <ErrorCard
+            title="Current epoch unavailable"
+            error={currentQ.error}
+            onRetry={() => currentQ.refetch()}
+          />
+        ) : null}
+        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+          <InfoBlock>
+            <InfoLine
+              label="Current version"
+              description={epochIdx !== undefined ? `from epoch #${epochIdx}` : undefined}
+              value={
+                <Text fontFamily="mono" fontSize="2xl" color={current !== null ? 'gray.100' : 'gray.400'}>
+                  {current !== null ? `v${current}` : unknownText(currentQ)}
+                </Text>
+              }
+            />
+          </InfoBlock>
+          <InfoBlock>
+            <InfoLine
+              label="Next version"
+              description={nextNote}
+              value={
+                <Text fontFamily="mono" fontSize="2xl" color={pending ? 'warning' : 'gray.400'}>
+                  {candidates === null
+                    ? unknownText(current === null ? currentQ : votesQ)
+                    : pending
+                      ? `v${pending.version}`
+                      : 'none voted'}
+                </Text>
+              }
+            />
+          </InfoBlock>
+          <InfoBlock>
+            <InfoLine
+              label={pending ? `Votes for v${pending.version}` : 'Voters'}
+              description={pending && knownReady && tally ? `of ${tally.known} known evonodes` : undefined}
+              value={
+                <Text fontFamily="mono" fontSize="2xl" color="gray.100">
+                  {pending ? pending.count : tally?.voted ?? unknownText(votesQ)}
+                </Text>
+              }
+            />
+          </InfoBlock>
+        </SimpleGrid>
+        {typeof reportedCurrent === 'number' && current !== null && reportedCurrent !== current ? (
+          <Text fontSize="xs" color="gray.400">
+            The SDK&apos;s versionUpgradeState reports currentProtocolVersion v{reportedCurrent}, which
+            disagrees with the current epoch record (v{current}); this page uses the epoch record and
+            reads the next version from the votes below.
+          </Text>
+        ) : null}
 
         <InfoBlock>
           <VStack align="stretch" spacing={3}>
             <Heading size="sm" color="gray.100">
-              Masternode upgrade vote (current page, {votesEntries.length} rows)
+              Evonode upgrade votes
             </Heading>
-            <VoteTallyBar
-              variant="protocol"
-              segments={[
-                { label: 'accepted', count: tally.accepted, color: 'success' },
-                { label: 'abstained', count: tally.abstained, color: 'warning' },
-                { label: 'rejected', count: tally.rejected, color: 'danger' },
-              ]}
-            />
+            {votesQ.isLoading ? (
+              <LoadingCard lines={2} />
+            ) : votesQ.isError ? (
+              <ErrorCard error={votesQ.error} onRetry={() => votesQ.refetch()} />
+            ) : tally ? (
+              <>
+                <VoteTallyBar variant="protocol" segments={segments} />
+                <WalkCapNotice data={votes} what="the vote list" />
+                <WalkCapNotice data={liveQ.data} what="current-epoch proposers" />
+                <Text fontSize="xs" color="gray.400">
+                  {knownReady ? (
+                    <>
+                      Denominator: {tally.known} known evonodes — every proTxHash with a recorded
+                      vote, plus every evonode that proposed a block in{' '}
+                      {prevProposers instanceof Map ? `finalized epoch #${prevIdx} or ` : ''}the current
+                      epoch #{epochIdx}. An evonode records its vote when it proposes a block, and
+                      votes reset each epoch, so &ldquo;no vote yet&rdquo; shrinks as the epoch
+                      fills. Platform does not expose the masternode list, so evonodes that
+                      have not proposed recently are not counted.
+                    </>
+                  ) : currentQ.isError ? (
+                    <>
+                      Showing {tally.voted} recorded votes. The current epoch could not be read on
+                      this network, so recent proposers, and evonodes without a vote, are unknown.
+                    </>
+                  ) : liveQ.isError || prevQ.isError ? (
+                    <>
+                      Showing {tally.voted} recorded votes. Recent proposers could not be loaded,
+                      so evonodes without a vote cannot be counted.
+                    </>
+                  ) : (
+                    <>Counting {tally.voted} recorded votes; reading recent proposers to find evonodes without a vote…</>
+                  )}
+                </Text>
+              </>
+            ) : null}
           </VStack>
         </InfoBlock>
 
         <InfoBlock>
           {votesQ.isLoading ? (
             <LoadingCard lines={6} />
-          ) : votesQ.isError ? (
-            <ErrorCard error={votesQ.error} onRetry={() => votesQ.refetch()} />
-          ) : votesEntries.length === 0 ? (
+          ) : votesQ.isError ? null : rows.length === 0 ? (
             <Text color="gray.400" fontSize="sm">
-              No votes recorded in this page.
+              No votes recorded.
             </Text>
           ) : (
-            <Box overflowX="auto">
+            <Box overflowX="auto" maxH="560px" overflowY="auto">
               <Table size="sm">
-                <Thead>
+                <Thead position="sticky" top={0} bg="surface" zIndex={1}>
                   <Tr>
                     <Th color="gray.400" borderColor="gray.750">
-                      proTxHash
+                      proTxHash ({rows.length})
                     </Th>
                     <Th color="gray.400" borderColor="gray.750">
                       Vote
@@ -170,18 +233,18 @@ export default function Page() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {votesEntries.map((row) => (
-                    <Tr key={row.proTxHash} _hover={{ bg: 'gray.800' }}>
+                  {rows.map(([hash, version]) => (
+                    <Tr key={hash} _hover={{ bg: 'gray.800' }}>
                       <Td borderColor="gray.750">
                         <Identifier
-                          value={row.proTxHash}
-                          href={`/evonode/?proTxHash=${encodeURIComponent(row.proTxHash)}`}
+                          value={hash}
+                          href={`/evonode/?proTxHash=${encodeURIComponent(hash)}`}
                           avatar
                           dense
                         />
                       </Td>
                       <Td borderColor="gray.750" fontFamily="mono" fontSize="xs" color="gray.250">
-                        {String(readProp<number | bigint>(row.vote, 'version') ?? '—')}
+                        v{version}
                       </Td>
                     </Tr>
                   ))}
@@ -189,18 +252,6 @@ export default function Page() {
               </Table>
             </Box>
           )}
-          <HStack justify="flex-end" mt={3}>
-            <CursorPagination
-              pageIndex={cursorStack.length - 1}
-              hasPrev={cursorStack.length > 1}
-              hasNext={votesEntries.length === 100}
-              onPrev={() => setCursorStack((s) => s.slice(0, -1))}
-              onNext={() => {
-                const last = votesEntries[votesEntries.length - 1]?.proTxHash;
-                if (last) setCursorStack((s) => [...s, last]);
-              }}
-            />
-          </HStack>
         </InfoBlock>
       </VStack>
     </Container>
