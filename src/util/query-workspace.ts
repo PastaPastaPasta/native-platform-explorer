@@ -131,6 +131,9 @@ export function describeQueryError(message: string | undefined): string | undefi
   if (/query must be for valid indexes|where clause on non indexed property|query must better match an existing index/i.test(message)) {
     return 'No index covers this combination of WHERE and ORDER BY fields. Filters and sorting must follow one index\'s property order; the schema panel lists the indices.';
   }
+  if (/Operation is not implemented or not supported/i.test(message)) {
+    return 'The node that answered does not support this request; it may run an older Platform version. Retry to reach a different node.';
+  }
   if (/invalid limit/i.test(message)) {
     return 'The Platform rejected the LIMIT for this query shape. Try a smaller LIMIT.';
   }

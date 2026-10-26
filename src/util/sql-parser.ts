@@ -487,10 +487,10 @@ class Parser {
       throw new ParseError(`LIKE needs a quoted pattern such as 'abc%', got '${tok.value}'`, tok.pos);
     }
     this.advance();
-    const prefix = tok.value.endsWith('%') ? tok.value.slice(0, -1) : undefined;
-    if (prefix === undefined && !/[%_]/.test(tok.value)) {
+    if (!/[%_]/.test(tok.value)) {
       throw new ParseError(`LIKE '${tok.value}' has no wildcard; use = '${tok.value}' for an exact match.`, tok.pos);
     }
+    const prefix = tok.value.endsWith('%') ? tok.value.slice(0, -1) : '';
     if (!prefix || /[%_]/.test(prefix)) {
       throw new ParseError(
         "Only prefix patterns are supported: LIKE 'abc%' (a literal prefix and one trailing %). Use STARTS WITH for a prefix containing % or _.",

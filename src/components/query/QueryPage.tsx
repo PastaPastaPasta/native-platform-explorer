@@ -48,7 +48,8 @@ export function QueryPage() {
   const initialQueryPending = useRef(!!params.get('q'));
   // Links record the sender's trust setting so a recipient can tell whether
   // the results they see were produced the same way.
-  const sharedTrusted = params.get('trusted');
+  // Captured once: running the shared query rewrites the URL with ours.
+  const [sharedTrusted] = useState(() => params.get('trusted'));
 
   const queryPath = useCallback(
     (sql: string, contractId: string) => {

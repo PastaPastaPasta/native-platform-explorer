@@ -29,6 +29,7 @@ import { ResultActions } from './ResultActions';
 import {
   checkAggregateAgainstIndices,
   checkQueryAgainstIndices,
+  RANGE_OPERATORS,
   getDocumentTypeAggregates,
   getDocumentTypeSchema,
   getIndicesForType,
@@ -41,8 +42,6 @@ import { AggregateResults, type AggregateResultMap } from './AggregateResults';
 
 /** Drive's DEFAULT_QUERY_LIMIT, which caps per-group aggregate entries when LIMIT is omitted. */
 const DEFAULT_GROUP_LIMIT = 100;
-
-const RANGE_OPERATORS = new Set(['>', '>=', '<', '<=', 'between', 'startsWith']);
 
 /** The GROUP BY field that also carries the range filter (RangeDistinct mode). */
 function rangeGroupField(parsed: ParsedQuery): string | undefined {
@@ -141,7 +140,8 @@ export function StatementResult({
       ? { ...params, limit: 1, startAfter: page.lastId }
       : undefined;
   const probeQ = useDocumentsQuery(probeParams, `${executionId}-next-${page.lastId ?? ''}`);
-  const hasNextPage = !!probeParams && probeQ.isSuccess && documentPageCursor(probeQ.data).count > 0;
+  // If the follow-up fails, fall back to offering Next for a full page.
+  const hasNextPage = !!probeParams && (probeQ.isError || (probeQ.isSuccess && documentPageCursor(probeQ.data).count > 0));
 
   const refetch = isAggregate ? aggQ.refetch : docsQ.refetch;
   useEffect(() => {

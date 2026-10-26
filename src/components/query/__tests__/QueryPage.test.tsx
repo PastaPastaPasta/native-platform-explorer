@@ -73,13 +73,18 @@ describe('Query workspace execution', () => {
     );
   });
 
-  it('tells a recipient when a shared link came from a different trust mode', () => {
+  it('tells a recipient when a shared link came from a different trust mode', async () => {
     navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '0' });
+    // Running the shared query rewrites the address with the recipient's mode.
+    navigation.replace.mockImplementation((url: string) => { navigation.search = new URLSearchParams(url.split('?')[1]); });
     const query = vi.fn().mockResolvedValue({ data: [] });
     const { unmount } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    await waitFor(() => expect(navigation.search.get('trusted')).toBe('1'));
+    await screen.findByText('0 documents returned');
     expect(screen.getByText(/This link was shared from untrusted mode, but trusted mode\s+is on here/)).toHaveTextContent(
       "Your results are proof-verified; the sender's were not.",
     );
+    navigation.replace.mockReset();
     unmount();
     navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '1' });
     renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
@@ -228,6 +233,17 @@ describe('Query workspace execution', () => {
     await waitFor(() => expect(query).toHaveBeenCalledWith(expect.objectContaining({ limit: 1, startAfter: 'doc-2' })));
     await waitFor(() => expect(screen.queryByText(/checking for more/)).not.toBeInTheDocument());
     expect(screen.getByRole('button', { name: /^Next$/ })).toBeDisabled();
+  });
+
+  it('still offers Next for a full page when the follow-up request fails', async () => {
+    const page = new Map([['doc-1', { $id: 'doc-1', label: 'one' }]]);
+    const query = vi.fn().mockImplementation((params: { startAfter?: string }) =>
+      params.startAfter ? Promise.reject(new Error('endpoint unavailable')) : Promise.resolve({ data: page }),
+    );
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain LIMIT 1');
+    await screen.findByText('one');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Next$/ })).toBeEnabled());
   });
 
   it('counts absent documents toward a full page and continues after them', async () => {

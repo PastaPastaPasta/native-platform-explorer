@@ -158,6 +158,18 @@ describe('checkQueryAgainstIndices', () => {
     expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }, { field: 'b', operator: '==' }]), abcd)).toEqual({ matchedIndex: 'abcd', warnings: [] });
   });
 
+  it('requires ORDER BY to reach every other field the query uses', () => {
+    const shape = q([{ field: P, operator: '==' }, { field: L, operator: '==' }], [P]);
+    expect(checkQueryAgainstIndices(shape, DPNS).warnings[0]).toBe(
+      `No index supports this filter and ORDER BY combination. parentNameAndLabel (${P}, ${L}): ORDER BY must continue through \`${L}\`, which the query also uses.`,
+    );
+    expect(checkQueryAgainstIndices(q([{ field: P, operator: '==' }, { field: L, operator: '==' }], [L]), DPNS).warnings).toEqual([]);
+  });
+
+  it('does not require ORDER BY for $id lookups', () => {
+    expect(checkQueryAgainstIndices(q([{ field: '$id', operator: 'in' }]), DPNS)).toEqual({ warnings: [] });
+  });
+
   it('flags conflicting or multiple range fields', () => {
     const both = q([{ field: P, operator: '>' }, { field: L, operator: '<' }], [P, L]);
     expect(checkQueryAgainstIndices(both, DPNS).warnings[0]).toBe(
@@ -207,16 +219,25 @@ describe('aggregate index flags', () => {
     expect(checkAggregateAgainstIndices(semesterRange, 'avg', 'score', indices, docType)).toEqual({ matchedIndex: 'byClassSemester', warnings: [] });
   });
 
+  it('needs the filtered fields to be exactly a countable index, not just its prefix', () => {
+    const ab = getIndicesForType({ indices: [{ name: 'ab', properties: [{ a: 'asc' }, { b: 'asc' }], countable: true }] });
+    const rangeAb = getIndicesForType({ indices: [{ name: 'ab', properties: [{ a: 'asc' }, { b: 'asc' }], countable: true, rangeCountable: true }] });
+    const onA = q([{ field: 'a', operator: '==' }]);
+    expect(checkAggregateAgainstIndices(onA, 'count', undefined, ab, { countable: false }).warnings[0]).toMatch(/^A filtered COUNT needs a countable index whose properties are exactly the filtered fields \(`a`\)/);
+    expect(checkAggregateAgainstIndices(onA, 'count', undefined, rangeAb, { countable: false })).toEqual({ matchedIndex: 'ab', warnings: [] });
+    expect(checkAggregateAgainstIndices(q([{ field: 'a', operator: '==' }, { field: 'b', operator: 'in' }]), 'count', undefined, ab, { countable: false })).toEqual({ matchedIndex: 'ab', warnings: [] });
+  });
+
   it('warns before running an aggregate without a suitable index', () => {
     const dpnsCount = checkAggregateAgainstIndices(q([{ field: P, operator: '==' }]), 'count', undefined, DPNS, { countable: false });
     expect(dpnsCount.warnings).toEqual([
-      `A filtered COUNT needs a countable index whose leading properties are exactly the filtered fields (\`${P}\`). This document type has no countable index.`,
+      `A filtered COUNT needs a countable index whose properties are exactly the filtered fields (\`${P}\`). This document type has no countable index.`,
     ]);
     expect(checkAggregateAgainstIndices(q([]), 'count', undefined, DPNS, { countable: false }).warnings).toEqual([
       'An unfiltered COUNT needs `documentsCountable: true` on the document type, which it does not declare.',
     ]);
     expect(checkAggregateAgainstIndices(q([{ field: 'student', operator: '==' }]), 'sum', 'score', indices, docType).warnings[0]).toBe(
-      'A filtered SUM needs a summable: "score" index whose leading properties are exactly the filtered fields (`student`). Indices with those flags: byClass (class); byClassSemester (class, semester).',
+      'A filtered SUM needs a summable: "score" index whose properties are exactly the filtered fields (`student`). Indices with those flags: byClass (class); byClassSemester (class, semester).',
     );
     expect(checkAggregateAgainstIndices(q([{ field: 'student', operator: '>' }]), 'count', undefined, indices, docType).warnings[0]).toBe(
       'A COUNT with a range on `student` needs a range countable index whose last property is `student` and whose other properties are the filtered fields (`student`). Indices with those flags: byClassSemester (class, semester).',

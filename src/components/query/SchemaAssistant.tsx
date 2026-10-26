@@ -19,10 +19,10 @@ import { getDocumentTypeAggregates, getDocumentTypeSchema, getIndicesForType, ty
 
 /** Aggregate capabilities of an index, as declared in the contract. */
 function indexFlags(index: SchemaIndex): string[] {
-  return [
-    index.countable ? (index.rangeCountable ? 'countable, range countable' : 'countable') : '',
-    index.summable ? `summable: ${index.summable}${index.rangeSummable ? ' (range)' : ''}` : '',
-  ].filter(Boolean);
+  const flags: string[] = [];
+  if (index.countable) flags.push(index.rangeCountable ? 'countable, range countable' : 'countable');
+  if (index.summable) flags.push(`summable: ${index.summable}${index.rangeSummable ? ' (range)' : ''}`);
+  return flags;
 }
 
 export function SchemaAssistant({
@@ -55,6 +55,11 @@ export function SchemaAssistant({
       : [];
   const indices = getIndicesForType(schema);
   const docAggregates = getDocumentTypeAggregates(schema);
+  const unfiltered = [
+    docAggregates.countable ? 'COUNT(*)' : '',
+    docAggregates.summable ? `SUM(${docAggregates.summable})` : '',
+    docAggregates.countable && docAggregates.summable ? `AVG(${docAggregates.summable})` : '',
+  ].filter(Boolean);
   const from = first?.contractAlias
     ? `${quoteSqlIdentifier(first.contractAlias)}.${quoteSqlIdentifier(type)}`
     : quoteSqlIdentifier(type);
@@ -119,12 +124,8 @@ export function SchemaAssistant({
       {!!schema && (
         <Text fontSize="xs" color="gray.400">
           Unfiltered aggregates:{' '}
-          {docAggregates.countable || docAggregates.summable
-            ? [
-                docAggregates.countable ? 'COUNT(*)' : '',
-                docAggregates.summable ? `SUM(${docAggregates.summable})` : '',
-                docAggregates.countable && docAggregates.summable ? `AVG(${docAggregates.summable})` : '',
-              ].filter(Boolean).join(', ')
+          {unfiltered.length
+            ? unfiltered.join(', ')
             : 'none (the document type is not documentsCountable or documentsSummable)'}
           . Filtered COUNT, SUM and AVG need an index with the matching flag below.
         </Text>

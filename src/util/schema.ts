@@ -194,7 +194,7 @@ export interface IndexCheck {
   warnings: string[];
 }
 
-const RANGE_OPERATORS = new Set<QueryOperator>(['>', '>=', '<', '<=', 'between', 'startsWith']);
+export const RANGE_OPERATORS: ReadonlySet<QueryOperator> = new Set<QueryOperator>(['>', '>=', '<', '<=', 'between', 'startsWith']);
 /** Drive's MAX_INDEX_DIFFERENCE: at most two unused trailing index properties. */
 const MAX_INDEX_DIFFERENCE = 2;
 
@@ -231,8 +231,10 @@ function queryRoles(shape: QueryShape, requireOrderBy: boolean): { roles: Roles;
       );
     }
   }
-  for (const field of requireOrderBy ? [...rangeFields, ...inFields] : []) {
-    if (!orderBy.includes(field)) {
+  if (requireOrderBy) {
+    for (const field of [...rangeFields, ...inFields]) {
+      // `$id` is served by the primary key tree, which needs no ORDER BY.
+      if (field === '$id' || orderBy.includes(field)) continue;
       const kind = rangeFields.includes(field) ? 'range filter' : 'IN filter';
       warnings.push(`The ${kind} on \`${field}\` needs ORDER BY ${field}; Platform requires ordering on every range and IN field.`);
     }
@@ -270,8 +272,15 @@ function indexMismatch(index: SchemaIndex, roles: Roles): string | null {
     return `IN is only allowed on its last two properties (${list(props.slice(-2))})`;
   }
   if (orderBy.length) {
-    const end = props.findIndex((_, i) => i + 1 >= orderBy.length && orderBy.every((f, j) => props[i + 1 - orderBy.length + j] === f));
+    // Drive trims trailing properties until the index ends with the ORDER BY
+    // run; every field the query names must sit inside what remains.
+    let end = -1;
+    for (let k = props.length; k >= orderBy.length && end === -1; k--) {
+      if (orderBy.every((f, j) => props[k - orderBy.length + j] === f)) end = k - 1;
+    }
     if (end === -1) return `ORDER BY must list consecutive properties in index order (${list(props)})`;
+    const after = named.filter((f) => props.indexOf(f) > end);
+    if (after.length) return `ORDER BY must continue through ${list(after)}, which the query also uses`;
   }
   const prefix = props.slice(0, named.length);
   if (!prefix.every((f) => named.includes(f))) {
@@ -346,8 +355,11 @@ export function checkAggregateAgainstIndices(
         return fits(idx, true) && p[p.length - 1] === roles.rangeField && p.length - 1 === pointFields.length && pointFields.every((f) => p.slice(0, -1).includes(f));
       })
     : indices.find((idx) => {
+        // Exactly the filtered fields, or a range index with one more trailing property.
         const p = props(idx);
-        return fits(idx, false) && p.length >= pointFields.length && p.slice(0, pointFields.length).every((f) => pointFields.includes(f));
+        const covers = (n: number) => p.slice(0, n).every((f) => pointFields.includes(f));
+        return (fits(idx, false) && p.length === pointFields.length && covers(p.length))
+          || (fits(idx, true) && p.length === pointFields.length + 1 && covers(pointFields.length));
       });
   if (match) return { matchedIndex: match.name, warnings };
 
@@ -361,7 +373,7 @@ export function checkAggregateAgainstIndices(
       ...warnings,
       roles.rangeField
         ? `A ${select.toUpperCase()} with a range on \`${roles.rangeField}\` needs a range ${requirement} index whose last property is \`${roles.rangeField}\` and whose other properties are the filtered fields (${where}).${hint}`
-        : `A filtered ${select.toUpperCase()} needs a ${requirement} index whose leading properties are exactly the filtered fields (${where}).${hint}`,
+        : `A filtered ${select.toUpperCase()} needs a ${requirement} index whose properties are exactly the filtered fields (${where}).${hint}`,
     ],
   };
 }

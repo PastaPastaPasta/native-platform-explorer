@@ -3,6 +3,8 @@ import type { DocumentsQueryParams } from '@sdk/queries';
 import type { ParsedQuery } from '../sql-parser';
 import { installStorageMock } from '@/test/storage';
 import {
+  describeQueryError,
+  documentPageCursor,
   aggregateExportRows,
   buildSdkExample,
   extractDocumentRows,
@@ -490,5 +492,31 @@ it('normalizes SDK Documents through toObject before versioned toJSON', async ()
   );
   expect(JSON.parse(log.mock.calls[0]![0] as string)).toEqual({
     'doc-id': { $id: 'doc-id', amount: '9007199254740993' },
+  });
+});
+
+describe('describeQueryError', () => {
+  it.each([
+    // Raw testnet responses captured while validating the workspace.
+    ["transport error: grpc error: code: 'Client specified an invalid argument', message: \"where clause on non indexed property error: prove count requires a `countable: true` (or summableOffCountIndex) index whose properties exactly match the where clause fields\"", /no index that supports this aggregate/],
+    ["transport error: grpc error: code: 'Client specified an invalid argument', message: \"missing order by for range error: query must have an orderBy field for each range element\"", /Add ORDER BY for every field/],
+    ["transport error: grpc error: code: 'Client specified an invalid argument', message: \"where clause on non indexed property error: query must be for valid indexes, valid indexes are: {}\"", /No index covers this combination/],
+    ["DapiClientError [-1]: transport error: grpc error: code: 'Operation is not implemented or not supported'", /does not support this request/],
+    ['invalid limit error: limit 500 exceeds 100', /rejected the LIMIT/],
+  ])('explains %s', (message, explanation) => {
+    expect(describeQueryError(message)).toMatch(explanation);
+  });
+
+  it('leaves unknown errors to the generic hint', () => {
+    expect(describeQueryError('connection refused')).toBeUndefined();
+    expect(describeQueryError(undefined)).toBeUndefined();
+  });
+});
+
+describe('documentPageCursor', () => {
+  it('counts absent documents and uses the last key as the cursor', () => {
+    expect(documentPageCursor(new Map<string, unknown>([['a', {}], ['b', undefined]]))).toEqual({ count: 2, lastId: 'b' });
+    expect(documentPageCursor([{ $id: 'x' }, { $id: 'y' }])).toEqual({ count: 2, lastId: 'y' });
+    expect(documentPageCursor(undefined)).toEqual({ count: 0 });
   });
 });
