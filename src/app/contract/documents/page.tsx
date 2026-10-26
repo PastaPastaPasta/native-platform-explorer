@@ -21,6 +21,7 @@ import {
   getLastDocId,
 } from '@components/contract/DocumentsResultsTable';
 import { DocumentsFiltersPanel } from '@components/contract/DocumentsFiltersPanel';
+import { DocumentsLanding } from '@components/contract/DocumentsLanding';
 import { CursorPagination } from '@components/pagination/CursorPagination';
 import { PAGE_SIZES } from '@components/pagination/PageSizeSelector';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
@@ -32,6 +33,7 @@ import {
   getIndicesForType,
   heuristicColumnsForType,
 } from '@util/schema';
+import { usePageTitle } from '@hooks/usePageTitle';
 import {
   buildDocumentsQuery,
   isDocumentFilterList,
@@ -69,6 +71,7 @@ function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
   const type = params.get('type') ?? '';
+  usePageTitle(id && type ? `${type} documents` : 'Documents');
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -121,15 +124,7 @@ function Content() {
   const rows = useMemo(() => extractRows(docsQ.data), [docsQ.data]);
 
   if (!id || !type) {
-    return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide <code>?id=…&amp;type=…</code> in the URL.
-          </Text>
-        </InfoBlock>
-      </Container>
-    );
+    return <DocumentsLanding initialContractId={id} />;
   }
 
   // Any change to the query invalidates the cursor stack: a document ID is

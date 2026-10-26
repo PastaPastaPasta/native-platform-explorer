@@ -20,18 +20,21 @@ import {
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
+import { LookupInput } from '@ui/LookupInput';
 import { ErrorCard } from '@ui/ErrorCard';
 import { Identifier } from '@components/data/Identifier';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import { useGroupInfos } from '@sdk/queries';
-import { shortId } from '@util/identifier';
+import { isBase58Identifier, shortId } from '@util/identifier';
 import { useWellKnownName } from '@hooks/useWellKnownName';
+import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 import { readProp } from '@util/sdk-shape';
 
 function Content() {
   const params = useSearchParams();
-  const contractId = params.get('contractId') ?? '';
+  const contractId = (params.get('contractId') ?? '').trim();
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -40,6 +43,9 @@ function Content() {
   ]);
 
   const wellKnown = useWellKnownName(contractId);
+  usePageTitle(contractId ? `Groups · ${wellKnown?.name ?? shortId(contractId)}` : 'Groups');
+  // Registry entries tagged "groups" are contracts known to define groups.
+  const groupContracts = useWellKnownEntries('contract').filter((entry) => entry.tags?.includes('groups'));
   const q = useGroupInfos(contractId || undefined);
 
   const groups = (() => {
@@ -53,12 +59,51 @@ function Content() {
 
   if (!contractId) {
     return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide a contract id as <code>?contractId=…</code>.
-          </Text>
-        </InfoBlock>
+      <Container py={{ base: 4, md: 6 }}>
+        <VStack align="stretch" spacing={4}>
+          <InfoBlock emphasised>
+            <VStack align="stretch" spacing={3}>
+              <Heading as="h1" size="md">Groups</Heading>
+              <Text fontSize="sm" color="muted" maxW="70ch">
+                Groups are multi-party signers defined inside a data contract, typically to
+                control token actions. Platform has no global list of groups, so open them by
+                the contract that defines them.
+              </Text>
+              <LookupInput
+                label="Contract ID"
+                placeholder="43–44 char base58 Identifier"
+                description="Lists the contract's groups by position (group.infos)."
+                validate={(v) => (isBase58Identifier(v) ? null : 'Expected a 43–44 char base58 string.')}
+                buildHref={(v) => `/groups/?contractId=${encodeURIComponent(v)}`}
+              />
+            </VStack>
+          </InfoBlock>
+          <InfoBlock>
+            <VStack align="stretch" spacing={2}>
+              <Heading size="sm">Well-known contracts with groups</Heading>
+              {groupContracts.length === 0 ? (
+                <Text fontSize="sm" color="muted">
+                  None of the well-known contracts on this network define groups. Tag a local
+                  registry entry with <code>groups</code> in Settings to list it here.
+                </Text>
+              ) : (
+                <HStack spacing={2} flexWrap="wrap">
+                  {groupContracts.map((entry) => (
+                    <Button
+                      key={entry.id}
+                      as={NextLink}
+                      href={`/groups/?contractId=${encodeURIComponent(entry.id)}`}
+                      size="sm"
+                      variant="outline"
+                    >
+                      {entry.name}
+                    </Button>
+                  ))}
+                </HStack>
+              )}
+            </VStack>
+          </InfoBlock>
+        </VStack>
       </Container>
     );
   }
