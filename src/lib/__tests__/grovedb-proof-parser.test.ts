@@ -63,6 +63,18 @@ describe('parseGrovedbProof', () => {
     expect(init.calls[1]).toBeInstanceOf(WebAssembly.Module);
   });
 
+  it('lets a parse queued behind a trapping one use the replacement instance', async () => {
+    const { parseGrovedbProof } = await freshParser();
+    const good = proofBytes('testnet-dpns-domain-desc');
+    const [trapped, queued] = await Promise.allSettled([
+      parseGrovedbProof(new Uint8Array([0, 0xfc, 0xff, 0xff, 0xff, 0xff])),
+      parseGrovedbProof(good),
+    ]);
+    expect(trapped).toMatchObject({ status: 'rejected', reason: { name: 'ProofParseError' } });
+    expect(queued).toMatchObject({ status: 'fulfilled', value: expect.stringContaining('PushInverted') });
+    expect(init.calls).toHaveLength(2);
+  });
+
   it('retries loading after a failed initialization', async () => {
     const { parseGrovedbProof } = await freshParser();
     init.failNext = 1;

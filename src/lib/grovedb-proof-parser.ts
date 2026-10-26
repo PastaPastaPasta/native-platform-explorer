@@ -6,6 +6,8 @@ type ParserModule = typeof import('./grovedb-proof-parser/grovedb_proof_parser')
 let loading: Promise<ParserModule> | null = null;
 /** Compiled module kept across re-instantiation after a trap. */
 let compiled: WebAssembly.Module | undefined;
+/** Bumped whenever a trap discards the instance. */
+let instanceGeneration = 0;
 
 function ensureLoaded(): Promise<ParserModule> {
   if (!loading) {
@@ -46,10 +48,16 @@ function describeFailure(error: unknown): string {
 export async function parseGrovedbProof(bytes: Uint8Array): Promise<string> {
   if (bytes.length === 0) throw new ProofParseError('No proof bytes to parse.');
   let mod: ParserModule;
-  try {
-    mod = await ensureLoaded();
-  } catch (error) {
-    throw new ProofParseError('The proof parser could not be loaded. Check your connection and try again.', { cause: error });
+  // A parse queued behind one that trapped would find the instance gone, so
+  // re-check the generation with no await between the check and the call.
+  for (;;) {
+    const generation = instanceGeneration;
+    try {
+      mod = await ensureLoaded();
+    } catch (error) {
+      throw new ProofParseError('The proof parser could not be loaded. Check your connection and try again.', { cause: error });
+    }
+    if (generation === instanceGeneration) break;
   }
   try {
     return mod.parse_grovedb_proof(bytes);
@@ -58,6 +66,7 @@ export async function parseGrovedbProof(bytes: Uint8Array): Promise<string> {
       // A trap may leave the instance inconsistent; start fresh next time.
       compiled = mod.__resetInstance() ?? compiled;
       loading = null;
+      instanceGeneration++;
     }
     throw new ProofParseError(describeFailure(error), { cause: error });
   }

@@ -5,8 +5,8 @@ import { AddIcon, MinusIcon, RepeatIcon } from '@chakra-ui/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildLayerTree,
-  flattenLayers,
   parseProofTree,
+  summarizeProof,
   type ParsedLayer,
   type TreeNode,
 } from './parse-proof-tree';
@@ -26,10 +26,10 @@ const ROW_GAP = 56;
 const PAD = 16;
 /** Real merk layers are AVL-balanced and far smaller; beyond these bounds the
  *  proof is malformed or adversarial and is summarized instead of drawn. */
-export const MAX_DRAWN_NODES = 4000;
+const MAX_DRAWN_NODES = 4000;
 export const MAX_DRAWN_DEPTH = 64;
 /** GroveDB paths are about a dozen layers deep. */
-export const MAX_LAYER_NESTING = 48;
+const MAX_LAYER_NESTING = 48;
 
 type NodeClass = 'target' | 'descend' | 'internal' | 'opaque';
 
@@ -80,7 +80,7 @@ function nodeTooltip(node: TreeNode): string {
   const op = node.op;
   const lines: string[] = [];
   lines.push(`${node.kind.toUpperCase()}  #${op.index} (${op.inverted ? 'PushInverted ' : ''}${op.variant ?? op.kind})`);
-  if (op.key) lines.push(`key:        ${op.key}`);
+  if (op.key !== undefined) lines.push(`key:        ${op.key}`);
   if (op.value) lines.push(`value:      ${op.value}`);
   if (op.treeValue) lines.push(`subtree:    ${op.treeValue}`);
   if (op.hash) lines.push(`hash:       ${op.hash}`);
@@ -103,11 +103,11 @@ interface Layout {
   height: number;
 }
 
-type LayoutResult = { layout: Layout } | { tooLarge: { nodes: number; depth: number } };
+type LayoutResult = { layout: Layout } | { tooLarge: { depth: number } };
 
 /** In-order layout without recursion, so a pathological chain cannot overflow
  *  the call stack. Gives up once the tree exceeds the drawable bounds. */
-export function computeLayout(root: TreeNode): LayoutResult {
+function computeLayout(root: TreeNode): LayoutResult {
   const byNode = new Map<TreeNode, Placement>();
   const pending: Array<{ node: TreeNode; depth: number }> = [];
   let current: TreeNode | undefined = root;
@@ -116,7 +116,7 @@ export function computeLayout(root: TreeNode): LayoutResult {
   while (current || pending.length) {
     while (current) {
       if (depth > MAX_DRAWN_DEPTH || pending.length + byNode.size >= MAX_DRAWN_NODES) {
-        return { tooLarge: { nodes: pending.length + byNode.size + 1, depth: Math.max(depth, maxDepth) } };
+        return { tooLarge: { depth: Math.max(depth, maxDepth) } };
       }
       pending.push({ node: current, depth });
       current = current.left;
@@ -312,7 +312,7 @@ function MerkTreeSVG({
         const x = colX(p.col);
         const y = rowY(p.depth);
         const op = p.node.op;
-        const childLayer = p.node.kind === 'subtree' && op.key ? childrenMap.get(op.key) : undefined;
+        const childLayer = p.node.kind === 'subtree' && op.key !== undefined ? childrenMap.get(op.key) : undefined;
         const subtreeOpen = childLayer ? expandedSubtrees.has(op.key!) : false;
         const clickable = !!childLayer;
 
@@ -514,10 +514,7 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
 
 export function ProofTreeView({ text }: { text: string }) {
   const root = useMemo(() => parseProofTree(text), [text]);
-  const damagedLayers = useMemo(
-    () => (root ? flattenLayers(root).filter((layer) => buildLayerTree(layer).issues.length > 0).length : 0),
-    [root],
-  );
+  const damagedLayers = useMemo(() => summarizeProof(root).layers.filter((l) => l.issues.length > 0).length, [root]);
   if (!root) return null;
 
   return (

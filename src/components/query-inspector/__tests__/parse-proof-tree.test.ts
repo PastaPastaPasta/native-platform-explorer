@@ -179,6 +179,34 @@ describe('parseProofTree op variants and layouts', () => {
   });
 });
 
+describe('parseProofTree printed values', () => {
+  it('keeps the stack in sync when item text holds an unbalanced bracket', () => {
+    const root = parseProofTree([
+      'LayerProof {', '  proof: Merk(',
+      '    0: Push(KVRefValueHash(k1, Item([abc), HASH[aa]))',
+      '    1: Push(KVHash(HASH[bb]))',
+      '    2: Parent)',
+      '}',
+    ].join('\n'))!;
+    expect(root.ops[0]).toMatchObject({ kind: 'kvRefValueHash', key: 'k1', value: 'Item([abc)', hash: 'aa' });
+    expect(buildLayerTree(root).issues).toEqual([]);
+  });
+
+  it('draws an unreadable Push as an opaque node instead of desyncing the stack', () => {
+    const root = parseProofTree(['LayerProof {', '  proof: Merk(', '    0: Push(KVDigest(k, HASH[aa]))', '    1: Push(KV(k2))', '    2: Child)', '}'].join('\n'))!;
+    const tree = buildLayerTree(root);
+    expect(tree.root?.right?.op).toMatchObject({ index: 1, kind: 'hash', variant: 'KV' });
+    expect(tree.issues).toEqual(['Op 1 (KV) has an unexpected shape and is drawn as an opaque sibling: Push(KV(k2))']);
+  });
+
+  it('counts a tree element without a lower layer as the result, not a subtree', () => {
+    // Aggregate proofs end in count/sum tree elements that are not descended into.
+    const root = parseProofTree(['LayerProof {', '  proof: Merk(', '    0: Push(KVValueHashFeatureType(class, CountTree(00, 4), HASH[aa], CountedMerkNode(4))))', '}'].join('\n'))!;
+    expect(buildLayerTree(root).root?.kind).toBe('kv');
+    expect(summarizeProof(root).totals).toMatchObject({ kv: 1, kvValueHash: 0 });
+  });
+});
+
 describe('buildLayerTree on malformed proofs', () => {
   function layer(ops: string[]): ParsedLayer {
     return parseProofTree(['LayerProof {', '  proof: Merk(', ...ops.map((op, i) => `    ${i}: ${op}`), '}'].join('\n'))!;
