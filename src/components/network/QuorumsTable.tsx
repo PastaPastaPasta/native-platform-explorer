@@ -21,16 +21,39 @@ import { normaliseQuorums, quorumBreakdown, type QuorumGroup } from '@util/quoru
 
 const UNKNOWN_TYPE = 'LLMQ_TYPE_UNKNOWN';
 
+/** rc.2 does not read the type or threshold from Platform: it maps the member
+ *  count to a type and takes a fixed fraction of the count as threshold. */
+export const INFERRED_NOTE =
+  'Type and threshold are inferred by the SDK from the member count ' +
+  '(50–70 → LLMQ_60_75, 90–110 → LLMQ_100_67, 350–450 → LLMQ_400_60, otherwise ' +
+  'LLMQ_TYPE_UNKNOWN), and the threshold is that fraction of the members present, ' +
+  'not the LLMQ type’s configured threshold. Platform does not report either.';
+
 function TypeLabel({ type }: { type: string }) {
-  if (type !== UNKNOWN_TYPE) return <>{type}</>;
   return (
-    <Text as="span" color="gray.400" title="The pinned SDK does not recognise this LLMQ type">
+    <Text
+      as="span"
+      color={type === UNKNOWN_TYPE ? 'gray.400' : undefined}
+      title={
+        type === UNKNOWN_TYPE
+          ? 'The SDK has no type for this member count'
+          : 'Inferred by the SDK from the member count'
+      }
+    >
       {type}
     </Text>
   );
 }
 
-/** Quorums grouped by reported type and size. */
+function InferredHeader({ children }: { children: React.ReactNode }) {
+  return (
+    <Text as="span" title={INFERRED_NOTE} cursor="help">
+      {children}*
+    </Text>
+  );
+}
+
+/** Quorums grouped by size, with the SDK's inferred type and threshold. */
 export function QuorumBreakdownList({ groups }: { groups: QuorumGroup[] }) {
   if (groups.length === 0) {
     return (
@@ -50,10 +73,10 @@ export function QuorumBreakdownList({ groups }: { groups: QuorumGroup[] }) {
         >
           <VStack align="flex-start" spacing={0} minW={0}>
             <Text fontFamily="mono" fontSize="13px" color="ink">
-              <TypeLabel type={g.quorumType} />
+              {g.memberCount ?? '—'} members
             </Text>
-            <Text fontFamily="mono" fontSize="11px" color="muted">
-              {g.memberCount ?? '—'} members · threshold {g.threshold ?? '—'}
+            <Text fontFamily="mono" fontSize="11px" color="muted" title={INFERRED_NOTE}>
+              inferred {g.quorumType} · threshold {g.threshold ?? '—'}
             </Text>
           </VStack>
           <Text fontFamily="mono" fontSize="lg" color="ink" sx={{ fontVariantNumeric: 'tabular-nums' }}>
@@ -61,6 +84,9 @@ export function QuorumBreakdownList({ groups }: { groups: QuorumGroup[] }) {
           </Text>
         </HStack>
       ))}
+      <Text fontSize="11px" color="muted" pt={2}>
+        {INFERRED_NOTE}
+      </Text>
     </VStack>
   );
 }
@@ -78,9 +104,9 @@ export function QuorumsTable({ data }: { data: unknown }) {
         {quorums.length} active validator quorum{quorums.length === 1 ? '' : 's'}
         {height !== null ? ` at platform height ${height}` : ''}
         {groups.length > 0
-          ? ` · ${groups.map((g) => `${g.count} × ${g.quorumType} (${g.memberCount ?? '?'} members)`).join(', ')}`
+          ? ` · ${groups.map((g) => `${g.count} × ${g.memberCount ?? '?'} members`).join(', ')}`
           : ''}
-        .
+        . The list is read without a proof.
       </Text>
       {quorums.length === 0 ? (
         <Text color="gray.400" fontSize="sm">
@@ -95,16 +121,13 @@ export function QuorumsTable({ data }: { data: unknown }) {
                   Quorum hash
                 </Th>
                 <Th color="gray.400" borderColor="gray.750">
-                  Type
+                  <InferredHeader>Type</InferredHeader>
                 </Th>
                 <Th color="gray.400" borderColor="gray.750" isNumeric>
                   Members
                 </Th>
                 <Th color="gray.400" borderColor="gray.750" isNumeric>
-                  Threshold
-                </Th>
-                <Th color="gray.400" borderColor="gray.750">
-                  Verified
+                  <InferredHeader>Threshold</InferredHeader>
                 </Th>
               </Tr>
             </Thead>
@@ -123,13 +146,13 @@ export function QuorumsTable({ data }: { data: unknown }) {
                   <Td borderColor="gray.750" fontFamily="mono" fontSize="xs" isNumeric>
                     {q.threshold ?? '—'}
                   </Td>
-                  <Td borderColor="gray.750" fontFamily="mono" fontSize="xs">
-                    {q.isVerified === null ? '—' : q.isVerified ? 'yes' : 'no'}
-                  </Td>
                 </Tr>
               ))}
             </Tbody>
           </Table>
+          <Text fontSize="xs" color="gray.400" mt={2}>
+            * {INFERRED_NOTE}
+          </Text>
         </Box>
       )}
       <Box>

@@ -20,6 +20,8 @@ const q = (hash: string, quorumType: string, memberCount: number, threshold: num
 
 // Shapes observed live: mainnet reports LLMQ_100_67; testnet's 25-member
 // platform quorums are a type the pinned SDK reports as LLMQ_TYPE_UNKNOWN.
+// The SDK sets isVerified to true whenever it found a validator set, so it is
+// not carried into the rows.
 const json = {
   height: '458827',
   quorums: [q('a1', 'LLMQ_100_67', 100, 67), q('a2', 'LLMQ_100_67', 100, 67), q('a3', 'LLMQ_100_67', 99, 66)],
@@ -31,7 +33,7 @@ describe('currentQuorumsInfo normalisation', () => {
     expect(summary.height).toBe(458827n);
     expect(summary.quorums).toHaveLength(3);
     expect(summary.quorums[2]).toEqual({
-      quorumHash: '00'.repeat(31) + 'a3', quorumType: 'LLMQ_100_67', memberCount: 99, threshold: 66, isVerified: true,
+      quorumHash: '00'.repeat(31) + 'a3', quorumType: 'LLMQ_100_67', memberCount: 99, threshold: 66,
     });
   });
 

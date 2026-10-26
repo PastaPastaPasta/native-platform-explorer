@@ -114,6 +114,10 @@ describe('QuorumsTable', () => {
   it('renders rows with the raw response behind a disclosure', () => {
     const data = { height: 9n, quorums: [{ quorumHash: hash(7), quorumType: 'LLMQ_100_67', memberCount: 99, threshold: 66, isVerified: true }] };
     renderWithProviders(<QuorumsTable data={data} />);
+    // isVerified is hard-coded by the SDK, and type/threshold are inferred.
+    const headers = screen.getAllByRole('columnheader').map((h) => h.textContent);
+    expect(headers).toEqual(['Quorum hash', 'Type*', 'Members', 'Threshold*']);
+    expect(screen.getByText(/\* Type and threshold are inferred by the SDK from the member count/)).toBeVisible();
     const row = screen.getAllByRole('row')[1]!;
     expect(within(row).getByText('LLMQ_100_67')).toBeVisible();
     expect(within(row).getByText('99')).toBeVisible();

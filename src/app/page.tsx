@@ -474,7 +474,7 @@ export default function HomePage() {
 
         <Box as="section">
           <SectionHeading
-            label="Quorums by type"
+            label="Quorums by size"
             action={
               <Button
                 as={NextLink}

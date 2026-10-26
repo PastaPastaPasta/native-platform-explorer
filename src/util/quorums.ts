@@ -3,12 +3,15 @@ import { readProp } from './sdk-shape';
 
 export interface QuorumRow {
   quorumHash: string;
-  /** As reported by the SDK. LLMQ types the pinned SDK does not know (e.g.
-   *  testnet's 25-member platform quorums) arrive as `LLMQ_TYPE_UNKNOWN`. */
+  /** Inferred by the pinned SDK from the member count (50–70 → LLMQ_60_75,
+   *  90–110 → LLMQ_100_67, 350–450 → LLMQ_400_60, otherwise
+   *  LLMQ_TYPE_UNKNOWN, e.g. testnet's 25-member quorums); Platform does not
+   *  report it. */
   quorumType: string;
   memberCount: number | null;
+  /** Inferred alongside the type: a fraction of the member count, not the
+   *  LLMQ type's configured threshold. */
   threshold: number | null;
-  isVerified: boolean | null;
 }
 
 export interface QuorumsSummary {
@@ -27,13 +30,11 @@ function row(q: unknown): QuorumRow | null {
   const hash = pick('quorumHash');
   if (typeof hash !== 'string' || !hash) return null;
   const type = pick('quorumType');
-  const verified = pick('isVerified');
   return {
     quorumHash: hash,
     quorumType: typeof type === 'string' && type ? type : 'unknown',
     memberCount: num(pick('memberCount')),
     threshold: num(pick('threshold')),
-    isVerified: typeof verified === 'boolean' ? verified : null,
   };
 }
 
