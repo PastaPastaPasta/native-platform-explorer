@@ -41,6 +41,7 @@ import {
   normaliseContract,
   tokenPositions,
 } from '@util/contract';
+import { useContractTitle } from '@hooks/useEntityTitle';
 
 // The diff view only matters for the few contracts that keep history.
 const ContractHistoryTimeline = dynamic(
@@ -53,6 +54,7 @@ const TABS = ['schema', 'documents', 'tokens', 'groups', 'history', 'internal'] 
 function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
+  useContractTitle(id);
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },

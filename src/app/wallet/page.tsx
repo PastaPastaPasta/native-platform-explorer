@@ -31,6 +31,7 @@ import { BridgeImportPane } from '@components/wallet/BridgeImportPane';
 import { BridgeLaunchCard } from '@components/wallet/BridgeLaunchCard';
 import { getConfig } from '@/config';
 import { isBase58Identifier } from '@util/identifier';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 function SafetyBanner() {
   return (
@@ -284,6 +285,7 @@ function WifPane() {
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Wallet' }]);
+  usePageTitle('Wallet');
   const config = getConfig();
 
   if (config.disableWriteMode) {

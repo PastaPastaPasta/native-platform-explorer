@@ -35,6 +35,7 @@ import { idToString, readProp } from '@util/sdk-shape';
 import { ShareLinkButton } from '@components/exploration/EntityActions';
 import { useSdk } from '@sdk/hooks';
 import { withNetwork } from '@util/exploration';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 const TABS = ['data', 'metadata', 'history'] as const;
 
@@ -43,6 +44,7 @@ function Content() {
   const id = params.get('id') ?? '';
   const type = params.get('type') ?? '';
   const docId = params.get('docId') ?? '';
+  usePageTitle(docId ? `${type || 'Document'} ${shortId(docId)}` : 'Document');
   const { network } = useSdk();
 
   usePageBreadcrumbs([

@@ -8,9 +8,11 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { QuorumsTable } from '@components/network/QuorumsTable';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useCurrentQuorumsInfo } from '@sdk/queries';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Network' }, { label: 'Quorums' }]);
+  usePageTitle('Quorums');
   const q = useCurrentQuorumsInfo();
   return (
     <Container py={{ base: 4, md: 6 }}>

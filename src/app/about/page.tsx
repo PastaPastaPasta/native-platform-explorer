@@ -6,6 +6,7 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { Badge, Box, Heading, Link, Text } from '@chakra-ui/react';
 import { EVO_SDK_VERSION } from '@/version';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 // Simple static rendering. We skip react-markdown here so Stage 5 avoids a
 // new runtime dep + SSR concern; the source file at `src/content/about.md` is
@@ -13,6 +14,7 @@ import { EVO_SDK_VERSION } from '@/version';
 // in a later polish pass.
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'About' }]);
+  usePageTitle('About');
   return (
     <Container py={{ base: 4, md: 6 }}>
       <InfoBlock>

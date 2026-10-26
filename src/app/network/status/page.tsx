@@ -36,6 +36,7 @@ import {
 } from '@sdk/health';
 import { toPlain } from '@util/contract';
 import { getTimeDelta } from '@util/datetime';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 function Uptime({ lastBlockTimeMs }: { lastBlockTimeMs: number }) {
   const [tick, setTick] = useState(0);
@@ -120,6 +121,7 @@ function HealthBanner({ health }: { health: NetworkHealth }) {
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Network' }, { label: 'Status' }]);
+  usePageTitle('Network status');
   const { network } = useSdk();
 
   const statusQ = useSystemStatus();

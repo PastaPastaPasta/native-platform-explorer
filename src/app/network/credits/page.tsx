@@ -21,9 +21,11 @@ import {
   usePrefundedSpecializedBalance,
   useTotalCreditsInPlatform,
 } from '@sdk/queries';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Network' }, { label: 'Credits' }]);
+  usePageTitle('Platform credits');
 
   const totalQ = useTotalCreditsInPlatform();
   const [input, setInput] = useState('');

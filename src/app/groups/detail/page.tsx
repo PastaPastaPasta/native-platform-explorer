@@ -35,11 +35,13 @@ import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useGroupActions, useGroupInfo, useGroupMembers } from '@sdk/queries';
 import { shortId } from '@util/identifier';
 import { readProp } from '@util/sdk-shape';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 function Content() {
   const params = useSearchParams();
   const contractId = params.get('contractId') ?? '';
   const positionStr = params.get('position') ?? '';
+  usePageTitle(positionStr ? `Group #${positionStr}` : 'Group');
   const position = Number(positionStr);
   const valid = contractId && Number.isFinite(position);
 
