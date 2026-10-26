@@ -25,7 +25,13 @@ vi.mock('@/signer/SignerProvider', async (importOriginal) => ({
   useSigner: vi.fn(),
 }));
 
-vi.mock('../SignerStatusCard', () => ({ SignerStatusCard: () => null }));
+vi.mock('../SignerStatusCard', () => ({
+  SignerStatusCard: ({ onRetry }: { onRetry?: () => void }) => (
+    <button type="button" onClick={onRetry}>
+      Refresh signer keys
+    </button>
+  ),
+}));
 
 const useSdkMock = vi.mocked(useSdk);
 const useSignerMock = vi.mocked(useSigner);
@@ -462,6 +468,52 @@ describe('OperationShell', () => {
       broadcast();
       await screen.findByText('Broadcast succeeded');
       expect(execute).toHaveBeenCalledWith(expect.objectContaining({ signingKeyId: 2 }));
+    });
+
+    it('requires confirming a signing key that changes during review', async () => {
+      const availableKeys = vi.fn().mockResolvedValue(transferKeys);
+      useSignerMock.mockReturnValue({
+        ...useSignerMock(),
+        signer: createMockSigner({ availableKeys }),
+      });
+      const { execute } = setup({
+        capability: { status: 'available' },
+        signingCriteria: vi.fn().mockResolvedValue({ purpose: 'TRANSFER' }),
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      await screen.findByText('Signing key: #2 · TRANSFER · CRITICAL');
+
+      // Key #2 was disabled on Platform; the refreshed list selects #3 instead.
+      availableKeys.mockResolvedValue([{ id: 3, purpose: 'TRANSFER', securityLevel: 'CRITICAL' }]);
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh signer keys' }));
+      await screen.findByText('Signing key: #3 · TRANSFER · CRITICAL');
+      expect(screen.getByRole('alert')).toHaveTextContent(
+        'The signing key changed while you were reviewing. It was #2 · TRANSFER · CRITICAL.',
+      );
+      expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeDisabled();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Sign with key #3' }));
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+      broadcast();
+      await screen.findByText('Broadcast succeeded');
+      expect(execute).toHaveBeenCalledWith(expect.objectContaining({ signingKeyId: 3 }));
+    });
+
+    it('does not ask again when a refresh selects the same key', async () => {
+      setup({
+        capability: { status: 'available' },
+        signingCriteria: vi.fn().mockResolvedValue({ purpose: 'TRANSFER' }),
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      await screen.findByText('Signing key: #2 · TRANSFER · CRITICAL');
+      fireEvent.click(screen.getByRole('button', { name: 'Refresh signer keys' }));
+      await screen.findByText('Signing key: #2 · TRANSFER · CRITICAL');
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeEnabled(),
+      );
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
 
     it('names contract bounds and blocks signing when no key qualifies', async () => {

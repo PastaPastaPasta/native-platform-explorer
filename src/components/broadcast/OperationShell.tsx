@@ -177,6 +177,8 @@ export function OperationShell<TOptions, TResult>({
     review: Review<TOptions, TResult>;
     key?: SignerKeyDescriptor;
     error?: string;
+    /** The key the user approved: the first one shown at review, or one they confirmed. */
+    confirmed?: string;
   } | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -274,7 +276,8 @@ export function OperationShell<TOptions, TResult>({
     setKeyRefresh((value) => value + 1);
   };
 
-  // Show the key that will sign; executors resolve the same criteria again.
+  // Show the key that will sign; executors resolve the same criteria again. A
+  // key refresh during review can select another key: that needs confirming.
   const currentKeys = keyState?.binding === contextBinding ? keyState.keys : null;
   useEffect(() => {
     const signingCriteria = review?.descriptor.signingCriteria;
@@ -284,10 +287,21 @@ export function OperationShell<TOptions, TResult>({
       .then((criteria) => selectSigningKey(currentKeys, criteria))
       .then(
         (key) => {
-          if (!cancelled) setReviewKey({ review, key });
+          if (!cancelled)
+            setReviewKey((previous) => ({
+              review,
+              key,
+              confirmed:
+                (previous?.review === review ? previous.confirmed : undefined) ?? describeKey(key),
+            }));
         },
         (error: unknown) => {
-          if (!cancelled) setReviewKey({ review, error: normalizeError(error).message });
+          if (!cancelled)
+            setReviewKey((previous) => ({
+              review,
+              error: normalizeError(error).message,
+              confirmed: previous?.review === review ? previous.confirmed : undefined,
+            }));
         },
       );
     return () => {
@@ -295,7 +309,10 @@ export function OperationShell<TOptions, TResult>({
     };
   }, [review, currentKeys]);
   const reviewSigningKey = reviewKey?.review === review ? reviewKey : null;
-  const signingKeyReady = !review?.descriptor.signingCriteria || !!reviewSigningKey?.key;
+  const signingKeyChanged =
+    !!reviewSigningKey?.key && describeKey(reviewSigningKey.key) !== reviewSigningKey.confirmed;
+  const signingKeyReady =
+    !review?.descriptor.signingCriteria || (!!reviewSigningKey?.key && !signingKeyChanged);
 
   // Drop the inputs once they can no longer be submitted; the receipt never held them.
   const purgeSecrets = useCallback(() => {
@@ -607,6 +624,26 @@ export function OperationShell<TOptions, TResult>({
                     ? `No key can sign this operation: ${reviewSigningKey.error}`
                     : 'Selecting the signing key…'}
               </Text>
+            ) : null}
+            {signingKeyChanged && reviewSigningKey?.key ? (
+              <VStack align="stretch" spacing={2}>
+                <Text role="alert" color="warning" fontSize="sm" fontWeight={600}>
+                  The signing key changed while you were reviewing. It was{' '}
+                  {reviewSigningKey.confirmed}. Check the new key before you sign.
+                </Text>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  alignSelf="flex-start"
+                  onClick={() =>
+                    setReviewKey((current) =>
+                      current?.key ? { ...current, confirmed: describeKey(current.key) } : current,
+                    )
+                  }
+                >
+                  Sign with key #{reviewSigningKey.key.id}
+                </Button>
+              </VStack>
             ) : null}
             <Text fontSize="sm" color="gray.250">
               Fees: Platform deducts processing fees from the identity&apos;s credit balance when
