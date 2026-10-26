@@ -478,9 +478,8 @@ describe('broadcast executors', () => {
 
   it.each([
     [undefined, ['CRITICAL', 'HIGH']],
-    [1, ['CRITICAL']],
-    [3, ['CRITICAL', 'HIGH', 'MEDIUM']],
-    [0, ['MASTER']],
+    [1n, ['CRITICAL']],
+    [3n, ['CRITICAL', 'HIGH', 'MEDIUM']],
   ])(
     'signs documents with the levels their type requires (signatureSecurityLevelRequirement %s)',
     async (requirement, levels) => {

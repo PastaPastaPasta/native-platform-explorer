@@ -117,9 +117,11 @@ describe('operation capabilities', () => {
 
   it('maps document signatureSecurityLevelRequirement to the levels Platform accepts', () => {
     expect(documentSecurityLevels(undefined)).toEqual(['CRITICAL', 'HIGH']);
-    expect(documentSecurityLevels(0)).toEqual(['MASTER']);
-    expect(documentSecurityLevels(1)).toEqual(['CRITICAL']);
-    expect(documentSecurityLevels(3)).toEqual(['CRITICAL', 'HIGH', 'MEDIUM']);
-    expect(() => documentSecurityLevels(4)).toThrow(/Unsupported/);
+    expect(documentSecurityLevels(1n)).toEqual(['CRITICAL']);
+    expect(documentSecurityLevels(3n)).toEqual(['CRITICAL', 'HIGH', 'MEDIUM']);
+    expect(documentSecurityLevels(2)).toEqual(['CRITICAL', 'HIGH']);
+    expect(() => documentSecurityLevels(0n)).toThrow(/requires MASTER keys/);
+    expect(() => documentSecurityLevels(4n)).toThrow(/Unsupported/);
+    expect(() => documentSecurityLevels('2')).toThrow(/Unsupported/);
   });
 });

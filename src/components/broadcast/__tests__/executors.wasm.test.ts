@@ -12,6 +12,7 @@ import {
 import type { IdentityPublicKeyInCreation } from '@dashevo/evo-sdk';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
 import { OperationNotSubmittedError, submitOperation } from '../outcomes';
+import { resolveSigningCriteria } from '../capabilities';
 import {
   executeContractUpdate,
   executeIdentityCreditWithdrawal,
@@ -214,7 +215,36 @@ describe('executors with the real WASM SDK', () => {
     },
   );
 
-  it('treats a real SDK argument error from a write call as not submitted', async () => {
+  it.each([
+    [1, ['CRITICAL']],
+    [3, ['CRITICAL', 'HIGH', 'MEDIUM']],
+  ])(
+    'reads a real contract\'s signatureSecurityLevelRequirement %s for document signing',
+    async (requirement, levels) => {
+      const contract = new DataContract({
+        ownerId: OWNER,
+        identityNonce: 1n,
+        schemas: {
+          note: {
+            type: 'object',
+            signatureSecurityLevelRequirement: requirement,
+            properties: { title: { type: 'string', maxLength: 63, position: 0 } },
+            additionalProperties: false,
+          },
+        },
+        fullValidation: true,
+        platformVersion,
+      });
+      const criteria = await resolveSigningCriteria(
+        'document.create',
+        { contracts: { fetch: vi.fn().mockResolvedValue(contract) } } as never,
+        { contractId: 'contract-1', documentType: 'note' },
+      );
+      expect(criteria?.allowedSecurityLevels).toEqual(levels);
+    },
+  );
+
+  it('treats an SDK InvalidArgument error raised inside a write callback as not submitted', async () => {
     const error = await submitOperation(async () => {
       PrivateKey.fromWIF('not-a-wif');
     }, {}).catch((e: unknown) => e);

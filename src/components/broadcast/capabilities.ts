@@ -98,14 +98,24 @@ export const DPNS_CONTRACT_ID = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpn
 
 /**
  * Levels Platform accepts for a document batch: CRITICAL through the document
- * type's `signatureSecurityLevelRequirement` (default HIGH), or only MASTER
- * when the type requires MASTER.
+ * type's `signatureSecurityLevelRequirement` (default HIGH). The SDK returns the
+ * requirement as a bigint. Batches only accept CRITICAL/HIGH/MEDIUM keys, so a
+ * type that requires MASTER cannot be signed at all.
  */
 export function documentSecurityLevels(requirement: unknown): SecurityLevelName[] {
-  const required = typeof requirement === 'number' ? requirement : 2;
-  if (!Number.isInteger(required) || required < 0 || required > 3)
+  const required =
+    requirement === undefined || requirement === null
+      ? 2
+      : typeof requirement === 'bigint'
+        ? Number(requirement)
+        : requirement;
+  if (typeof required !== 'number' || !Number.isInteger(required) || required < 0 || required > 3)
     throw new Error(`Unsupported signatureSecurityLevelRequirement ${String(requirement)}.`);
-  return required === 0 ? ['MASTER'] : SECURITY_LEVELS.slice(1, required + 1);
+  if (required === 0)
+    throw new Error(
+      'This document type requires MASTER keys, which Platform does not accept for document transitions.',
+    );
+  return SECURITY_LEVELS.slice(1, required + 1);
 }
 
 /**
