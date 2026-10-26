@@ -340,7 +340,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 69,
+              "line": 78,
               "owner": "fetchCurrentEpoch"
             }
           ]
@@ -351,7 +351,7 @@
           "sources": [
             {
               "file": "src/sdk/current-epoch.ts",
-              "line": 64,
+              "line": 73,
               "owner": "fetchCurrentEpoch"
             }
           ]
