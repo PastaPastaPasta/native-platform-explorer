@@ -20,6 +20,7 @@ import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useCurrentQuorumsInfo, useSystemStatus } from '@sdk/queries';
 import { QuorumsTable } from '@components/network/QuorumsTable';
+import { SdkVersionNotice } from '@components/layout/SdkNotices';
 import {
   CORE_LAG_DEGRADED,
   CORE_LAG_STALE,
@@ -137,6 +138,7 @@ export default function Page() {
   return (
     <Container py={{ base: 4, md: 6 }}>
       <VStack align="stretch" spacing={4}>
+        <SdkVersionNotice />
         <InfoBlock emphasised>
           <HStack justify="space-between" flexWrap="wrap" spacing={3}>
             <Heading size="md" color="gray.100">

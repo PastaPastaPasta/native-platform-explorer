@@ -11,7 +11,7 @@ import { DiagnosticsDrawer } from '@components/diagnostics/DiagnosticsDrawer';
 import { QueryInspectorDrawer } from '@components/query-inspector/QueryInspectorDrawer';
 import { ProofInspector } from '@components/proof/ProofInspector';
 import { recordShellReady } from '@sdk/timing';
-import { SdkSessionNotice, SdkVersionNotice } from './SdkNotices';
+import { SdkSessionNotice } from './SdkNotices';
 
 export function RootComponent({ children }: { children: ReactNode }) {
   useEffect(recordShellReady, []);
@@ -34,7 +34,6 @@ export function RootComponent({ children }: { children: ReactNode }) {
           </Box>
           <Box px={{ base: 4, md: 6, xl: 8 }} pb={{ base: 10, md: 16 }}>
             <SdkSessionNotice />
-            <SdkVersionNotice />
             {children}
           </Box>
           <Footer />

@@ -2053,6 +2053,17 @@
               "owner": "useSystemStatus"
             }
           ]
+        },
+        {
+          "method": "version",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/version.ts",
+              "line": 35,
+              "owner": "useProtocolVersionCheck"
+            }
+          ]
         }
       ]
     },
