@@ -64,3 +64,16 @@ export async function coreScriptForAddress(
   }
   return script;
 }
+
+/** Whether `address` is a valid Dash address for `network` that a withdrawal can pay. */
+export async function isCoreAddress(
+  address: string,
+  network: 'mainnet' | 'testnet',
+): Promise<boolean> {
+  try {
+    (await coreScriptForAddress(address, network)).free();
+    return true;
+  } catch {
+    return false;
+  }
+}

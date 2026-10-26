@@ -1,22 +1,32 @@
 import { createHash } from 'node:crypto';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Identity, IdentityPublicKey, PrivateKey, wallet } from '@dashevo/evo-sdk';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../../outcomes';
 import { parseAssetLockProof, type ParsedAssetLockProof } from '../../forms/identity/asset-lock';
 import { decodeStateTransition } from '../../forms/raw/decode';
 import { executeIdentityCreate, executeIdentityTopUp } from '../identity-create';
+import { prepareNewIdentityKeys, type NewIdentityKeyChoice } from '@/signer/new-identity';
 import { executeMasternodeVote, voterIdentityId } from '../voting';
 import { executeRawBroadcast } from '../raw';
+
+// The protocol version guard is unit-tested in protocol-version.test.ts.
+const assertWritable = vi.hoisted(() => vi.fn());
+vi.mock('@sdk/protocol-version', () => ({ assertWritableProtocolVersion: assertWritable }));
+beforeEach(() => {
+  assertWritable.mockReset().mockResolvedValue(14);
+});
 
 // Real WASM SDK; only network calls are mocked. Nothing is broadcast.
 const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
-const PRO_TX_HASH = 'ab'.repeat(32);
+// Not a palindrome: a byte-order mistake changes the voter identity.
+const PRO_TX_HASH = '0123456789abcdef'.repeat(4);
 const CONTRACT = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
 const SIGNED_HEX =
   '07007199f1f68404c86ecf60d9cb93ac2bdd02c0109cdbfeb759142b8ab9135f4b198bf296f9b006c8743b45ecb55d0e253f39d1c23e8865724f865dc3f7d5804b09fc000f424007000341202733b5fde2725f9d7b49618bc475aafb2d844d695793bfecbfbd44dcd672ef66542a44d2e3855f9ae3fa332cbaf9ea7d4227862db14db9df1028117e22a70786';
 let wif: string;
 let proof: ParsedAssetLockProof;
+let keys: NewIdentityKeyChoice;
 
 beforeAll(async () => {
   await wallet.validateMnemonic('abandon');
@@ -27,6 +37,10 @@ beforeAll(async () => {
     outputIndex: '0',
     coreChainLockedHeight: '1579591',
   });
+  const source = { kind: 'mnemonic' as const, mnemonic: MNEMONIC, identityIndex: 0 };
+  const prepared = await prepareNewIdentityKeys(source, 'testnet');
+  prepared.release();
+  keys = { source, publicKeyHashes: prepared.publicKeyHashes };
 });
 
 describe('asset-lock identity executors', () => {
@@ -42,7 +56,7 @@ describe('asset-lock identity executors', () => {
     network: 'testnet' as const,
     proof,
     assetLockKeyWif: wif,
-    keys: { kind: 'mnemonic' as const, mnemonic: MNEMONIC, identityIndex: 0 },
+    keys,
   });
 
   it('creates the identity the proof determines, with the derived keys', async () => {
@@ -317,14 +331,12 @@ describe('raw broadcast', () => {
     await expect(run(sdk)).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
   });
 
-  it('refuses a transition that differs from the reviewed one', async () => {
+  it('refuses, as not submitted, reviewed bytes that no longer decode', async () => {
     const sdk = sdkWith(
       async () => undefined,
       async () => proved,
     );
-    await expect(run(sdk, { hash: '00'.repeat(32) })).rejects.toBeInstanceOf(
-      OperationNotSubmittedError,
-    );
+    await expect(run(sdk, { hex: '00ff' })).rejects.toBeInstanceOf(OperationNotSubmittedError);
     expect(sdk.stateTransitions.broadcastStateTransition).not.toHaveBeenCalled();
   });
 });

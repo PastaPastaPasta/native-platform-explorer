@@ -101,7 +101,14 @@ describe('identity create', () => {
     await waitFor(() =>
       expect(onOptionsChange).toHaveBeenLastCalledWith(
         expect.objectContaining({
-          keys: { kind: 'mnemonic', mnemonic: 'abandon '.repeat(11) + 'about', identityIndex: 0 },
+          keys: {
+            source: {
+              kind: 'mnemonic',
+              mnemonic: 'abandon '.repeat(11) + 'about',
+              identityIndex: 0,
+            },
+            publicKeyHashes: expect.arrayContaining([expect.stringMatching(/^[0-9a-f]{40}$/)]),
+          },
         }),
       ),
     );

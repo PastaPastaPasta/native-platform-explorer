@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { Input, VStack } from '@chakra-ui/react';
-import { SecretInput } from '@ui/SecretInput';
+import type { DerivationNetwork } from '@/signer/types';
 import { isBase58Identifier } from '@util/identifier';
 import type { OperationFormProps } from '../../OperationShell';
-import { AddressKeyStatus, FormField, inputStyle, useAddressKeyPreview } from './fields';
+import { FormField, inputStyle } from '../fields';
+import { AddressKeyField, CreditsField, useAddressKeyPreview } from './fields';
 import {
   formatCredits,
   MIN_IDENTITY_FUNDING_CREDITS,
@@ -15,7 +16,7 @@ import {
 } from './limits';
 
 export interface AddressTopUpIdentityOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   /** The identity that receives the credits. */
   identityId: string;
   inputKeyWif: string;
@@ -75,28 +76,19 @@ export function AddressTopUpIdentityForm({
           onChange={(e) => setIdentityId(e.target.value)}
         />
       </FormField>
-      <FormField label="Paying address private key (WIF)">
-        <SecretInput
-          {...inputStyle}
-          aria-label="Paying address private key (WIF)"
-          value={wif}
-          onChange={(e) => setWif(e.target.value)}
-        />
-        <AddressKeyStatus preview={preview} network={network} />
-      </FormField>
-      <FormField
-        label="Amount (credits)"
+      <AddressKeyField
+        label="Paying address private key (WIF)"
+        value={wif}
+        onChange={setWif}
+        preview={preview}
+        network={network}
+      />
+      <CreditsField
+        value={amountText}
+        onChange={setAmountText}
         error={(amountText && amount.error) || shortfall}
         hint={`At least ${formatCredits(MIN_IDENTITY_FUNDING_CREDITS)} credits. The address pays the fee on top from its remaining balance.`}
-      >
-        <Input
-          {...inputStyle}
-          inputMode="numeric"
-          aria-label="Amount (credits)"
-          value={amountText}
-          onChange={(e) => setAmountText(e.target.value)}
-        />
-      </FormField>
+      />
     </VStack>
   );
 }

@@ -24,15 +24,10 @@ import {
   type IdentityUpdateKeysOptions,
 } from './forms/IdentityUpdateKeys';
 import { DpnsRegisterForm, DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
-import {
-  IdentityCreateForm,
-  redactIdentityCreate,
-  type IdentityCreateOptions,
-} from './forms/identity/IdentityCreate';
+import { IdentityCreateForm, type IdentityCreateOptions } from './forms/identity/IdentityCreate';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/identity/IdentityTopUp';
 import {
   AddressTransferForm,
-  redactAddressKey,
   type AddressTransferOptions,
 } from './forms/addresses/AddressTransfer';
 import {
@@ -49,20 +44,20 @@ import {
 } from './forms/addresses/AddressWithdraw';
 import {
   AddressFundFromAssetLockForm,
-  redactAssetLockKey,
   type AddressFundFromAssetLockOptions,
 } from './forms/addresses/AddressFundFromAssetLock';
 import {
   AddressCreateIdentityForm,
-  redactAddressCreateIdentity,
   type AddressCreateIdentityOptions,
 } from './forms/addresses/AddressCreateIdentity';
 import { formatCredits, sumOutputs } from './forms/addresses/limits';
+import { MasternodeVoteForm, type MasternodeVoteOptions } from './forms/voting/MasternodeVote';
 import {
-  MasternodeVoteForm,
+  redactAddressKey,
+  redactAssetLockKey,
+  redactNewIdentityKeys,
   redactVotingKey,
-  type MasternodeVoteOptions,
-} from './forms/voting/MasternodeVote';
+} from './forms/redact';
 import { RawBroadcastForm, type RawBroadcastOptions } from './forms/raw/RawBroadcast';
 import {
   executeContractRegister,
@@ -298,7 +293,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Creates an identity funded by an asset-lock transaction from a Core wallet. Without a ' +
         'Core wallet, use the bridge, which builds the asset lock for you.',
-      secrets: { reviewData: redactIdentityCreate },
+      secrets: { reviewData: (o) => redactNewIdentityKeys(redactAssetLockKey(o)) },
       feeNote: ASSET_LOCK_FEE_NOTE,
       FormComponent: IdentityCreateForm,
       summarise: (o) =>
@@ -482,7 +477,7 @@ export const OPERATIONS: OperationEntry[] = [
       title: 'Create an identity from a Platform address',
       description:
         "Creates an identity funded by a Platform address, signed with the address's key and the new identity's keys.",
-      secrets: { reviewData: redactAddressCreateIdentity },
+      secrets: { reviewData: (o) => redactNewIdentityKeys(redactAddressKey(o)) },
       feeNote: ADDRESS_FEE_NOTE,
       FormComponent: AddressCreateIdentityForm,
       summarise: (o) =>

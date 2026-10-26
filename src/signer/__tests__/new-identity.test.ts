@@ -49,17 +49,22 @@ describe('new identity keys', () => {
     }
   });
 
-  it('describes keys for review without the mnemonic or WIFs', () => {
+  it('describes keys for review with their hashes, without the mnemonic or WIFs', () => {
     const view = describeNewIdentityKeys(
-      { kind: 'mnemonic', mnemonic: MNEMONIC, identityIndex: 1 },
+      {
+        source: { kind: 'mnemonic', mnemonic: MNEMONIC, identityIndex: 1 },
+        publicKeyHashes: ['aa', 'bb', 'cc', 'dd'],
+      },
       'testnet',
     );
-    expect(view).toHaveLength(DEFAULT_NEW_IDENTITY_KEYS.length);
-    expect(view[0]).toEqual({
+    expect(view.keys).toHaveLength(DEFAULT_NEW_IDENTITY_KEYS.length);
+    expect(view).toMatchObject({ from: 'mnemonic (hidden)', identityIndex: 1 });
+    expect(view.keys[0]).toEqual({
       id: 0,
       purpose: 'AUTHENTICATION',
       securityLevel: 'MASTER',
       derivationPath: "m/9'/1'/5'/0'/0'/1'/0'",
+      publicKeyHash: 'aa',
     });
     expect(JSON.stringify(view)).not.toContain('abandon');
     expect(newIdentityKeyCount({ kind: 'wif', keys: [] })).toBe(0);

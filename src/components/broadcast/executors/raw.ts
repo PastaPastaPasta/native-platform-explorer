@@ -3,11 +3,12 @@
 // "already in mempool/chain", which is not a failure: the result is awaited
 // the same way.
 
+import type { StateTransition } from '@dashevo/evo-sdk';
 import { freeAll } from '@/signer/form-keys';
 import type { ExecuteArgs } from '../executors';
 import { decodeStateTransition } from '../forms/raw/decode';
 import type { RawBroadcastOptions } from '../forms/raw/RawBroadcast';
-import { BroadcastOutcomeUnknownError } from '../outcomes';
+import { BroadcastOutcomeUnknownError, sdkErrorName } from '../outcomes';
 import { executeFormSigned } from './form-signed';
 
 export interface RawBroadcastResult {
@@ -23,14 +24,23 @@ export interface RawBroadcastResult {
   result: unknown;
 }
 
-/** A WASM SDK error of `kind` (they are plain objects, not Errors). */
-function isSdkError(error: unknown, kind: string): boolean {
-  return (
-    !!error &&
-    typeof error === 'object' &&
-    !(error instanceof Error) &&
-    (error as { name?: unknown }).name === kind
-  );
+/**
+ * Strict waits refuse transitions whose proofs only cover the affected state
+ * (top-ups, transfers, withdrawals, …); accept those as such.
+ */
+async function waitForOutcome(
+  sdk: ExecuteArgs<unknown>['sdk'],
+  transition: StateTransition,
+): Promise<{ proof: 'execution' | 'affected-state'; result: unknown }> {
+  try {
+    return { proof: 'execution', result: await sdk.stateTransitions.waitForResponse(transition) };
+  } catch (error) {
+    if (sdkErrorName(error) !== 'ExecutionNotProved') throw error;
+    return {
+      proof: 'affected-state',
+      result: await sdk.stateTransitions.waitForAffectedState(transition),
+    };
+  }
 }
 
 function plain(value: unknown): unknown {
@@ -43,10 +53,10 @@ export async function executeRawBroadcast({
   options,
   assertCurrent,
 }: ExecuteArgs<RawBroadcastOptions>): Promise<RawBroadcastResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(null, async (submit, onRelease) => {
     const reviewed = options.transition;
+    // Decode again from the reviewed hex: what is broadcast is built from it here.
     const decoded = await decodeStateTransition(reviewed.hex);
-    if (decoded.hash !== reviewed.hash) throw new Error('The transition changed after review.');
     const { StateTransition } = await import('@dashevo/evo-sdk');
     const transition = StateTransition.fromHex(decoded.hex);
     onRelease(() => freeAll(transition));
@@ -58,34 +68,18 @@ export async function executeRawBroadcast({
           await sdk.stateTransitions.broadcastStateTransition(transition);
           return 'accepted' as const;
         } catch (error) {
-          if (isSdkError(error, 'AlreadyExists')) return 'already-known' as const;
+          if (sdkErrorName(error) === 'AlreadyExists') return 'already-known' as const;
           throw error;
         }
       },
       entities,
       assertCurrent,
     );
-    // Strict waits refuse transitions whose proofs only cover the affected
-    // state (top-ups, transfers, withdrawals, …); accept those as such. The
-    // transition was submitted, so every wait failure leaves the outcome
+    // The transition was submitted, so every wait failure leaves the outcome
     // unknown, whatever its error kind.
-    let outcome: { proof: 'execution' | 'affected-state'; result: unknown };
-    try {
-      try {
-        outcome = {
-          proof: 'execution',
-          result: await sdk.stateTransitions.waitForResponse(transition),
-        };
-      } catch (error) {
-        if (!isSdkError(error, 'ExecutionNotProved')) throw error;
-        outcome = {
-          proof: 'affected-state',
-          result: await sdk.stateTransitions.waitForAffectedState(transition),
-        };
-      }
-    } catch (error) {
+    const outcome = await waitForOutcome(sdk, transition).catch((error: unknown) => {
       throw new BroadcastOutcomeUnknownError(error, entities);
-    }
+    });
     return {
       kind: 'raw' as const,
       message:

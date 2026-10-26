@@ -1,8 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { SecretInput } from '@ui/SecretInput';
 import { HStack, Input, Radio, RadioGroup, Stack, Text, Textarea, VStack } from '@chakra-ui/react';
-import { FormField, inputStyle } from '../addresses/fields';
+import { FormField, inputStyle, useKeyedAsync } from '../fields';
 import {
   parseAssetLockProof,
   type AssetLockProofInput,
@@ -29,11 +30,6 @@ export function AssetLockProofFields({
     coreChainLockedHeight: '',
     text: '',
   });
-  const [parsed, setParsed] = useState<{
-    key: string;
-    proof?: ParsedAssetLockProof;
-    error?: string;
-  } | null>(null);
 
   const input: AssetLockProofInput =
     kind === 'instant'
@@ -51,27 +47,11 @@ export function AssetLockProofFields({
             coreChainLockedHeight: fields.coreChainLockedHeight,
           }
         : { kind, text: fields.text };
-  const key = JSON.stringify(input);
   const complete = Object.values(input).every((value) => String(value).trim() !== '');
-
-  useEffect(() => {
-    if (!complete) return;
-    let cancelled = false;
-    void parseAssetLockProof(JSON.parse(key) as AssetLockProofInput).then(
-      (proof) => !cancelled && setParsed({ key, proof }),
-      (error: unknown) =>
-        !cancelled &&
-        setParsed({
-          key,
-          error: error instanceof Error ? error.message : 'Invalid asset-lock proof.',
-        }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [key, complete]);
-  const current = complete && parsed?.key === key ? parsed : null;
-  const proof = current?.proof ?? null;
+  const current = useKeyedAsync(complete ? JSON.stringify(input) : null, (key) =>
+    parseAssetLockProof(JSON.parse(key) as AssetLockProofInput),
+  );
+  const proof = current?.value ?? null;
 
   useEffect(() => {
     onChange(proof);
@@ -183,5 +163,30 @@ export function AssetLockProofFields({
         </Text>
       ) : null}
     </VStack>
+  );
+}
+
+/** The one-time key of the asset-lock output. */
+export function AssetLockKeyField({
+  value,
+  onChange,
+  hint,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  hint: string;
+}) {
+  return (
+    <FormField
+      label="Asset-lock private key (WIF)"
+      hint={`The one-time key of the asset-lock output. It signs the proof and stays in this tab only for this operation. ${hint}`}
+    >
+      <SecretInput
+        {...inputStyle}
+        aria-label="Asset-lock private key (WIF)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </FormField>
   );
 }

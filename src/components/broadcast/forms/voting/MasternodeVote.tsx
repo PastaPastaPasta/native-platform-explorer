@@ -6,14 +6,16 @@ import { Input, Select, Text, Textarea, VStack } from '@chakra-ui/react';
 import { SecretInput } from '@ui/SecretInput';
 import { useContestedResourceVoteState } from '@sdk/queries';
 import { isBase58Identifier } from '@util/identifier';
+import { proTxHashToHex } from '@util/protx';
 import { idToString, readProp } from '@util/sdk-shape';
+import type { DerivationNetwork } from '@/signer/types';
 import type { OperationFormProps } from '../../OperationShell';
-import { FormField, inputStyle } from '../addresses/fields';
+import { FormField, inputStyle, selectStyle } from '../fields';
 
 export type VoteChoice = 'towardsIdentity' | 'abstain' | 'lock';
 
 export interface MasternodeVoteOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   /** The masternode's ProTxHash: hex as Core shows it, or base58. */
   proTxHash: string;
   votingKeyWif: string;
@@ -24,12 +26,6 @@ export interface MasternodeVoteOptions {
   choice: VoteChoice;
   towardsIdentityId?: string;
 }
-
-export function redactVotingKey({ votingKeyWif: _secret, ...rest }: MasternodeVoteOptions) {
-  return { ...rest, votingKey: 'provided (hidden)' };
-}
-
-const PRO_TX_HASH = /^(?:[0-9a-f]{64})$/i;
 
 function parseIndexValues(text: string): unknown[] | null {
   try {
@@ -88,7 +84,7 @@ export function MasternodeVoteForm({
         idToString(readProp<unknown>(c, 'towardsIdentity')),
     )
     .filter((id): id is string => !!id);
-  const proTxValid = PRO_TX_HASH.test(proTxHash.trim()) || isBase58Identifier(proTxHash.trim());
+  const proTxValid = proTxHashToHex(proTxHash) !== null;
   const towardsValid = choice !== 'towardsIdentity' || isBase58Identifier(towards.trim());
 
   useEffect(() => {
@@ -186,9 +182,7 @@ export function MasternodeVoteForm({
       ) : null}
       <FormField label="Vote">
         <Select
-          size="sm"
-          bg="gray.800"
-          borderColor="gray.700"
+          {...selectStyle}
           aria-label="Vote"
           value={choice}
           onChange={(e) => setChoice(e.target.value as VoteChoice)}
@@ -205,9 +199,7 @@ export function MasternodeVoteForm({
         >
           {contenders.length ? (
             <Select
-              size="sm"
-              bg="gray.800"
-              borderColor="gray.700"
+              {...selectStyle}
               aria-label="Contender"
               placeholder="Pick a contender"
               value={contenders.includes(towards) ? towards : ''}

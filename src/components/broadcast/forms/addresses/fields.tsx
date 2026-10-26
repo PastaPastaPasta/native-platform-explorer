@@ -1,10 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Box, Button, HStack, Input, Text, VStack } from '@chakra-ui/react';
+import { useEffect, useMemo, useState } from 'react';
+import { Button, HStack, Input, Text, VStack } from '@chakra-ui/react';
+import { SecretInput } from '@ui/SecretInput';
 import { useAddressInfo } from '@sdk/queries';
 import { platformAddressForWif } from '@/signer/form-keys';
+import type { DerivationNetwork as Network } from '@/signer/types';
 import { platformAddressHrp } from '@util/platform-address';
+import { FormField, inputStyle, useKeyedAsync } from '../fields';
 import {
   addressOutputsError,
   formatCredits,
@@ -13,81 +16,84 @@ import {
   type AddressOutput,
 } from './limits';
 
-type Network = 'mainnet' | 'testnet';
-
-export function FormField({
-  label,
-  hint,
-  error,
-  children,
-}: {
-  label: string;
-  hint?: ReactNode;
-  error?: string | null;
-  children: ReactNode;
-}) {
-  return (
-    <Box>
-      <Text fontSize="sm" color="gray.100" fontWeight={500} mb={1}>
-        {label}
-      </Text>
-      {children}
-      {error || hint ? (
-        <Text fontSize="xs" color={error ? 'danger' : 'gray.400'} mt={1}>
-          {error ?? hint}
-        </Text>
-      ) : null}
-    </Box>
-  );
-}
-
-export const inputStyle = {
-  size: 'sm',
-  fontFamily: 'mono',
-  bg: 'gray.800',
-  borderColor: 'gray.700',
-} as const;
-
 /**
  * The Platform address a private key controls and its current balance. The
  * key is decoded only to derive the address; nothing is kept.
  */
 export function useAddressKeyPreview(wif: string, network: Network) {
   const trimmed = wif.trim();
-  const [derived, setDerived] = useState<{ wif: string; address?: string; error?: string } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!trimmed) return;
-    let cancelled = false;
-    void platformAddressForWif(trimmed, network).then(
-      (address) => !cancelled && setDerived({ wif: trimmed, address }),
-      (error: unknown) =>
-        !cancelled &&
-        setDerived({
-          wif: trimmed,
-          error: error instanceof Error ? error.message : 'Not a valid WIF private key.',
-        }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [trimmed, network]);
-  const current = trimmed && derived?.wif === trimmed ? derived : null;
-  const info = useAddressInfo(current?.address);
+  const derived = useKeyedAsync(trimmed ? JSON.stringify([network, trimmed]) : null, (key) => {
+    const [net, value] = JSON.parse(key) as [Network, string];
+    return platformAddressForWif(value, net);
+  });
+  const info = useAddressInfo(derived?.value);
   const record = info.data as { balance?: bigint; nonce?: bigint } | null | undefined;
   return {
-    address: current?.address,
-    error: current?.error,
-    checking: !!trimmed && !current,
+    address: derived?.value,
+    error: derived?.error,
+    checking: !!trimmed && !derived,
     balance: info.isSuccess ? (record?.balance ?? 0n) : undefined,
     nonce: info.isSuccess ? record?.nonce : undefined,
     balanceError: info.isError,
   };
 }
 
+/** The paying address's private key, with the address it controls and its balance. */
+export function AddressKeyField({
+  label,
+  value,
+  onChange,
+  preview,
+  network,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  preview: ReturnType<typeof useAddressKeyPreview>;
+  network: Network;
+}) {
+  return (
+    <FormField label={label}>
+      <SecretInput
+        {...inputStyle}
+        aria-label={label}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      <AddressKeyStatus preview={preview} network={network} />
+    </FormField>
+  );
+}
+
+/** A whole number of credits. */
+export function CreditsField({
+  label = 'Amount (credits)',
+  value,
+  onChange,
+  error,
+  hint,
+}: {
+  label?: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string | null;
+  hint?: string;
+}) {
+  return (
+    <FormField label={label} error={error} hint={hint}>
+      <Input
+        {...inputStyle}
+        inputMode="numeric"
+        aria-label="Amount (credits)"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </FormField>
+  );
+}
+
 /** Status line under an address key field: the derived address and its balance. */
-export function AddressKeyStatus({
+function AddressKeyStatus({
   preview,
   network,
 }: {

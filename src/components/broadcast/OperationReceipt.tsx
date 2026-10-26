@@ -28,6 +28,7 @@ export function OperationReceipt({
   const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/+$/, '');
   const link = (path: string, params: Record<string, string>) =>
     `${basePath}${path}?${new URLSearchParams({ ...params, network }).toString()}`;
+  const affectedIdentity = entities.identityId ?? identityId;
   const details = result && typeof result === 'object' ? (result as Record<string, unknown>) : null;
   const stateTransitionHash =
     typeof details?.stateTransitionHash === 'string' ? details.stateTransitionHash : undefined;
@@ -71,10 +72,10 @@ export function OperationReceipt({
             Open state transition
           </Button>
         ) : null}
-        {(entities.identityId ?? identityId) ? (
+        {affectedIdentity ? (
           <Button
             as="a"
-            href={link('/identity/', { id: (entities.identityId ?? identityId)! })}
+            href={link('/identity/', { id: affectedIdentity })}
             size="sm"
             variant="outline"
           >

@@ -34,7 +34,7 @@ import {
   sumOutputs,
   type AddressOutput,
 } from '../forms/addresses/limits';
-import { executeFormSigned } from './form-signed';
+import { executeFormSigned, loadAssetLockProof } from './form-signed';
 import { buildNewIdentity } from './identity-create';
 
 type Network = 'mainnet' | 'testnet';
@@ -126,7 +126,7 @@ export async function executeAddressTransfer({
   options,
   assertCurrent,
 }: ExecuteArgs<AddressTransferOptions>): Promise<AddressesResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, outputs, fromAddress } = options;
     assertOutputs(outputs, network, fromAddress);
     if (options.feeFrom === 'recipient' && outputs.length !== 1)
@@ -185,8 +185,9 @@ export async function executeAddressTransferFromIdentity(
               identity,
               outputs: addressOutputs(options.outputs),
               signer: material.identitySigner,
-              // Pin the reviewed key; the SDK would otherwise pick any transfer key.
-              signingTransferKeyId: material.keyId,
+              // Pin the key checked against the review (not the signer's own report);
+              // the SDK would otherwise pick any transfer key.
+              signingTransferKeyId: material.identityKey.keyId,
             }),
           { identityId: material.identityId, addresses },
           args.assertCurrent,
@@ -215,7 +216,7 @@ export async function executeAddressTopUpIdentity({
   options,
   assertCurrent,
 }: ExecuteArgs<AddressTopUpIdentityOptions>): Promise<AddressesResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, fromAddress, amountCredits, identityId } = options;
     if (amountCredits < MIN_IDENTITY_FUNDING_CREDITS)
       throw new Error(
@@ -253,7 +254,7 @@ export async function executeAddressWithdraw({
   options,
   assertCurrent,
 }: ExecuteArgs<AddressWithdrawOptions>): Promise<AddressesResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, fromAddress, amountCredits, toAddress } = options;
     const fee = validateCoreFeePerByte(String(options.coreFeePerByte));
     if (fee.error) throw new Error(fee.error);
@@ -298,15 +299,15 @@ export async function executeAddressFundFromAssetLock({
   options,
   assertCurrent,
 }: ExecuteArgs<AddressFundFromAssetLockOptions>): Promise<AddressesResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, address, proof } = options;
     const addressError = platformAddressError(address, network);
     if (addressError) throw new Error(addressError);
-    const { AssetLockProof, PlatformAddressSigner } = await import('@dashevo/evo-sdk');
-    const assetLockProof = AssetLockProof.fromHex(proof.proofHex);
+    const assetLockProof = await loadAssetLockProof(proof.proofHex, onRelease);
     // There are no address inputs, so the address signer holds no keys.
+    const { PlatformAddressSigner } = await import('@dashevo/evo-sdk');
     const signer = new PlatformAddressSigner();
-    onRelease(() => freeAll(assetLockProof, signer));
+    onRelease(() => freeAll(signer));
     return withPrivateKey(
       options.assetLockKeyWif,
       network,
@@ -341,7 +342,7 @@ export async function executeAddressCreateIdentity({
   options,
   assertCurrent,
 }: ExecuteArgs<AddressCreateIdentityOptions>): Promise<AddressesResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, fromAddress, amountCredits } = options;
     if (amountCredits < MIN_IDENTITY_FUNDING_CREDITS)
       throw new Error(
@@ -353,7 +354,7 @@ export async function executeAddressCreateIdentity({
       sdk,
       fromAddress,
       amountCredits,
-      minFee.createIdentity(newIdentityKeyCount(options.keys)),
+      minFee.createIdentity(newIdentityKeyCount(options.keys.source)),
     );
     // The SDK derives the identity ID from the inputs and their nonces.
     const created = await buildNewIdentity(

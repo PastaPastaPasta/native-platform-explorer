@@ -245,6 +245,8 @@ export function OperationShell<TOptions, TResult>({
     snapshot.fingerprint === current.current.optionsFingerprint;
   const reviewIsCurrent = review !== null && isCurrent(review);
   const formSigned = signsInForm(descriptor.capability);
+  // Form-signed operations never sign with the connected signer.
+  const reviewSigner = formSigned ? null : signer;
   const usesSigner = descriptor.capability?.status === 'available' && !formSigned;
   useEffect(() => {
     if (!usesSigner || !signer || status !== 'ready') return;
@@ -400,8 +402,8 @@ export function OperationShell<TOptions, TResult>({
       summary,
       view,
       sdk,
-      signer: formSigned ? null : signer,
-      identityId: formSigned ? null : (signer?.identityId ?? null),
+      signer: reviewSigner,
+      identityId: reviewSigner?.identityId ?? null,
       network,
       trusted,
       sessionSignal,

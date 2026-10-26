@@ -19,14 +19,16 @@ import {
   MAX_NEW_IDENTITY_KEYS,
   NEW_KEY_LEVELS,
   newKeySpecsError,
+  prepareNewIdentityKeys,
+  type NewIdentityKeyChoice,
   type NewIdentityKeySource,
   type NewKeyLevel,
   type NewKeyPurpose,
 } from '@/signer/new-identity';
-import { identityKeyPath } from '@/signer/mnemonic';
-import { FormField, inputStyle } from '../addresses/fields';
+import { identityIndexError, identityKeyPath } from '@/signer/mnemonic';
+import type { DerivationNetwork as Network } from '@/signer/types';
+import { FormField, inputStyle, selectStyle, useKeyedAsync } from '../fields';
 
-type Network = 'mainnet' | 'testnet';
 type KeyRow = { purpose: NewKeyPurpose; securityLevel: NewKeyLevel; privateKeyWif: string };
 
 const DEFAULT_ROWS: KeyRow[] = DEFAULT_NEW_IDENTITY_KEYS.map((spec) => ({
@@ -34,71 +36,26 @@ const DEFAULT_ROWS: KeyRow[] = DEFAULT_NEW_IDENTITY_KEYS.map((spec) => ({
   privateKeyWif: '',
 }));
 
-/** Review-safe view of a key source: the key layout without the mnemonic or WIFs. */
-export function redactNewIdentityKeys(source: NewIdentityKeySource) {
-  return source.kind === 'mnemonic'
-    ? { from: 'mnemonic (hidden)', identityIndex: source.identityIndex }
-    : {
-        from: 'private keys (hidden)',
-        keys: source.keys.map(({ purpose, securityLevel }, id) => ({ id, purpose, securityLevel })),
-      };
-}
-
-/** Checks a mnemonic, or WIFs, for the network without keeping anything. */
-function useSecretCheck(source: NewIdentityKeySource | null, network: Network) {
-  const [check, setCheck] = useState<{ source: NewIdentityKeySource; errors: string[] } | null>(
-    null,
-  );
-  useEffect(() => {
-    if (!source) return;
-    let cancelled = false;
-    void (async () => {
-      const { wallet } = await import('@dashevo/evo-sdk');
-      let errors: string[];
-      if (source.kind === 'mnemonic') {
-        const valid = await wallet.validateMnemonic(source.mnemonic).catch(() => false);
-        errors = [valid ? '' : 'That BIP-39 mnemonic is not valid.'];
-      } else {
-        errors = await Promise.all(
-          source.keys.map(async ({ privateKeyWif }, index) => {
-            if (!privateKeyWif) return 'Enter the private key (WIF) for this key.';
-            const duplicate = source.keys.findIndex((k) => k.privateKeyWif === privateKeyWif);
-            if (duplicate !== index) return 'The same private key is listed twice.';
-            try {
-              const pair = await wallet.keyPairFromWif(privateKeyWif);
-              try {
-                return pair.network === network
-                  ? ''
-                  : `This private key is for ${pair.network}, not ${network}.`;
-              } finally {
-                pair.free();
-              }
-            } catch {
-              return 'Not a valid WIF private key.';
-            }
-          }),
-        );
-      }
-      if (!cancelled) setCheck({ source, errors });
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [source, network]);
-  return check?.source === source ? check.errors : null;
+/** Derive the public key hashes a source creates, checking it as signing will. */
+async function deriveKeyHashes(key: string): Promise<string[]> {
+  const [network, source] = JSON.parse(key) as [Network, NewIdentityKeySource];
+  const keys = await prepareNewIdentityKeys(source, network);
+  keys.release();
+  return keys.publicKeyHashes;
 }
 
 /**
  * The new identity's keys: derived from a mnemonic on the DIP-13 identity
  * paths (so connecting that mnemonic on /wallet finds them), or explicit
- * private keys. Reports the source, or null while it is incomplete or invalid.
+ * private keys. Reports the source with the public key hashes it derives, so
+ * the review can show them; null while it is incomplete or invalid.
  */
 export function NewIdentityKeysFields({
   network,
   onChange,
 }: {
   network: Network;
-  onChange: (source: NewIdentityKeySource | null) => void;
+  onChange: (keys: NewIdentityKeyChoice | null) => void;
 }) {
   const [kind, setKind] = useState<'mnemonic' | 'wif'>('mnemonic');
   const [mnemonic, setMnemonic] = useState('');
@@ -106,26 +63,27 @@ export function NewIdentityKeysFields({
   const [rows, setRows] = useState<KeyRow[]>(DEFAULT_ROWS);
 
   const index = /^\d+$/.test(identityIndex.trim()) ? Number(identityIndex.trim()) : NaN;
-  const indexError =
-    Number.isSafeInteger(index) && index < 2 ** 31
-      ? null
-      : 'Enter an identity index from 0 to 2147483647.';
+  const indexError = identityIndexError(index);
   const specError = kind === 'wif' ? newKeySpecsError(rows) : null;
   const source = useMemo<NewIdentityKeySource | null>(() => {
     if (kind === 'mnemonic')
       return mnemonic.trim() && !indexError
         ? { kind, mnemonic: mnemonic.trim().replace(/\s+/g, ' '), identityIndex: index }
         : null;
-    return specError
+    return specError || rows.some((row) => !row.privateKeyWif.trim())
       ? null
       : { kind, keys: rows.map((row) => ({ ...row, privateKeyWif: row.privateKeyWif.trim() })) };
   }, [kind, mnemonic, indexError, index, specError, rows]);
-  const errors = useSecretCheck(source, network);
-  const ready = source && errors && !errors.some(Boolean) ? source : null;
+  const derived = useKeyedAsync(source ? JSON.stringify([network, source]) : null, deriveKeyHashes);
+  const hashes = derived?.value;
+  const choice = useMemo(
+    () => (source && hashes ? { source, publicKeyHashes: hashes } : null),
+    [source, hashes],
+  );
 
   useEffect(() => {
-    onChange(ready);
-  }, [ready, onChange]);
+    onChange(choice);
+  }, [choice, onChange]);
 
   const update = (i: number, patch: Partial<KeyRow>) =>
     setRows((current) =>
@@ -137,6 +95,7 @@ export function NewIdentityKeysFields({
         return next;
       }),
     );
+  const hash = (id: number) => (hashes?.[id] ? ` · key hash ${hashes[id]}` : '');
 
   return (
     <VStack align="stretch" spacing={3}>
@@ -156,7 +115,6 @@ export function NewIdentityKeysFields({
         <>
           <FormField
             label="Wallet mnemonic"
-            error={errors?.[0] || null}
             hint="The explorer derives the new keys and forgets the mnemonic after this operation. Write it down before you continue: it is the only backup of the identity's keys."
           >
             <SecretInput
@@ -181,11 +139,12 @@ export function NewIdentityKeysFields({
               onChange={(e) => setIdentityIndex(e.target.value)}
             />
           </FormField>
-          <Box fontSize="xs" color="gray.400">
+          <Box fontSize="xs" color="gray.400" data-testid="new-identity-keys">
             {DEFAULT_NEW_IDENTITY_KEYS.map((spec, id) => (
-              <Text key={id} fontFamily="mono">
+              <Text key={id} fontFamily="mono" wordBreak="break-all">
                 #{id} {spec.purpose} {spec.securityLevel} ·{' '}
                 {indexError ? '…' : identityKeyPath(network, index, id)}
+                {hash(id)}
               </Text>
             ))}
           </Box>
@@ -199,10 +158,8 @@ export function NewIdentityKeysFields({
                   #{i}
                 </Text>
                 <Select
-                  size="sm"
+                  {...selectStyle}
                   w="auto"
-                  bg="gray.800"
-                  borderColor="gray.700"
                   aria-label={`New key ${i} purpose`}
                   value={row.purpose}
                   onChange={(e) => update(i, { purpose: e.target.value as NewKeyPurpose })}
@@ -214,10 +171,8 @@ export function NewIdentityKeysFields({
                   ))}
                 </Select>
                 <Select
-                  size="sm"
+                  {...selectStyle}
                   w="auto"
-                  bg="gray.800"
-                  borderColor="gray.700"
                   aria-label={`New key ${i} security level`}
                   value={row.securityLevel}
                   onChange={(e) => update(i, { securityLevel: e.target.value as NewKeyLevel })}
@@ -246,9 +201,9 @@ export function NewIdentityKeysFields({
                 value={row.privateKeyWif}
                 onChange={(e) => update(i, { privateKeyWif: e.target.value })}
               />
-              {errors?.[i] && row.privateKeyWif ? (
-                <Text fontSize="xs" color="danger" mt={1}>
-                  {errors[i]}
+              {hashes?.[i] ? (
+                <Text fontSize="xs" color="gray.400" fontFamily="mono" mt={1}>
+                  key hash {hashes[i]}
                 </Text>
               ) : null}
             </Box>
@@ -273,6 +228,16 @@ export function NewIdentityKeysFields({
           </HStack>
         </VStack>
       )}
+      {derived?.error ? (
+        <Text fontSize="xs" color="danger" role="alert">
+          {derived.error}
+        </Text>
+      ) : hashes ? (
+        <Text fontSize="xs" color="gray.250">
+          Compare these key hashes with your wallet before you continue: they are what the review
+          shows and what gets signed.
+        </Text>
+      ) : null}
     </VStack>
   );
 }

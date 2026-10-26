@@ -2,11 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { Input, VStack } from '@chakra-ui/react';
-import { SecretInput } from '@ui/SecretInput';
 import { useCurrentEpoch } from '@sdk/queries';
+import type { DerivationNetwork } from '@/signer/types';
+import { isCoreAddress } from '@util/core-address';
 import type { OperationFormProps } from '../../OperationShell';
+import { FormField, inputStyle, useKeyedAsync } from '../fields';
 import { validateCoreFeePerByte } from '../IdentityCreditWithdrawal';
-import { AddressKeyStatus, FormField, inputStyle, useAddressKeyPreview } from './fields';
+import { AddressKeyField, CreditsField, useAddressKeyPreview } from './fields';
 import {
   formatCredits,
   MAX_WITHDRAWAL_CREDITS,
@@ -17,7 +19,7 @@ import {
 } from './limits';
 
 export interface AddressWithdrawOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   inputKeyWif: string;
   fromAddress: string;
   amountCredits: bigint;
@@ -36,9 +38,6 @@ export function AddressWithdrawForm({
   const [toAddress, setToAddress] = useState('');
   const [amountText, setAmountText] = useState('');
   const [feeText, setFeeText] = useState('1');
-  const [addressCheck, setAddressCheck] = useState<{ address: string; valid: boolean } | null>(
-    null,
-  );
   const preview = useAddressKeyPreview(wif, network);
   const epoch = useCurrentEpoch();
   const protocolVersion = epoch.data?.protocolVersion;
@@ -50,26 +49,14 @@ export function AddressWithdrawForm({
     amount.amount === undefined
       ? null
       : shortfallError(preview.balance, amount.amount, minFee.withdrawal());
-
   const destination = toAddress.trim();
-  useEffect(() => {
-    if (!destination) return;
-    let cancelled = false;
-    void import('@util/core-address')
-      .then(({ coreScriptForAddress }) => coreScriptForAddress(destination, network))
-      .then(
-        (script) => {
-          script.free();
-          return true;
-        },
-        () => false,
-      )
-      .then((valid) => !cancelled && setAddressCheck({ address: destination, valid }));
-    return () => {
-      cancelled = true;
-    };
-  }, [destination, network]);
-  const addressValid = addressCheck?.address === destination ? addressCheck.valid : undefined;
+  const addressValid = useKeyedAsync(
+    destination ? JSON.stringify([network, destination]) : null,
+    (key) => {
+      const [net, address] = JSON.parse(key) as [DerivationNetwork, string];
+      return isCoreAddress(address, net);
+    },
+  )?.value;
 
   useEffect(() => {
     if (
@@ -108,15 +95,13 @@ export function AddressWithdrawForm({
 
   return (
     <VStack align="stretch" spacing={4}>
-      <FormField label="Paying address private key (WIF)">
-        <SecretInput
-          {...inputStyle}
-          aria-label="Paying address private key (WIF)"
-          value={wif}
-          onChange={(e) => setWif(e.target.value)}
-        />
-        <AddressKeyStatus preview={preview} network={network} />
-      </FormField>
+      <AddressKeyField
+        label="Paying address private key (WIF)"
+        value={wif}
+        onChange={setWif}
+        preview={preview}
+        network={network}
+      />
       <FormField
         label="Destination Dash Core address"
         error={
@@ -131,8 +116,9 @@ export function AddressWithdrawForm({
           onChange={(e) => setToAddress(e.target.value)}
         />
       </FormField>
-      <FormField
-        label="Amount (credits)"
+      <CreditsField
+        value={amountText}
+        onChange={setAmountText}
         error={(amountText && amount.error) || shortfall}
         hint={`${formatCredits(min)} to ${formatCredits(MAX_WITHDRAWAL_CREDITS)} credits${
           protocolVersion === undefined || protocolVersion >= 14
@@ -141,15 +127,7 @@ export function AddressWithdrawForm({
         }. Platform's fee, at least ${formatCredits(minFee.withdrawal())} credits for a withdrawal, is paid on top from the address's remaining balance.${
           versionKnown ? '' : ' Checking the network protocol version…'
         }`}
-      >
-        <Input
-          {...inputStyle}
-          inputMode="numeric"
-          aria-label="Amount (credits)"
-          value={amountText}
-          onChange={(e) => setAmountText(e.target.value)}
-        />
-      </FormField>
+      />
       <FormField
         label="Core fee per byte (duffs)"
         error={fee.error}

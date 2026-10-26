@@ -1,17 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Input, Radio, RadioGroup, Stack, Text, VStack } from '@chakra-ui/react';
-import { SecretInput } from '@ui/SecretInput';
+import { Input, VStack } from '@chakra-ui/react';
 import { isBase58Identifier } from '@util/identifier';
+import type { DerivationNetwork } from '@/signer/types';
 import type { OperationFormProps } from '../../OperationShell';
-import { FormField, inputStyle } from '../addresses/fields';
-import { AssetLockProofFields } from './AssetLockFields';
-import { BridgeHandoff } from './BridgeHandoff';
+import { FormField, inputStyle } from '../fields';
+import { AssetLockKeyField, AssetLockProofFields } from './AssetLockFields';
+import { BridgeHandoff, FundingModeChoice, type FundingMode } from './BridgeHandoff';
 import type { ParsedAssetLockProof } from './asset-lock';
 
 export interface IdentityTopUpOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   identityId: string;
   proof: ParsedAssetLockProof;
   assetLockKeyWif: string;
@@ -22,7 +22,7 @@ export function IdentityTopUpForm({
   signer,
   onOptionsChange,
 }: OperationFormProps<IdentityTopUpOptions>) {
-  const [mode, setMode] = useState<'bridge' | 'proof'>('bridge');
+  const [mode, setMode] = useState<FundingMode>('bridge');
   const [identityId, setIdentityId] = useState(signer?.identityId ?? '');
   const [proof, setProof] = useState<ParsedAssetLockProof | null>(null);
   const [wif, setWif] = useState('');
@@ -49,34 +49,17 @@ export function IdentityTopUpForm({
           onChange={(e) => setIdentityId(e.target.value)}
         />
       </FormField>
-      <RadioGroup value={mode} onChange={(value) => setMode(value as 'bridge' | 'proof')}>
-        <Stack spacing={1}>
-          <Radio value="bridge" size="sm">
-            <Text fontSize="sm">Use the bridge (no Core wallet needed)</Text>
-          </Radio>
-          <Radio value="proof" size="sm">
-            <Text fontSize="sm">
-              I have an asset-lock proof and its private key from a Core wallet
-            </Text>
-          </Radio>
-        </Stack>
-      </RadioGroup>
+      <FundingModeChoice value={mode} onChange={setMode} />
       {mode === 'bridge' ? (
         <BridgeHandoff action="topUp" />
       ) : (
         <>
           <AssetLockProofFields onChange={setProof} />
-          <FormField
-            label="Asset-lock private key (WIF)"
-            hint="The one-time key of the asset-lock output. It signs the proof and stays in this tab only for this operation. Platform credits the asset lock's value, less the fee, to the identity."
-          >
-            <SecretInput
-              {...inputStyle}
-              aria-label="Asset-lock private key (WIF)"
-              value={wif}
-              onChange={(e) => setWif(e.target.value)}
-            />
-          </FormField>
+          <AssetLockKeyField
+            value={wif}
+            onChange={setWif}
+            hint="Platform credits the asset lock's value, less the fee, to the identity."
+          />
         </>
       )}
     </VStack>

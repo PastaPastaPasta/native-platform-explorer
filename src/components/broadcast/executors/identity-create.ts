@@ -4,28 +4,30 @@
 
 import type { EvoSDK, Identity, IdentitySigner } from '@dashevo/evo-sdk';
 import { freeAll, withPrivateKey } from '@/signer/form-keys';
-import { prepareNewIdentityKeys, type NewIdentityKeySource } from '@/signer/new-identity';
+import { prepareNewIdentityKeys, type NewIdentityKeyChoice } from '@/signer/new-identity';
+import type { DerivationNetwork as Network } from '@/signer/types';
 import { fetchExistingIdentity, type ExecuteArgs, type IdentityResult } from '../executors';
 import type { IdentityCreateOptions } from '../forms/identity/IdentityCreate';
 import type { IdentityTopUpOptions } from '../forms/identity/IdentityTopUp';
-import { executeFormSigned } from './form-signed';
-
-type Network = 'mainnet' | 'testnet';
+import { executeFormSigned, loadAssetLockProof } from './form-signed';
 
 /**
  * The identity to create, with its keys, and a signer holding their private
- * keys. Refuses keys another identity already uses: Platform would reject the
+ * keys. The keys must be the ones reviewed (by their public key hashes).
+ * Refuses keys another identity already uses: Platform would reject the
  * transition after it consumed the funding.
  */
 export async function buildNewIdentity(
   sdk: EvoSDK,
-  source: NewIdentityKeySource,
+  { source, publicKeyHashes }: NewIdentityKeyChoice,
   network: Network,
   identityId: string,
 ): Promise<{ identity: Identity; signer: IdentitySigner; release(): void }> {
   const keys = await prepareNewIdentityKeys(source, network);
   let identity: Identity | undefined;
   try {
+    if (keys.publicKeyHashes.join() !== publicKeyHashes.join())
+      throw new Error('The new identity keys no longer match the reviewed key hashes.');
     for (const [id, hash] of keys.publicKeyHashes.entries()) {
       const existing = await sdk.identities.byPublicKeyHash(hash);
       if (existing) {
@@ -64,11 +66,9 @@ export async function executeIdentityCreate({
   options,
   assertCurrent,
 }: ExecuteArgs<IdentityCreateOptions>): Promise<IdentityResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, proof } = options;
-    const { AssetLockProof } = await import('@dashevo/evo-sdk');
-    const assetLockProof = AssetLockProof.fromHex(proof.proofHex);
-    onRelease(() => freeAll(assetLockProof));
+    const assetLockProof = await loadAssetLockProof(proof.proofHex, onRelease);
     const derived = assetLockProof.createIdentityId();
     const identityId = derived.toBase58();
     freeAll(derived);
@@ -113,11 +113,9 @@ export async function executeIdentityTopUp({
   options,
   assertCurrent,
 }: ExecuteArgs<IdentityTopUpOptions>): Promise<IdentityResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { network, proof, identityId } = options;
-    const { AssetLockProof } = await import('@dashevo/evo-sdk');
-    const assetLockProof = AssetLockProof.fromHex(proof.proofHex);
-    onRelease(() => freeAll(assetLockProof));
+    const assetLockProof = await loadAssetLockProof(proof.proofHex, onRelease);
     const identity = await fetchExistingIdentity(sdk, identityId);
     onRelease(() => freeAll(identity));
     return withPrivateKey(

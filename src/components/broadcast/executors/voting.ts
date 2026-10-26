@@ -5,7 +5,9 @@
 
 import type { EvoSDK, IdentityPublicKey, PrivateKey } from '@dashevo/evo-sdk';
 import { freeAll, withPrivateKey } from '@/signer/form-keys';
+import { hexToBytes } from '@util/hex';
 import { isBase58Identifier } from '@util/identifier';
+import { proTxHashToHex } from '@util/protx';
 import type { ExecuteArgs } from '../executors';
 import type { MasternodeVoteOptions } from '../forms/voting/MasternodeVote';
 import { executeFormSigned } from './form-signed';
@@ -18,9 +20,6 @@ export interface VoteResult {
   /** The vote as Platform recorded it. */
   vote: unknown;
 }
-
-const hexToBytes = (hex: string) =>
-  Uint8Array.from(hex.match(/.{2}/g) ?? [], (b) => parseInt(b, 16));
 
 /** Identifier::create_voter_identifier: SHA-256(proTxHash ‖ voting key hash). */
 export async function voterIdentityId(
@@ -40,20 +39,11 @@ export async function voterIdentityId(
   }
 }
 
-/** The ProTxHash as the SDK reads it (hex as Core shows it, or base58). */
-async function proTxHashBytes(value: string): Promise<Uint8Array> {
-  const { Identifier } = await import('@dashevo/evo-sdk');
-  const trimmed = value.trim();
-  if (!/^[0-9a-f]{64}$/i.test(trimmed) && !isBase58Identifier(trimmed))
-    throw new Error('Enter the masternode ProTxHash as 64 hex characters or base58.');
-  const id = /^[0-9a-f]{64}$/i.test(trimmed)
-    ? Identifier.fromHex(trimmed)
-    : Identifier.fromBase58(trimmed);
-  try {
-    return id.toBytes();
-  } finally {
-    freeAll(id);
-  }
+/** The ProTxHash bytes as the SDK reads them (hex as Core shows it, or base58). */
+function proTxHashBytes(value: string): Uint8Array {
+  const hex = proTxHashToHex(value);
+  if (!hex) throw new Error('Enter the masternode ProTxHash as 64 hex characters or base58.');
+  return hexToBytes(hex);
 }
 
 /** The enabled VOTING key of the voter identity that `key` controls. */
@@ -64,7 +54,7 @@ async function voterKey(
   network: string,
 ): Promise<{ voterId: string; votingKey: IdentityPublicKey }> {
   const keyHash = key.getPublicKeyHash();
-  const voterId = await voterIdentityId(await proTxHashBytes(proTxHash), hexToBytes(keyHash));
+  const voterId = await voterIdentityId(proTxHashBytes(proTxHash), hexToBytes(keyHash));
   const voter = await sdk.identities.fetch(voterId);
   if (!voter)
     throw new Error(
@@ -91,7 +81,7 @@ export async function executeMasternodeVote({
   options,
   assertCurrent,
 }: ExecuteArgs<MasternodeVoteOptions>): Promise<VoteResult> {
-  return executeFormSigned(async (submit, onRelease) => {
+  return executeFormSigned(sdk, async (submit, onRelease) => {
     const { IdentitySigner, ResourceVoteChoice, VotePoll } = await import('@dashevo/evo-sdk');
     if (
       options.choice === 'towardsIdentity' &&

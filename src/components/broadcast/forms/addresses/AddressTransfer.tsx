@@ -2,19 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Radio, RadioGroup, Stack, Text, VStack } from '@chakra-ui/react';
-import { SecretInput } from '@ui/SecretInput';
+import type { DerivationNetwork } from '@/signer/types';
 import type { OperationFormProps } from '../../OperationShell';
-import {
-  AddressKeyStatus,
-  AddressOutputsEditor,
-  FormField,
-  inputStyle,
-  useAddressKeyPreview,
-} from './fields';
+import { FormField } from '../fields';
+import { AddressKeyField, AddressOutputsEditor, useAddressKeyPreview } from './fields';
 import { formatCredits, minFee, shortfallError, sumOutputs, type AddressOutput } from './limits';
 
 export interface AddressTransferOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   /** WIF of the paying address. */
   inputKeyWif: string;
   /** The address the key controls, shown at review and checked again at signing. */
@@ -22,14 +17,6 @@ export interface AddressTransferOptions {
   outputs: AddressOutput[];
   /** Who pays the fee: the sender's remaining balance, or the single recipient. */
   feeFrom: 'sender' | 'recipient';
-}
-
-/** Review-safe view of an operation that carries an address key. */
-export function redactAddressKey<T extends { inputKeyWif: string }>({
-  inputKeyWif: _secret,
-  ...rest
-}: T) {
-  return { ...rest, inputKey: 'provided (hidden)' };
 }
 
 export function AddressTransferForm({
@@ -42,11 +29,12 @@ export function AddressTransferForm({
   const preview = useAddressKeyPreview(wif, network);
   const single = outputs?.length === 1;
   const total = outputs ? sumOutputs(outputs) : 0n;
+  const recipientMin = minFee.transfer(1, 1);
   const shortfall = !outputs
     ? null
     : feeFrom === 'recipient'
-      ? single && total < minFee.transfer(1, 1)
-        ? `To pay the fee, the recipient must receive at least ${formatCredits(minFee.transfer(1, 1))} credits.`
+      ? single && total < recipientMin
+        ? `To pay the fee, the recipient must receive at least ${formatCredits(recipientMin)} credits.`
         : shortfallError(preview.balance, total, 0n)
       : shortfallError(preview.balance, total, minFee.transfer(1, outputs.length));
 
@@ -66,15 +54,13 @@ export function AddressTransferForm({
 
   return (
     <VStack align="stretch" spacing={4}>
-      <FormField label="Sending address private key (WIF)">
-        <SecretInput
-          {...inputStyle}
-          aria-label="Sending address private key (WIF)"
-          value={wif}
-          onChange={(e) => setWif(e.target.value)}
-        />
-        <AddressKeyStatus preview={preview} network={network} />
-      </FormField>
+      <AddressKeyField
+        label="Sending address private key (WIF)"
+        value={wif}
+        onChange={setWif}
+        preview={preview}
+        network={network}
+      />
       <FormField label="Recipients">
         <AddressOutputsEditor network={network} from={preview.address} onChange={setOutputs} />
       </FormField>

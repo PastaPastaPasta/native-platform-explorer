@@ -10,6 +10,7 @@ import type {
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
 import { extractErrorMessage } from '@sdk/errors';
+import { hexToBytes } from '@util/hex';
 import { assertWritableProtocolVersion } from '@sdk/protocol-version';
 import { decodeWif } from '@/signer/local';
 import {
@@ -771,10 +772,6 @@ async function newIdentityKeys(
 }
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
-
-function hexToBytes(hex: string): Uint8Array {
-  return Uint8Array.from(hex.match(/.{2}/g) ?? [], (byte) => parseInt(byte, 16));
-}
 
 // ─── DPNS ───────────────────────────────────────────────────────────────
 

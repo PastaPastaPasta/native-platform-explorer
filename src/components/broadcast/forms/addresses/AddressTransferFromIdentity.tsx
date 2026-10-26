@@ -2,12 +2,14 @@
 
 import { useEffect, useState } from 'react';
 import { Text, VStack } from '@chakra-ui/react';
+import type { DerivationNetwork } from '@/signer/types';
 import type { OperationFormProps } from '../../OperationShell';
-import { AddressOutputsEditor, FormField } from './fields';
+import { FormField } from '../fields';
+import { AddressOutputsEditor } from './fields';
 import type { AddressOutput } from './limits';
 
 export interface AddressTransferFromIdentityOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   outputs: AddressOutput[];
 }
 

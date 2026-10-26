@@ -4,10 +4,8 @@
 
 import type { IdentityPublicKey, IdentitySigner } from '@dashevo/evo-sdk';
 import { freeAll, loadPrivateKey } from './form-keys';
-import { identityKeyPath } from './mnemonic';
-import { SignerUnavailableError } from './types';
-
-type Network = 'mainnet' | 'testnet';
+import { identityIndexError, identityKeyPath } from './mnemonic';
+import { SignerUnavailableError, type DerivationNetwork as Network } from './types';
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
 
@@ -43,19 +41,37 @@ export type NewIdentityKeySource =
   | { kind: 'mnemonic'; mnemonic: string; identityIndex: number }
   | { kind: 'wif'; keys: (NewKeySpec & { privateKeyWif: string })[] };
 
+/** A key source with the public key hashes it derived, as reviewed. */
+export interface NewIdentityKeyChoice {
+  source: NewIdentityKeySource;
+  /** HASH160 of each new public key, in key ID order. Signing must reproduce them. */
+  publicKeyHashes: string[];
+}
+
 export function newIdentityKeyCount(source: NewIdentityKeySource): number {
   return source.kind === 'mnemonic' ? DEFAULT_NEW_IDENTITY_KEYS.length : source.keys.length;
 }
 
-/** A review-safe description of the keys a source creates (no secrets). */
-export function describeNewIdentityKeys(source: NewIdentityKeySource, network: Network) {
-  return source.kind === 'mnemonic'
-    ? DEFAULT_NEW_IDENTITY_KEYS.map((spec, id) => ({
-        id,
-        ...spec,
-        derivationPath: identityKeyPath(network, source.identityIndex, id),
-      }))
-    : source.keys.map(({ purpose, securityLevel }, id) => ({ id, purpose, securityLevel }));
+/**
+ * The review view of new keys: their layout and public key hashes, so they
+ * can be compared with the wallet before anything is funded. No secrets.
+ */
+export function describeNewIdentityKeys(choice: NewIdentityKeyChoice, network: Network) {
+  const { source, publicKeyHashes } = choice;
+  const specs = source.kind === 'mnemonic' ? DEFAULT_NEW_IDENTITY_KEYS : source.keys;
+  return {
+    from: source.kind === 'mnemonic' ? 'mnemonic (hidden)' : 'private keys (hidden)',
+    ...(source.kind === 'mnemonic' ? { identityIndex: source.identityIndex } : {}),
+    keys: specs.map(({ purpose, securityLevel }, id) => ({
+      id,
+      purpose,
+      securityLevel,
+      ...(source.kind === 'mnemonic'
+        ? { derivationPath: identityKeyPath(network, source.identityIndex, id) }
+        : {}),
+      publicKeyHash: publicKeyHashes[id],
+    })),
+  };
 }
 
 /** Null when the explicit key list is acceptable to Platform, otherwise why not. */
@@ -90,12 +106,8 @@ export async function prepareNewIdentityKeys(
   if (source.kind === 'mnemonic') {
     if (!(await wallet.validateMnemonic(source.mnemonic)))
       throw new SignerUnavailableError('That BIP-39 mnemonic is not valid.');
-    if (
-      !Number.isSafeInteger(source.identityIndex) ||
-      source.identityIndex < 0 ||
-      source.identityIndex >= 2 ** 31
-    )
-      throw new SignerUnavailableError('Enter an identity index from 0 to 2147483647.');
+    const indexError = identityIndexError(source.identityIndex);
+    if (indexError) throw new SignerUnavailableError(indexError);
   }
 
   const signer = new IdentitySigner();

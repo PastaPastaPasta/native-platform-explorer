@@ -1,6 +1,7 @@
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PlatformAddressSigner, PrivateKey, wallet } from '@dashevo/evo-sdk';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
+import { prepareNewIdentityKeys } from '@/signer/new-identity';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../../outcomes';
 import {
   executeAddressCreateIdentity,
@@ -12,6 +13,13 @@ import {
 } from '../addresses';
 import { parseAssetLockProof } from '../../forms/identity/asset-lock';
 
+// The protocol version guard is unit-tested in protocol-version.test.ts.
+const assertWritable = vi.hoisted(() => vi.fn());
+vi.mock('@sdk/protocol-version', () => ({ assertWritableProtocolVersion: assertWritable }));
+beforeEach(() => {
+  assertWritable.mockReset().mockResolvedValue(14);
+});
+
 // Real WASM SDK for keys, scripts and proofs; only the network calls are mocked,
 // shaped like the 5.0.0-rc.8 declarations. Nothing is broadcast.
 const A = 'tdash1kp63uahgrxged4z5jswyt5dn5v3lzsem6cwarqfg'; // key 0x…01
@@ -22,6 +30,14 @@ const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
 let wifA: string;
 let wifOther: string;
+
+/** The mnemonic's default keys with the hashes the form derives for review. */
+async function mnemonicKeys() {
+  const source = { kind: 'mnemonic' as const, mnemonic: MNEMONIC, identityIndex: 0 };
+  const keys = await prepareNewIdentityKeys(source, 'testnet');
+  keys.release();
+  return { source, publicKeyHashes: keys.publicKeyHashes };
+}
 
 beforeAll(async () => {
   await wallet.validateMnemonic('abandon');
@@ -157,6 +173,19 @@ describe('Platform address executors', () => {
     expect(error).toBeInstanceOf(OperationNotSubmittedError);
     expect((error as Error).message).toMatch(message);
     expect(sdk.addresses.transfer).not.toHaveBeenCalled();
+  });
+
+  it('checks the network protocol version before building, as not submitted', async () => {
+    const sdk = mockSdk();
+    assertWritable.mockRejectedValue(new Error('This network runs Platform protocol v15'));
+    const error = await executeAddressTransfer({
+      sdk: sdk as never,
+      signer: null,
+      options: transferOptions(),
+    }).catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(OperationNotSubmittedError);
+    expect(assertWritable).toHaveBeenCalledWith(sdk);
+    expect(sdk.addresses.get).not.toHaveBeenCalled();
   });
 
   it('keeps a failed write "outcome unknown" with the addresses it touched', async () => {
@@ -330,7 +359,7 @@ describe('Platform address executors', () => {
       inputKeyWif: wifA,
       fromAddress: A,
       amountCredits: 100_000_000n,
-      keys: { kind: 'mnemonic' as const, mnemonic: MNEMONIC, identityIndex: 0 },
+      keys: await mnemonicKeys(),
     };
     const result = await executeAddressCreateIdentity({ sdk: sdk as never, signer: null, options });
     expect(seen).toEqual({
@@ -354,6 +383,19 @@ describe('Platform address executors', () => {
     }).catch((e: unknown) => e);
     expect(error).toBeInstanceOf(OperationNotSubmittedError);
     expect((error as Error).message).toMatch(/already a key of identity taken/);
+    expect(sdk.addresses.createIdentity).not.toHaveBeenCalled();
+
+    // Keys that no longer derive to the reviewed hashes are never signed.
+    const changed = {
+      ...options,
+      keys: {
+        ...options.keys,
+        publicKeyHashes: ['00'.repeat(20), ...options.keys.publicKeyHashes.slice(1)],
+      },
+    };
+    await expect(
+      executeAddressCreateIdentity({ sdk: sdk as never, signer: null, options: changed }),
+    ).rejects.toThrow(/no longer match the reviewed key hashes/);
     expect(sdk.addresses.createIdentity).not.toHaveBeenCalled();
   });
 });

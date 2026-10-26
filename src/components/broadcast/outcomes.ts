@@ -40,11 +40,16 @@ export class BroadcastOutcomeUnknownError extends Error {
  */
 const PRE_SUBMISSION_SDK_ERRORS = new Set(['InvalidArgument', 'NotImplemented']);
 
-export function isPreSubmissionSdkError(error: unknown): boolean {
+/** The kind of a WASM SDK error, or undefined for anything else. */
+export function sdkErrorName(error: unknown): string | undefined {
   // WasmSdkError / WasmDppError are plain wasm-bindgen objects, not Errors.
-  if (!error || typeof error !== 'object' || error instanceof Error) return false;
+  if (!error || typeof error !== 'object' || error instanceof Error) return undefined;
   const name = (error as { name?: unknown }).name;
-  return typeof name === 'string' && PRE_SUBMISSION_SDK_ERRORS.has(name);
+  return typeof name === 'string' ? name : undefined;
+}
+
+export function isPreSubmissionSdkError(error: unknown): boolean {
+  return PRE_SUBMISSION_SDK_ERRORS.has(sdkErrorName(error) ?? '');
 }
 
 export async function submitOperation<T>(

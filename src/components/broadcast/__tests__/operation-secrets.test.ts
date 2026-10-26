@@ -7,13 +7,18 @@ const FORMS_DIR = 'src/components/broadcast/forms';
 
 /** Exported form components whose source collects a secret through SecretInput. */
 function formsWithSecretFields(): string[] {
-  return readdirSync(FORMS_DIR, { recursive: true, encoding: 'utf8' })
-    .filter((file) => file.endsWith('.tsx') && !file.includes('__tests__'))
-    .map((file) => readFileSync(join(FORMS_DIR, file), 'utf8'))
-    .filter((source) => source.includes('<SecretInput'))
-    .flatMap((source) =>
-      [...source.matchAll(/export (?:function|const) (\w+Form)\b/g)].map((m) => m[1]!),
-    );
+  return (
+    readdirSync(FORMS_DIR, { recursive: true, encoding: 'utf8' })
+      .filter((file) => file.endsWith('.tsx') && !file.includes('__tests__'))
+      .map((file) => readFileSync(join(FORMS_DIR, file), 'utf8'))
+      // SecretInput directly, or a field component that renders one.
+      .filter((source) =>
+        /<(SecretInput|AddressKeyField|AssetLockKeyField|NewIdentityKeysFields)\b/.test(source),
+      )
+      .flatMap((source) =>
+        [...source.matchAll(/export (?:function|const) (\w+Form)\b/g)].map((m) => m[1]!),
+      )
+  );
 }
 
 describe('operation secret declarations', () => {
@@ -65,16 +70,22 @@ describe('operation secret declarations', () => {
   });
 
   const proof = { proofHex: '00', type: 'chain', outPoint: 'tx:0', identityId: 'new-id' };
-  const mnemonicKeys = { kind: 'mnemonic' as const, mnemonic: 'secret-mnemonic', identityIndex: 0 };
+  const mnemonicKeys = {
+    source: { kind: 'mnemonic' as const, mnemonic: 'secret-mnemonic', identityIndex: 0 },
+    publicKeyHashes: ['aa', 'bb', 'cc', 'dd'],
+  };
   const wifKeys = {
-    kind: 'wif' as const,
-    keys: [
-      {
-        purpose: 'AUTHENTICATION' as const,
-        securityLevel: 'MASTER' as const,
-        privateKeyWif: 'secret-new-key',
-      },
-    ],
+    source: {
+      kind: 'wif' as const,
+      keys: [
+        {
+          purpose: 'AUTHENTICATION' as const,
+          securityLevel: 'MASTER' as const,
+          privateKeyWif: 'secret-new-key',
+        },
+      ],
+    },
+    publicKeyHashes: ['aa'],
   };
   const address = {
     network: 'testnet',

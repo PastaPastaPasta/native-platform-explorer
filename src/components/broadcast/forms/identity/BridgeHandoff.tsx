@@ -1,6 +1,6 @@
 'use client';
 
-import { Button, HStack, Text, VStack } from '@chakra-ui/react';
+import { Button, HStack, Radio, RadioGroup, Stack, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useSdk } from '@sdk/hooks';
 import { getBridgeUrl } from '@util/bridge';
@@ -42,5 +42,31 @@ export function BridgeHandoff({ action }: { action: 'create' | 'topUp' }) {
         )}
       </VStack>
     </InfoBlock>
+  );
+}
+
+export type FundingMode = 'bridge' | 'proof';
+
+/** The bridge (no Core wallet needed) or an asset-lock proof from a Core wallet. */
+export function FundingModeChoice({
+  value,
+  onChange,
+}: {
+  value: FundingMode;
+  onChange: (mode: FundingMode) => void;
+}) {
+  return (
+    <RadioGroup value={value} onChange={(mode) => onChange(mode as FundingMode)}>
+      <Stack spacing={1}>
+        <Radio value="bridge" size="sm">
+          <Text fontSize="sm">Use the bridge (no Core wallet needed)</Text>
+        </Radio>
+        <Radio value="proof" size="sm">
+          <Text fontSize="sm">
+            I have an asset-lock proof and its private key from a Core wallet
+          </Text>
+        </Radio>
+      </Stack>
+    </RadioGroup>
   );
 }

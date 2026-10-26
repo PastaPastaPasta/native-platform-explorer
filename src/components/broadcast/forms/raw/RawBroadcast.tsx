@@ -4,12 +4,13 @@ import { useEffect, useState } from 'react';
 import { Text, Textarea, VStack } from '@chakra-ui/react';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { useIdentity } from '@sdk/queries';
+import type { DerivationNetwork } from '@/signer/types';
 import type { OperationFormProps } from '../../OperationShell';
-import { FormField, inputStyle } from '../addresses/fields';
+import { FormField, inputStyle, useKeyedAsync } from '../fields';
 import { decodeStateTransition, type DecodedStateTransition } from './decode';
 
 export interface RawBroadcastOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   /** The decoded transition; its hex is broadcast unchanged. */
   transition: DecodedStateTransition;
 }
@@ -19,31 +20,9 @@ export function RawBroadcastForm({
   onOptionsChange,
 }: OperationFormProps<RawBroadcastOptions>) {
   const [text, setText] = useState('');
-  const [decoded, setDecoded] = useState<{
-    text: string;
-    transition?: DecodedStateTransition;
-    error?: string;
-  } | null>(null);
   const trimmed = text.trim();
-
-  useEffect(() => {
-    if (!trimmed) return;
-    let cancelled = false;
-    void decodeStateTransition(trimmed).then(
-      (transition) => !cancelled && setDecoded({ text: trimmed, transition }),
-      (error: unknown) =>
-        !cancelled &&
-        setDecoded({
-          text: trimmed,
-          error: error instanceof Error ? error.message : 'Could not decode.',
-        }),
-    );
-    return () => {
-      cancelled = true;
-    };
-  }, [trimmed]);
-  const current = trimmed && decoded?.text === trimmed ? decoded : null;
-  const transition = current?.transition;
+  const decoded = useKeyedAsync(trimmed || null, decodeStateTransition);
+  const transition = decoded?.value;
   const owner = useIdentity(transition?.ownerId);
 
   useEffect(() => {
@@ -54,7 +33,7 @@ export function RawBroadcastForm({
     <VStack align="stretch" spacing={3}>
       <FormField
         label="Signed state transition (hex or base64)"
-        error={current?.error}
+        error={decoded?.error}
         hint="Produced and signed by another tool. The explorer decodes it locally and broadcasts the same bytes; it cannot change or re-sign it."
       >
         <Textarea
@@ -77,8 +56,16 @@ export function RawBroadcastForm({
               identityContractNonce: transition.identityContractNonce,
               userFeeIncrease: transition.userFeeIncrease,
               bytes: transition.hex.length / 2,
+              details: transition.details,
             }}
           />
+          {transition.addressFunded ? (
+            <Text fontSize="xs" color="warning" role="status">
+              Platform address signatures do not commit to a network: the same transition is valid
+              on any network where its input addresses hold funds at these nonces. Check that you
+              mean to broadcast it on {network}.
+            </Text>
+          ) : null}
           {transition.ownerId ? (
             <Text
               fontSize="xs"

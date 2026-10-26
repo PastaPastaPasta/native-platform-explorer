@@ -3,6 +3,7 @@
 // transaction, or a chain-locked outpoint), or as a serialized proof.
 
 import { freeAll } from '@/signer/form-keys';
+import { hexToBytes } from '@util/hex';
 
 export type AssetLockProofInput =
   | { kind: 'instant'; instantLockHex: string; transactionHex: string; outputIndex: string }
@@ -24,7 +25,7 @@ const HEX = /^(?:[0-9a-f]{2})+$/i;
 function hexBytes(text: string, label: string): Uint8Array {
   const clean = text.replace(/\s+/g, '');
   if (!HEX.test(clean)) throw new Error(`${label} must be hex.`);
-  return Uint8Array.from(clean.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
+  return hexToBytes(clean);
 }
 
 function index(text: string, label: string, max = 2 ** 32 - 1): number {

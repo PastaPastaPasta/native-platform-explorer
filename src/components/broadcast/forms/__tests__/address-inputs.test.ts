@@ -151,9 +151,25 @@ describe('raw state transitions', () => {
       signaturePublicKeyId: 3,
       identityNonce: '7',
       userFeeIncrease: 0,
+      addressFunded: false,
+      details: expect.objectContaining({
+        amount: 1000000,
+        recipientId: 'ARJDcyfBJFVvWhVZaX4DhwswABWXjHKDWRnzyNT4CpTa',
+        signaturePublicKeyId: 3,
+      }),
     });
     const base64 = btoa(String.fromCharCode(...stateTransitionBytes(SIGNED_HEX)));
     await expect(decodeStateTransition(base64)).resolves.toEqual(decoded);
+  });
+
+  it('flags address-funded transitions, whose signatures do not commit to a network', async () => {
+    // An (unsigned) transfer of 600,000 credits from 0x…01's address, built offline.
+    const decoded = await decodeStateTransition(
+      '0c000100751e76e8199196d454941c45d1b3a323f1433bd601fc000927c00100e5222440a670e4e2d2ed7bf7a6adf3d4bbd0740afc000927c00100000000',
+    );
+    expect(decoded).toMatchObject({ type: 'AddressFundsTransfer', addressFunded: true });
+    expect(decoded.ownerId).toBeUndefined();
+    expect(JSON.stringify(decoded.details)).toContain('600000');
   });
 
   it('refuses input that is not exactly one canonical transition', async () => {

@@ -2,27 +2,19 @@
 
 import { useEffect, useState } from 'react';
 import { Input, VStack } from '@chakra-ui/react';
-import { SecretInput } from '@ui/SecretInput';
+import type { DerivationNetwork } from '@/signer/types';
 import { platformAddressError, platformAddressHrp } from '@util/platform-address';
 import type { OperationFormProps } from '../../OperationShell';
-import { AssetLockProofFields } from '../identity/AssetLockFields';
+import { FormField, inputStyle } from '../fields';
+import { AssetLockKeyField, AssetLockProofFields } from '../identity/AssetLockFields';
 import type { ParsedAssetLockProof } from '../identity/asset-lock';
-import { FormField, inputStyle } from './fields';
 
 export interface AddressFundFromAssetLockOptions {
-  network: 'mainnet' | 'testnet';
+  network: DerivationNetwork;
   /** The Platform address that receives the asset lock's value, less the fee. */
   address: string;
   proof: ParsedAssetLockProof;
   assetLockKeyWif: string;
-}
-
-/** Review-safe view of an operation that carries the one-time asset-lock key. */
-export function redactAssetLockKey<T extends { assetLockKeyWif: string }>({
-  assetLockKeyWif: _secret,
-  ...rest
-}: T) {
-  return { ...rest, assetLockKey: 'provided (hidden)' };
 }
 
 export function AddressFundFromAssetLockForm({
@@ -50,17 +42,7 @@ export function AddressFundFromAssetLockForm({
   return (
     <VStack align="stretch" spacing={4}>
       <AssetLockProofFields onChange={setProof} />
-      <FormField
-        label="Asset-lock private key (WIF)"
-        hint="The one-time key of the asset-lock output. It signs the proof and stays in this tab only for this operation."
-      >
-        <SecretInput
-          {...inputStyle}
-          aria-label="Asset-lock private key (WIF)"
-          value={wif}
-          onChange={(e) => setWif(e.target.value)}
-        />
-      </FormField>
+      <AssetLockKeyField value={wif} onChange={setWif} hint="" />
       <FormField
         label="Platform address to fund"
         error={addressError}

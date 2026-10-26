@@ -9,7 +9,6 @@ import { platformAddressError } from '@util/platform-address';
 import { parseDecimalBigInt } from '../amount';
 import { minWithdrawalCredits } from '../IdentityCreditWithdrawal';
 
-export const MIN_INPUT_CREDITS = 100_000n;
 export const MIN_OUTPUT_CREDITS = 500_000n;
 /** An identity created or topped up from addresses must receive at least this much. */
 export const MIN_IDENTITY_FUNDING_CREDITS = 200_000n;
