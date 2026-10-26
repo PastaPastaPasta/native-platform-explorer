@@ -27,6 +27,16 @@ export interface ServiceWorkerOptions {
   /** A newer build is ready; call `apply` to switch to it (it reloads the page). */
   onUpdate: (apply: () => void) => void;
   reload: () => void;
+  /** Defaults to the window's CacheStorage. */
+  cacheStorage?: CacheStorage;
+}
+
+/** Deletes this scope's caches (named like scripts/sw/service-worker.js). */
+async function deleteScopeCaches(storage: CacheStorage | undefined, scope: string): Promise<void> {
+  if (!storage) return;
+  const prefix = `npe:${new URL(scope, 'http://scope.invalid').pathname}:`;
+  const names = await storage.keys();
+  await Promise.all(names.filter((name) => name.startsWith(prefix)).map((name) => storage.delete(name)));
 }
 
 /** The release a worker serves, or null if it does not answer. */
@@ -74,8 +84,13 @@ function reportLoadsOutsideWorker(container: ServiceWorkerContainer): () => void
 export function startServiceWorker(options: ServiceWorkerOptions): () => void {
   const { container, scriptUrl, scope, release, enabled, onUpdate } = options;
   if (!enabled) {
+    // Unregistering here usually beats the browser's update check, so the
+    // kill-switch worker (scripts/sw/unregister.js) never runs its cleanup.
+    // Delete the caches from the page as well.
+    const storage = options.cacheStorage ?? (typeof caches === 'undefined' ? undefined : caches);
     container.getRegistration(scope)
       .then((registration) => registration?.unregister())
+      .then(() => deleteScopeCaches(storage, scope))
       .catch(() => undefined);
     return () => undefined;
   }
@@ -128,12 +143,15 @@ export function startServiceWorker(options: ServiceWorkerOptions): () => void {
     // An update only matters to a page an older worker controls. On the
     // first install there is no controller and the worker activates by itself.
     if (registration.waiting && container.controller) void inspectWaiting(registration.waiting);
-    const onUpdateFound = () => {
-      const worker = registration.installing;
+    const followInstalling = (worker: ServiceWorker | null) => {
       worker?.addEventListener('statechange', () => {
         if (worker.state === 'installed' && container.controller) void inspectWaiting(worker);
       });
     };
+    // The navigation's own update check may already be installing a worker,
+    // in which case updatefound fired before this listener existed.
+    followInstalling(registration.installing);
+    const onUpdateFound = () => followInstalling(registration.installing);
     registration.addEventListener('updatefound', onUpdateFound);
 
     let lastCheck = Date.now();

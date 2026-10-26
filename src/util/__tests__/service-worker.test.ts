@@ -72,6 +72,33 @@ describe('startServiceWorker', () => {
     expect(container.registration.unregister).toHaveBeenCalledOnce();
   });
 
+  it('deletes only this scope\'s caches when disabled', async () => {
+    const names = ['npe:/app/:pages:b1', 'npe:/app/:static:b1', 'npe:/other/:static:b1', 'unrelated'];
+    const cacheStorage = {
+      keys: vi.fn(async () => [...names]),
+      delete: vi.fn(async (_name: string) => true),
+    } as unknown as CacheStorage;
+    start(new FakeContainer(), { enabled: false, cacheStorage });
+    await settle();
+    expect(cacheStorage.delete).toHaveBeenCalledTimes(2);
+    expect(cacheStorage.delete).toHaveBeenCalledWith('npe:/app/:pages:b1');
+    expect(cacheStorage.delete).toHaveBeenCalledWith('npe:/app/:static:b1');
+  });
+
+  it('follows a worker that was already installing before the page started watching', async () => {
+    const container = new FakeContainer();
+    container.controller = new FakeWorker('page-build');
+    const installing = new FakeWorker('next-build');
+    installing.state = 'installing';
+    container.registration.installing = installing;
+    const { onUpdate } = start(container);
+    await settle();
+    expect(onUpdate).not.toHaveBeenCalled();
+    installing.setState('installed');
+    await settle();
+    expect(onUpdate).toHaveBeenCalledOnce();
+  });
+
   it('offers a reload for a waiting worker of another build and activates it on request', async () => {
     const container = new FakeContainer();
     container.controller = new FakeWorker('page-build');

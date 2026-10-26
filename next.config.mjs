@@ -48,7 +48,14 @@ function reproducibleBuildId() {
   const settings = Object.entries(process.env)
     .filter(([name]) => name.startsWith('NEXT_PUBLIC_') && name !== 'NEXT_PUBLIC_BASE_PATH')
     .sort(([a], [b]) => a.localeCompare(b));
-  const digest = createHash('sha256').update(JSON.stringify({ basePath, settings })).digest('hex');
+  // Same commit and settings can still yield different bytes with another
+  // installed dependency set or Node major; a shared ID would then make old
+  // tabs request chunks the new build's integrity map refuses.
+  const toolchain = {
+    lockfile: createHash('sha256').update(fs.readFileSync(path.join(__dirname, 'pnpm-lock.yaml'))).digest('hex'),
+    node: process.versions.node.split('.')[0],
+  };
+  const digest = createHash('sha256').update(JSON.stringify({ basePath, settings, toolchain })).digest('hex');
   return `${gitCommit}-${digest.slice(0, 12)}`;
 }
 const buildId = process.env.NPE_BUILD_ID || reproducibleBuildId() || randomBytes(12).toString('base64url');
