@@ -31,6 +31,15 @@ beforeAll(async () => {
   platformVersion = PlatformVersion.latest();
 });
 
+/** A session and network on the newest protocol the SDK supports. */
+function protocol() {
+  const current = platformVersion.version;
+  return {
+    version: vi.fn(() => current),
+    system: { status: vi.fn().mockResolvedValue({ version: { protocol: { drive: { current } } } }) },
+  };
+}
+
 function onChainContract() {
   return new DataContract({
     ownerId: OWNER,
@@ -53,7 +62,7 @@ describe('executors with the real WASM SDK', () => {
     const current = onChainContract();
     const update = vi.fn().mockResolvedValue(undefined);
     const sdk = {
-      version: vi.fn().mockResolvedValue(platformVersion),
+      ...protocol(),
       contracts: { fetch: vi.fn().mockResolvedValue(current), update },
     };
     const schemas = {
@@ -112,7 +121,7 @@ describe('executors with the real WASM SDK', () => {
     await expect(
       executeContractUpdate({
         sdk: {
-          version: vi.fn().mockResolvedValue(platformVersion),
+          ...protocol(),
           contracts: { fetch: vi.fn().mockResolvedValue(onChainContract()), update },
         } as never,
         signer: createMockSigner({
@@ -148,6 +157,7 @@ describe('executors with the real WASM SDK', () => {
       });
       const execution = executeIdentityUpdateKeys({
         sdk: {
+          ...protocol(),
           identities: { fetch: vi.fn().mockResolvedValue(new Identity(OWNER)), update },
         } as never,
         signer: createMockSigner({
@@ -206,7 +216,7 @@ describe('executors with the real WASM SDK', () => {
       pair.free();
       const creditWithdrawal = vi.fn();
       const execution = executeIdentityCreditWithdrawal({
-        sdk: { identities: { fetch: vi.fn(), creditWithdrawal } } as never,
+        sdk: { ...protocol(), identities: { fetch: vi.fn(), creditWithdrawal } } as never,
         signer: createMockSigner(),
         options: { network, toAddress: otherNetwork, amountCredits: 1_000_000n, coreFeePerByte: 1 },
       });
