@@ -10,6 +10,12 @@
  */
 export function parse_grovedb_proof(bytes: Uint8Array): string;
 
+/**
+ * Local addition: forget the current instance so the next init creates a
+ * fresh one, returning the compiled module for reuse.
+ */
+export function __resetInstance(): WebAssembly.Module | undefined;
+
 export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
 
 export interface InitOutput {

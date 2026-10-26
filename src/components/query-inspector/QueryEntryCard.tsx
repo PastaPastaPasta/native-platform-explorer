@@ -21,7 +21,7 @@ import {
   Tooltip,
 } from '@chakra-ui/react';
 import { ChevronDownIcon, ChevronUpIcon, CopyIcon } from '@chakra-ui/icons';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { bytesToHex, downloadEvidenceBundle, EVIDENCE_TRUST_NOTICE } from '@sdk/evidence';
 import { safeStringify } from '@util/wasm-json';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
@@ -52,12 +52,32 @@ function FieldRow({ label, value, annotation }: { label: string; value: string; 
   );
 }
 
-function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collapsedHeight?: number }) {
+/** Characters rendered before a "Show all" control. Proofs can reach the
+ *  inspector's 8 MB budget, and a 16M-character text node stalls the page. */
+export const CODE_PREVIEW_CHARS = 20_000;
+
+function MiniCodeBlock({
+  value,
+  collapsedHeight = 300,
+  totalLength = value.length,
+  getFullValue,
+}: {
+  value: string;
+  collapsedHeight?: number;
+  /** Length of the complete text when `value` is only a preview of it. */
+  totalLength?: number;
+  /** Produces the complete text on demand (copy / show all). */
+  getFullValue?: () => string;
+}) {
   const [expanded, setExpanded] = useState(false);
+  const [showAll, setShowAll] = useState(false);
+  const full = useMemo(() => (showAll && getFullValue ? getFullValue() : value), [showAll, getFullValue, value]);
+  const truncated = !showAll && totalLength > CODE_PREVIEW_CHARS;
+  const shown = truncated ? value.slice(0, CODE_PREVIEW_CHARS) : full;
   // ~14px per line at 2xs font; treat anything noticeably taller than the
-  // collapsed box as "long" so we show the expand toggle. The full text is
-  // ALWAYS in the DOM — collapsed just means scrollable within a smaller box.
-  const long = value.length > 600 || value.split('\n').length > 16;
+  // collapsed box as "long" so we show the expand toggle. Collapsed just
+  // means scrollable within a smaller box.
+  const long = shown.length > 600 || shown.split('\n', 17).length > 16;
 
   return (
     <Box position="relative" borderRadius="md" overflow="hidden" border="1px solid" borderColor="gray.750">
@@ -69,7 +89,7 @@ function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collap
             size="sm"
             minW="44px" minH="44px"
             variant="ghost"
-            onClick={() => { navigator.clipboard?.writeText(value); }}
+            onClick={() => { navigator.clipboard?.writeText(getFullValue ? getFullValue() : value); }}
           />
         </Tooltip>
         {long ? (
@@ -96,16 +116,40 @@ function MiniCodeBlock({ value, collapsedHeight = 300 }: { value: string; collap
         maxHeight={expanded || !long ? undefined : `${collapsedHeight}px`}
         overflow="auto"
       >
-        {value}
+        {shown}
       </Code>
+      {truncated ? (
+        <HStack justify="space-between" px={3} py={1.5} bg="gray.800" borderTop="1px solid" borderColor="gray.750">
+          <Text fontSize="2xs" color="gray.500">
+            Showing the first {CODE_PREVIEW_CHARS.toLocaleString()} of {totalLength.toLocaleString()} characters.
+          </Text>
+          <Button size="xs" variant="ghost" onClick={() => setShowAll(true)}>
+            Show all
+          </Button>
+        </HStack>
+      ) : null}
     </Box>
+  );
+}
+
+function ProofBytesBlock({ bytes, collapsedHeight }: { bytes: Uint8Array; collapsedHeight: number }) {
+  // Hex-encode only the preview up front; the full dump is built on demand.
+  const preview = useMemo(() => bytesToHex(bytes.subarray(0, CODE_PREVIEW_CHARS / 2)), [bytes]);
+  const getFullValue = useCallback(() => bytesToHex(bytes), [bytes]);
+  return (
+    <MiniCodeBlock
+      value={preview}
+      totalLength={bytes.length * 2}
+      getFullValue={getFullValue}
+      collapsedHeight={collapsedHeight}
+    />
   );
 }
 
 function ProofTab({ entry }: { entry: QueryProofEntry }) {
   const [parsedTree, setParsedTree] = useState<string | null>(null);
+  const [parseError, setParseError] = useState<string | null>(null);
   const [parsing, setParsing] = useState(false);
-  const proofHex = useMemo(() => entry.proof ? bytesToHex(entry.proof.grovedbProof) : '', [entry.proof]);
 
   // Auto-parse on mount. The Proof tab itself only mounts when the user opens
   // it (Chakra TabPanel is lazy), so the ~146KB WASM module is still fetched
@@ -113,6 +157,7 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
   useEffect(() => {
     const proof = entry.proof?.grovedbProof;
     setParsedTree(null);
+    setParseError(null);
     if (!proof) { setParsing(false); return; }
     let cancelled = false;
     setParsing(true);
@@ -122,7 +167,7 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
         const text = await parseGrovedbProof(proof);
         if (!cancelled) setParsedTree(text);
       } catch (e) {
-        if (!cancelled) setParsedTree(`Parse error: ${e instanceof Error ? e.message : String(e)}`);
+        if (!cancelled) setParseError(e instanceof Error ? e.message : String(e));
       } finally {
         if (!cancelled) setParsing(false);
       }
@@ -209,14 +254,21 @@ function ProofTab({ entry }: { entry: QueryProofEntry }) {
             <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={4} mb={1}>
               Raw bytes ({formatBytes(proof.grovedbProof.length)})
             </Text>
-            <MiniCodeBlock value={proofHex} collapsedHeight={120} />
+            <ProofBytesBlock bytes={proof.grovedbProof} collapsedHeight={120} />
             <Text fontSize="2xs" color="gray.400" fontWeight="600" textTransform="uppercase" mt={4} mb={1}>
               Raw parser output
             </Text>
             <MiniCodeBlock value={parsedTree} collapsedHeight={400} />
           </Box>
         ) : !parsing ? (
-          <MiniCodeBlock value={proofHex} collapsedHeight={120} />
+          <>
+            {parseError ? (
+              <Text role="alert" fontSize="xs" color="orange.300" mb={2}>
+                Could not parse this proof: {parseError}
+              </Text>
+            ) : null}
+            <ProofBytesBlock bytes={proof.grovedbProof} collapsedHeight={120} />
+          </>
         ) : null}
       </Box>
     </VStack>

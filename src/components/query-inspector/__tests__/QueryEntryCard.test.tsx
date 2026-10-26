@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
-import { QueryEntryDetail } from '../QueryEntryCard';
+import { CODE_PREVIEW_CHARS, QueryEntryDetail } from '../QueryEntryCard';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 
 const parse = vi.hoisted(() => vi.fn().mockResolvedValue('{}'));
@@ -40,5 +40,30 @@ describe('query provenance', () => {
     expect(parse).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole('tab', { name: 'Proof' }));
     await waitFor(() => expect(parse).toHaveBeenCalledOnce());
+  });
+
+  const proofOf = (grovedbProof: Uint8Array): QueryProofEntry['proof'] => ({
+    grovedbProof, quorumHash: new Uint8Array(), signature: new Uint8Array(), blockIdHash: new Uint8Array(), round: 0, quorumType: 106,
+  });
+
+  it('shows a parser failure as a message instead of parser output', async () => {
+    parse.mockRejectedValueOnce(new Error('The bytes end before the proof does.'));
+    renderWithProviders(<QueryEntryDetail entry={{ ...entry, proof: proofOf(new Uint8Array([1, 2])) }} defaultTabIndex={2} />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('Could not parse this proof: The bytes end before the proof does.');
+    expect(screen.getByText('0102')).toBeInTheDocument();
+    expect(screen.queryByText('Raw parser output')).not.toBeInTheDocument();
+  });
+
+  it('renders a preview of a large proof and the full hex only on request', async () => {
+    parse.mockRejectedValueOnce(new Error('not a proof'));
+    const bytes = new Uint8Array(CODE_PREVIEW_CHARS).fill(0xab);
+    renderWithProviders(<QueryEntryDetail entry={{ ...entry, proof: proofOf(bytes) }} defaultTabIndex={2} />);
+    await screen.findByRole('alert');
+    const total = (bytes.length * 2).toLocaleString();
+    expect(screen.getByText(`Showing the first ${CODE_PREVIEW_CHARS.toLocaleString()} of ${total} characters.`)).toBeInTheDocument();
+    const code = () => screen.getByText((_, el) => el?.tagName === 'CODE' && /^(ab)+$/.test(el.textContent ?? ''));
+    expect(code().textContent).toHaveLength(CODE_PREVIEW_CHARS);
+    fireEvent.click(screen.getByRole('button', { name: 'Show all' }));
+    expect(code().textContent).toHaveLength(bytes.length * 2);
   });
 });
