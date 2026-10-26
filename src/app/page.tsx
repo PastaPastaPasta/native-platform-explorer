@@ -420,11 +420,7 @@ export default function HomePage() {
       {/* Top proposers */}
       <Box as="section">
         <SectionHeading
-          label={`Top proposers · epoch ${epoch ? `#${epoch.index}` : '—'}${
-            evonodesQ.isSuccess
-              ? ` · ${proposers.totalBlocks.toLocaleString('en-US')} blocks by ${proposers.proposers} evonodes`
-              : ''
-          }`}
+          label={`Top proposers · epoch ${epoch ? `#${epoch.index}` : '—'}`}
           action={
             <Button
               as={NextLink}
