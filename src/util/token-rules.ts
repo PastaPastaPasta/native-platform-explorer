@@ -103,9 +103,17 @@ export function changeControlRows(config: unknown): ChangeControlRow[] {
   return rows;
 }
 
-const canAct = (config: Record<string, unknown> | undefined, key: string) => {
+/** On, off, or `'unknown'` when the rule's action takers cannot be read. */
+export type TokenCapability = boolean | 'unknown';
+
+const ACTION_TAKERS = new Set(['NoOne', 'ContractOwner', 'Identity', 'MainGroup', 'Group']);
+
+const canAct = (config: Record<string, unknown> | undefined, key: string): TokenCapability => {
   const rule = toRecord(config?.[key]);
-  return rule ? enumVariant(rule.authorizedToMakeChange)?.variant !== 'NoOne' : false;
+  if (!rule) return false;
+  const variant = enumVariant(rule.authorizedToMakeChange)?.variant;
+  if (variant === undefined || !ACTION_TAKERS.has(variant)) return 'unknown';
+  return variant !== 'NoOne';
 };
 
 /** Capability pills: an action is "on" when someone is authorized to perform it. */

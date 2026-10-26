@@ -148,6 +148,15 @@ describe('evo-sdk 5.0 internally tagged enums', () => {
     })).toMatchObject({ mintable: true, burnable: false });
   });
 
+  it('reports a capability as unknown, not on, when its action takers cannot be read', () => {
+    expect(tokenFlagsFromConfig({
+      manualMintingRules: rule({ kind: 'future', two: 'keys' }),
+      manualBurningRules: rule({ $type: 'someoneNew' }),
+      freezeRules: rule(42),
+      unfreezeRules: rule({ $type: 'noOne' }),
+    })).toMatchObject({ mintable: 'unknown', burnable: 'unknown', freezable: 'unknown', unfreezable: false, destroyable: false });
+  });
+
   it('describes a perpetual distribution', () => {
     expect(describePerpetualDistribution({
       $formatVersion: '0',
