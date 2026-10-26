@@ -1,3 +1,4 @@
+import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { idToString, readProp } from './sdk-shape';
 
 // Homograph-safe conversion used by DPNS to deduplicate visually-similar labels.
@@ -28,6 +29,17 @@ export function validateLabel(label: string): { valid: boolean; reason?: string 
     return { valid: false, reason: 'Labels must be 3–63 chars of [a-z0-9-], not starting/ending with -.' };
   }
   return { valid: true };
+}
+
+/** /governance/contested/detail for the DPNS contest over `label` (keyed by
+ *  its homograph-safe form on the parentNameAndLabel index). */
+export function dpnsContestHref(label: string): string {
+  const dpnsId = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns')!.testnetId;
+  const values = JSON.stringify(['dash', convertToHomographSafeChars(label)]);
+  return (
+    `/governance/contested/detail/?contract=${encodeURIComponent(dpnsId)}` +
+    `&docType=domain&indexName=parentNameAndLabel&indexValues=${encodeURIComponent(values)}`
+  );
 }
 
 /** Normalise `name` into a `.dash` FQDN when the user omits the TLD. */
