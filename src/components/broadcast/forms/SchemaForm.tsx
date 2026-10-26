@@ -68,15 +68,19 @@ function defaultForSchema(schema: SchemaObject): JsonValue {
 }
 
 /** Produce an empty initial value for the form from a top-level schema.
- *  Blank strings and numbers are left out, as a cleared field is: an optional
- *  property the user never fills is not submitted as "". */
+ *  Blank strings and numbers are left out, as a cleared field is, and empty
+ *  objects and lists are seeded only for required properties: an optional
+ *  property the user never fills is not submitted (as "", {} or []) and does
+ *  not fail validation for its own required members. */
 export function emptyValueFor(schema: SchemaObject): SchemaObject {
   const out: SchemaObject = {};
   const props = isObject(schema.properties) ? schema.properties : {};
+  const required = Array.isArray(schema.required) ? (schema.required as string[]) : [];
   for (const [key, def] of Object.entries(props)) {
     if (key.startsWith('$') || !isObject(def)) continue;
     const value = defaultForSchema(def);
-    if (value !== '') out[key] = value;
+    const blank = value === '' || (!('default' in def) && typeof value === 'object' && !required.includes(key));
+    if (!blank) out[key] = value;
   }
   return out;
 }
@@ -362,12 +366,14 @@ function FieldNode(props: FieldNodeProps) {
     }
   }
 
-  // FormControl ties the label to the field's input, so it has an accessible name.
+  // FormControl ties the label to a leaf field's input, so it has an accessible
+  // name. Objects and lists have no single input; their members are labelled.
+  const Wrapper = kind === 'object' || kind === 'array' ? Box : FormControl;
   return (
-    <FormControl>
+    <Wrapper>
       <FieldLabel name={name} required={required} description={description} />
       <Box mt={1}>{renderer}</Box>
-    </FormControl>
+    </Wrapper>
   );
 }
 

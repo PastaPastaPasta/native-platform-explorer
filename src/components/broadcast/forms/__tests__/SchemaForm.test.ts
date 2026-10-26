@@ -34,8 +34,12 @@ describe('emptyValueFor', () => {
     expect(v).not.toHaveProperty('body');
     expect(v.pinned).toBe(false);
     expect(v).not.toHaveProperty('priority');
-    expect(v.tags).toEqual([]);
-    expect(v.author).toEqual({});
+    // Optional objects and lists stay unset, so author.name (required inside
+    // the optional author) does not block an untouched form.
+    expect(v).not.toHaveProperty('tags');
+    expect(v).not.toHaveProperty('author');
+    expect(issuesToErrorMap(validateAgainstSchema(noteSchema, { ...v, title: 'x' }))).toEqual({});
+    expect(emptyValueFor({ ...noteSchema, required: ['title', 'tags', 'author'] })).toMatchObject({ tags: [], author: {} });
   });
 
   it('skips $-prefixed system fields', () => {
