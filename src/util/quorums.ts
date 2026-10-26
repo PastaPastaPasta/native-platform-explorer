@@ -46,7 +46,8 @@ export function normaliseQuorums(raw: unknown): QuorumsSummary {
     height:
       typeof height === 'bigint' ? height
         : typeof height === 'number' && Number.isSafeInteger(height) ? BigInt(height)
-          : null,
+          : typeof height === 'string' && /^\d+$/.test(height) ? BigInt(height)
+            : null,
     quorums: Array.isArray(list)
       ? list.map(row).filter((r): r is QuorumRow => r !== null)
       : [],

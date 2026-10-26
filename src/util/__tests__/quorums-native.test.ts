@@ -48,4 +48,9 @@ describe('currentQuorumsInfo normalisation', () => {
     expect(summary.quorums.map((r) => r.quorumType)).toEqual(['LLMQ_TYPE_UNKNOWN']);
     expect(normaliseQuorums(undefined)).toEqual({ height: null, quorums: [] });
   });
+
+  it('keeps the decimal-string height of the JSON form', () => {
+    expect(normaliseQuorums(json).height).toBe(458827n);
+    expect(normaliseQuorums({ ...json, height: 'not-a-height' }).height).toBeNull();
+  });
 });

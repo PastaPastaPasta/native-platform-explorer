@@ -61,7 +61,9 @@ export function EpochView({
           <Heading size="sm" color="gray.100">
             {leaderboardTitle}
           </Heading>
-          {!evonodesQ.isLoading && !evonodesQ.isError ? (
+          {/* A disabled walk (epoch unknown or failed) is neither loading nor
+              errored, so require data rather than infer it. */}
+          {evonodesQ.data instanceof Map && !evonodesQ.isError ? (
             <Text fontSize="xs" color="muted" fontFamily="mono">
               {proposers.totalBlocks.toLocaleString('en-US')} blocks ·{' '}
               {proposers.proposers.toLocaleString('en-US')} evonodes
