@@ -39,6 +39,7 @@ import { findOwnVote } from '@util/protocol-votes';
 import { readProp } from '@util/sdk-shape';
 import { useSdk } from '@sdk/hooks';
 import { getNetwork } from '@sdk/networks';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 // Recent epochs offered by the selector. Older epochs are reachable from
 // /epoch/history/, whose finalized proposer lists link back here.
@@ -409,6 +410,7 @@ function Content() {
   const params = useSearchParams();
   const raw = params.get('proTxHash') ?? '';
   const hex = proTxHashToHex(raw);
+  usePageTitle(hex ? `Evonode ${shortId(hex)}` : 'Evonodes');
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },

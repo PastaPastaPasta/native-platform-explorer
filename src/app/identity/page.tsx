@@ -38,6 +38,7 @@ import {
 } from '@sdk/queries';
 import { aggregateProof } from '@sdk/proofs';
 import { shortId } from '@util/identifier';
+import { useIdentityTitle } from '@hooks/useEntityTitle';
 
 function TabHeading({ label }: { label: string }) {
   return (
@@ -52,6 +53,7 @@ const TABS = ['keys', 'dpns', 'tokens', 'groups', 'votes', 'advanced'] as const;
 function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
+  useIdentityTitle(id);
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },

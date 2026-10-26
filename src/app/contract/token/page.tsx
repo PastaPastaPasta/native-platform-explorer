@@ -8,11 +8,13 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { useSdk } from '@sdk/hooks';
 import { TokenView } from '@components/token/TokenView';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
   const position = params.get('position') ?? '';
+  usePageTitle(position ? `Token #${position}` : 'Token');
   const { sdk, status } = useSdk();
   const [tokenId, setTokenId] = useState<string | null>(null);
   const [error, setError] = useState<Error | null>(null);

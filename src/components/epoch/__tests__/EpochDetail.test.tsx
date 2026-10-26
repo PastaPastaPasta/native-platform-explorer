@@ -13,6 +13,7 @@ vi.mock('@sdk/queries', () => ({
   useEpochInfo: () => hooks.epoch,
   useFinalizedEpochInfo: () => hooks.finalized,
   useAllEvonodeBlocksInEpoch: (...args: unknown[]) => { hooks.useLive(...args); return hooks.live; },
+  useCurrentEpoch: () => query('success', { index: 50 }),
 }));
 
 function query(status = 'success', data: unknown = new Map()) {

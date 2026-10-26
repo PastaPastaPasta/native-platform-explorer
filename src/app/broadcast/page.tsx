@@ -19,6 +19,7 @@ import {
   type OperationGroup,
 } from '@components/broadcast/operations';
 import { getConfig } from '@/config';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 function GroupCard({
   group,
@@ -88,6 +89,7 @@ function Hub() {
   const selected = findOperationById(opId);
 
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Broadcast' }]);
+  usePageTitle(selected ? `Broadcast · ${selected.label}` : 'Broadcast');
 
   const pickOp = (entry: OperationEntry) => {
     // Preserve any contextual query params already in the URL (contract, type, id).

@@ -5,10 +5,12 @@ import { useSearchParams } from 'next/navigation';
 import { LoadingCard } from '@ui/LoadingCard';
 import { TokenView } from '@components/token/TokenView';
 import { TokenLanding } from '@components/token/TokenLanding';
+import { useTokenTitle } from '@hooks/useEntityTitle';
 
 function Content() {
   const params = useSearchParams();
   const id = params.get('id') ?? '';
+  useTokenTitle(id);
   if (!id) return <TokenLanding />;
   return <TokenView tokenId={id} />;
 }

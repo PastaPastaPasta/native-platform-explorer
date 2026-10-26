@@ -2,21 +2,24 @@
 
 import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { Button, HStack, Text, VStack } from '@chakra-ui/react';
+import { Button, Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
+import { LookupInput } from '@ui/LookupInput';
 import { NotFoundCard } from '@ui/NotFoundCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import { useIdentityByPublicKeyHash, useIdentitiesByNonUniquePkh } from '@sdk/queries';
-import { shortId } from '@util/identifier';
+import { isPublicKeyHash, shortId } from '@util/identifier';
 import { idToString } from '@util/sdk-shape';
 
 function Content() {
   const params = useSearchParams();
-  const pkh = params.get('pkh') ?? '';
+  const raw = (params.get('pkh') ?? '').trim();
+  const pkh = isPublicKeyHash(raw) ? raw.toLowerCase() : '';
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -24,6 +27,7 @@ function Content() {
     { label: 'Reverse lookup' },
     { label: pkh ? shortId(pkh) : '—' },
   ]);
+  usePageTitle(pkh ? `Public-key hash ${shortId(pkh)}` : 'Identity reverse lookup');
 
   const uniqueQ = useIdentityByPublicKeyHash(pkh || undefined);
   const [startAfter, setStartAfter] = useState<string | undefined>(undefined);
@@ -34,11 +38,28 @@ function Content() {
 
   if (!pkh) {
     return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide a 40-character hex public-key hash as <code>?pkh=…</code>.
-          </Text>
+      <Container py={{ base: 4, md: 6 }}>
+        <InfoBlock emphasised>
+          <VStack align="stretch" spacing={3}>
+            <Heading as="h1" size="md">Identity reverse lookup</Heading>
+            <Text fontSize="sm" color="muted" maxW="70ch">
+              Find the identity that owns a public key, from the key&apos;s 20-byte hash
+              (HASH160). Unique keys resolve to one identity; otherwise every identity with a
+              non-unique key of that hash is listed.
+            </Text>
+            {raw ? (
+              <Text role="alert" fontSize="sm" color="failed">
+                &ldquo;{shortId(raw, 12, 6)}&rdquo; is not a 40-character hex public-key hash.
+              </Text>
+            ) : null}
+            <LookupInput
+              label="Public-key hash"
+              placeholder="40-char hex"
+              description="identities.byPublicKeyHash, falling back to byNonUniquePublicKeyHash."
+              validate={(v) => (isPublicKeyHash(v) ? null : 'Expected a 40-char hex string.')}
+              buildHref={(v) => `/identity/lookup/?pkh=${encodeURIComponent(v.toLowerCase())}`}
+            />
+          </VStack>
         </InfoBlock>
       </Container>
     );

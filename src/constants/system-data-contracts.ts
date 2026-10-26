@@ -68,3 +68,9 @@ export const SYSTEM_DATA_CONTRACTS: SystemContract[] = [
     ...SAME_ON_BOTH('43gujrzZgXqcKBiScLa4T8XTDnRhenR9BLx8GWVHjPxF'),
   },
 ];
+
+/** The DPNS contract ID on `network` (identical on mainnet and testnet). */
+export function dpnsContractId(network: string): string | undefined {
+  const dpns = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns');
+  return (network === 'mainnet' ? dpns?.mainnetId : dpns?.testnetId) ?? undefined;
+}

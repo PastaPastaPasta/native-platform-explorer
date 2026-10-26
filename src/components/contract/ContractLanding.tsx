@@ -16,11 +16,11 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LookupInput } from '@ui/LookupInput';
 import { Identifier } from '@components/data/Identifier';
-import { WELL_KNOWN } from '@constants/well-known';
+import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 import { isBase58Identifier } from '@util/identifier';
 
 export function ContractLanding() {
-  const wellKnownContracts = WELL_KNOWN.filter((w) => w.kind === 'contract');
+  const wellKnownContracts = useWellKnownEntries('contract');
 
   return (
     <Container py={{ base: 4, md: 6 }}>

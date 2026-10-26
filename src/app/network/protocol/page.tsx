@@ -9,7 +9,6 @@ import {
   Tbody,
   Td,
   Text,
-  Th,
   Thead,
   Tr,
   VStack,
@@ -21,8 +20,10 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { InfoLine } from '@components/data/InfoLine';
 import { Identifier } from '@components/data/Identifier';
 import { WalkCapNotice } from '@components/data/WalkCapNotice';
+import { SortableTh, useSortState, useSortedRows } from '@components/data/SortableTh';
 import { VoteTallyBar, type TallySegment } from '@components/governance/VoteTallyBar';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import {
   useAllEvonodeBlocksInEpoch,
   useAllProtocolVotes,
@@ -41,6 +42,7 @@ function versionColor(version: number, current: number | null): string {
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Network' }, { label: 'Protocol' }]);
+  usePageTitle('Protocol version');
 
   const stateQ = useProtocolVersionUpgradeState();
   const currentQ = useCurrentEpoch();
@@ -100,10 +102,12 @@ export default function Page() {
     : [];
   const unknownText = (q: { isLoading: boolean }) => (q.isLoading ? '…' : 'unknown');
 
-  const rows = useMemo(
-    () => (votes ? [...votes.entries()].sort(([a], [b]) => (a < b ? -1 : 1)) : []),
-    [votes],
-  );
+  const rows = useMemo(() => (votes ? [...votes.entries()] : []), [votes]);
+  const { sort, toggle } = useSortState<'hash' | 'vote'>({ key: 'hash', direction: 'asc' });
+  const sortedRows = useSortedRows(rows, sort, {
+    hash: ([hash]) => hash,
+    vote: ([, version]) => Number(version),
+  });
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -224,16 +228,16 @@ export default function Page() {
               <Table size="sm">
                 <Thead position="sticky" top={0} bg="surface" zIndex={1}>
                   <Tr>
-                    <Th color="gray.400" borderColor="gray.750">
+                    <SortableTh column="hash" sort={sort} onSort={toggle} color="gray.400" borderColor="gray.750">
                       proTxHash ({rows.length})
-                    </Th>
-                    <Th color="gray.400" borderColor="gray.750">
+                    </SortableTh>
+                    <SortableTh column="vote" sort={sort} onSort={toggle} firstDirection="desc" color="gray.400" borderColor="gray.750">
                       Vote
-                    </Th>
+                    </SortableTh>
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {rows.map(([hash, version]) => (
+                  {sortedRows.map(([hash, version]) => (
                     <Tr key={hash} _hover={{ bg: 'gray.800' }}>
                       <Td borderColor="gray.750">
                         <Identifier

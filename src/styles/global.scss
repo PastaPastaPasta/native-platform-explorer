@@ -84,3 +84,21 @@ pre {
   scrollbar-width: thin;
   scrollbar-color: var(--chakra-colors-hairline) transparent;
 }
+
+// PRD §11.8: honour the OS "reduce motion" setting. Stop the loading sweep
+// and skeleton pulses, and make transitions instant.
+@media (prefers-reduced-motion: reduce) {
+  .loading-line::after {
+    animation: none;
+    display: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

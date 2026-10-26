@@ -23,14 +23,12 @@ import { Identifier } from '@components/data/Identifier';
 import { BigNumberDisplay } from '@components/data/BigNumber';
 import { useTokenIdentityBalances, useTokenIdentityTokenInfos } from '@sdk/queries';
 import { readProp } from '@util/sdk-shape';
-import { WELL_KNOWN } from '@constants/well-known';
+import { useWellKnownEntries } from '@hooks/useWellKnownRegistry';
 import { isBase58Identifier } from '@util/identifier';
 
 export function IdentityTokensTab({ identityId }: { identityId: string }) {
-  const wellKnownTokenIds = useMemo(
-    () => WELL_KNOWN.filter((w) => w.kind === 'token').map((w) => w.id),
-    [],
-  );
+  const wellKnownTokens = useWellKnownEntries('token');
+  const wellKnownTokenIds = useMemo(() => wellKnownTokens.map((w) => w.id), [wellKnownTokens]);
   const [adhoc, setAdhoc] = useState<string[]>([]);
   const [input, setInput] = useState('');
 

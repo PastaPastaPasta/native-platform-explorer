@@ -9,6 +9,8 @@ const state = vi.hoisted(() => ({
   dpns: { data: null as unknown, isLoading: false, isSuccess: true, isError: false, error: null as Error | null, refetch: vi.fn() },
   nonUnique: { data: [] as unknown, isLoading: false, isSuccess: true, isError: false, error: null as Error | null, refetch: vi.fn() },
   empty: { data: null, isLoading: false, isSuccess: true, isError: false, error: null, refetch: vi.fn() },
+  prefix: { data: [] as unknown, isLoading: false, isSuccess: true, isError: false, error: null as Error | null, refetch: vi.fn() },
+  prefixArgs: [] as unknown[],
 }));
 vi.mock('next/navigation', () => ({ useSearchParams: () => new URLSearchParams({ q: state.q }) }));
 vi.mock('@sdk/hooks', () => ({ useSdk: () => state.sdk }));
@@ -22,6 +24,9 @@ vi.mock('@sdk/queries', () => ({
   useIdentityByPublicKeyHash: () => state.empty,
   useIdentitiesByNonUniquePkh: () => state.nonUnique,
   useDpnsGetByName: () => state.dpns,
+  useDpnsPrefixSearch: (...args: unknown[]) => { state.prefixArgs = args; return state.prefix; },
+  useDpnsUsername: () => state.empty,
+  useDpnsIsContested: () => state.empty,
 }));
 
 describe('search resolution states', () => {
@@ -32,6 +37,7 @@ describe('search resolution states', () => {
     Object.assign(state.identity, { data: null, isLoading: false, isSuccess: true, isError: false, error: null });
     Object.assign(state.dpns, { data: null, isLoading: false, isSuccess: true, isError: false, error: null });
     Object.assign(state.nonUnique, { data: [], isLoading: false, isSuccess: true, isError: false, error: null });
+    Object.assign(state.prefix, { data: [], isLoading: false, isSuccess: true, isError: false, error: null });
     vi.clearAllMocks();
   });
 
@@ -125,5 +131,30 @@ describe('search resolution states', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(state.nonUnique.refetch).toHaveBeenCalledOnce();
     expect(screen.queryByText('No matching entity found')).not.toBeInTheDocument();
+  });
+
+  it('lists up to ten DPNS names for a prefix query inline', () => {
+    state.q = 'Alic';
+    const owner = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
+    state.prefix.data = new Map([
+      ['doc1', { id: 'doc1', properties: { label: 'Alice', normalizedLabel: 'a11ce', records: { identity: owner } } }],
+      ['doc2', { id: 'doc2', properties: { label: 'alicia', normalizedLabel: 'a11c1a' } }],
+    ]);
+    render(<SearchPage />);
+    // Homograph-safe prefix, limited to ten results.
+    expect(state.prefixArgs.slice(0, 1)).toEqual(['a11c']);
+    expect(state.prefixArgs[2]).toBe(10);
+    expect(screen.getByRole('heading', { name: 'DPNS names starting with “Alic”' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Alice.dash' }).getAttribute('href')).toMatch(/\/dpns\/?\?name=a11ce\.dash/);
+    expect(screen.getByRole('link', { name: 'All results →' }).getAttribute('href')).toMatch(/\/dpns\/search\/?\?q=Alic&network=testnet/);
+  });
+
+  it('keeps the DPNS prefix query off identifier searches', () => {
+    state.q = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
+    state.prefixArgs = [];
+    render(<SearchPage />);
+    expect(screen.queryByRole('heading', { name: /DPNS names starting with/ })).not.toBeInTheDocument();
+    expect(state.prefixArgs).toEqual([]);
+    expect(screen.getByRole('link', { name: 'Find DPNS names with this prefix' })).toBeInTheDocument();
   });
 });

@@ -21,6 +21,7 @@ import { shortId } from '@util/identifier';
 import { readProp, idToString } from '@util/sdk-shape';
 import { toPlain } from '@util/contract';
 import { safeStringify } from '@util/wasm-json';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 function parseIndexValues(raw: string): unknown[] | null {
   try {
@@ -38,6 +39,7 @@ function Content() {
   const docType = params.get('docType') ?? '';
   const indexName = params.get('indexName') ?? '';
   const indexValuesRaw = params.get('indexValues') ?? '';
+  usePageTitle(docType ? `Contested ${docType}` : 'Contested resource');
   const indexValues = indexValuesRaw ? parseIndexValues(indexValuesRaw) : null;
 
   usePageBreadcrumbs([

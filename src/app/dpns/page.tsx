@@ -14,10 +14,12 @@ import {
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
+import { LookupInput } from '@ui/LookupInput';
 import { ErrorCard } from '@ui/ErrorCard';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import {
   useDpnsGetByName,
   useDpnsIsAvailable,
@@ -26,6 +28,7 @@ import {
   useDpnsResolve,
 } from '@sdk/queries';
 import { convertToHomographSafeChars, normaliseDpnsName } from '@util/dpns';
+import { looksLikeDpnsName } from '@util/identifier';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 
 function contestedLink(label: string): string | null {
@@ -49,6 +52,7 @@ function Content() {
     { label: 'DPNS' },
     { label: name || '—' },
   ]);
+  usePageTitle(name || 'DPNS name');
 
   const resolveQ = useDpnsResolve(name || undefined);
   const recordQ = useDpnsGetByName(name || undefined);
@@ -58,12 +62,22 @@ function Content() {
 
   if (!name) {
     return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide a DPNS name as <code>?name=…</code>, e.g.{' '}
-            <code>/dpns/?name=alice.dash</code>.
-          </Text>
+      <Container py={{ base: 4, md: 6 }}>
+        <InfoBlock emphasised>
+          <VStack align="stretch" spacing={3}>
+            <Heading as="h1" size="md">DPNS name</Heading>
+            <LookupInput
+              label="Name"
+              placeholder="alice.dash or alice"
+              description="Resolves the name to its identity and shows availability and contest status."
+              validate={(v) => (looksLikeDpnsName(v) ? null : 'Expected a DPNS label, e.g. alice or alice.dash')}
+              buildHref={(v) => `/dpns/?name=${encodeURIComponent(normaliseDpnsName(v))}`}
+              buttonLabel="Resolve"
+            />
+            <Button as={NextLink} href="/dpns/search/" size="sm" variant="ghost" alignSelf="start">
+              Search names by prefix
+            </Button>
+          </VStack>
         </InfoBlock>
       </Container>
     );

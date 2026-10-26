@@ -21,10 +21,10 @@ import { LookupInput } from '@ui/LookupInput';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
 import { VotePollsList } from '@components/governance/VotePollsList';
 import { CreditsBlock } from '@components/data/CreditsBlock';
-import { Identifier } from '@components/data/Identifier';
 import { ProofGlyph } from '@components/proof/ProofGlyph';
 import { WalkCapNotice } from '@components/data/WalkCapNotice';
 import { QuorumBreakdownList } from '@components/network/QuorumsTable';
+import { WellKnownContracts } from '@components/network/WellKnownContracts';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useAllEvonodeBlocksInEpoch,
@@ -35,7 +35,6 @@ import {
   useTotalCreditsInPlatform,
   useVotePollsByEndDate,
 } from '@sdk/queries';
-import { WELL_KNOWN } from '@constants/well-known';
 import { useSdk } from '@sdk/hooks';
 import { normaliseEpoch, summariseProposers, withEpochDuration } from '@util/epoch';
 import { networkEpochDurationMs } from '@sdk/current-epoch';
@@ -48,6 +47,7 @@ import { isBase58Identifier, looksLikeDpnsName } from '@util/identifier';
 import type { ProofStatus } from '@components/proof/ProofInspectorContext';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 import type { ProofState } from '@sdk/proofs';
+import { usePageTitle } from '@hooks/usePageTitle';
 
 // Verification follows the SDK outcome; captured bytes are optional.
 function glyphStatus(s: ProofState): ProofStatus {
@@ -219,6 +219,7 @@ function StatCell({
 
 export default function HomePage() {
   usePageBreadcrumbs([]);
+  usePageTitle(null);
   const { network, trusted, status } = useSdk();
   const proofsOn = trusted && status === 'ready';
 
@@ -538,26 +539,7 @@ export default function HomePage() {
 
         <Box as="section">
           <SectionHeading label="Well-known contracts" />
-          <VStack align="stretch" spacing={0} divider={<Box h="1px" bg="hairline" />}>
-            {WELL_KNOWN.map((w) => (
-              <Box
-                key={w.id}
-                as={NextLink}
-                href={`/contract/?id=${encodeURIComponent(w.id)}`}
-                display="flex"
-                alignItems="center"
-                justifyContent="space-between"
-                py={2.5}
-                _hover={{ color: 'accent' }}
-                transition="color 0.12s ease"
-              >
-                <Text fontSize="13px" color="ink" fontWeight={400}>
-                  {w.name}
-                </Text>
-                <Identifier value={w.id} dense avatar={false} copy={false} />
-              </Box>
-            ))}
-          </VStack>
+          <WellKnownContracts />
         </Box>
       </Grid>
 

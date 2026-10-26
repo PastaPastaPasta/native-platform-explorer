@@ -23,7 +23,10 @@ import { withNetwork } from '@util/exploration';
 import { Identifier } from '@components/data/Identifier';
 import { GlobalSearchInput } from '@components/search/GlobalSearchInput';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
+import { usePrefetchProps, type PrefetchTarget } from '@hooks/usePrefetch';
 import { classifyQuery, type SearchCandidate } from '@util/search';
+import { DpnsPrefixResults } from '@components/search/DpnsPrefixResults';
 import {
   useContract,
   useDpnsGetByName,
@@ -39,6 +42,34 @@ interface ResolvedMatch {
   href: string;
   primary: string;
   confirmed?: boolean;
+  /** The destination page's primary query, prefetched on hover/focus. */
+  prefetch?: PrefetchTarget;
+}
+
+function MatchButton({ match, network }: { match: ResolvedMatch; network: string }) {
+  const prefetch = usePrefetchProps(match.prefetch);
+  return (
+    <Button
+      as={NextLink}
+      href={withNetwork(match.href, network)}
+      aria-label={`Open ${match.kind} ${match.primary} on ${network}`}
+      variant="outline"
+      colorScheme="blue"
+      size="md"
+      height="auto"
+      py={2}
+      maxW="100%"
+      whiteSpace="normal"
+      {...prefetch}
+    >
+      <VStack align="flex-start" spacing={1} minW={0} maxW="100%">
+        <Text fontSize="2xs" color="gray.400" textTransform="uppercase">
+          {match.kind}{match.confirmed ? '' : ' · open lookup'}
+        </Text>
+        <Identifier value={match.primary} avatar={false} copy={false} dense />
+      </VStack>
+    </Button>
+  );
 }
 
 function findByKind<K extends SearchCandidate['kind']>(
@@ -76,21 +107,22 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
   const dpnsQ = useDpnsGetByName(dpns?.name);
 
   const lookups = [
-    { value: identity?.id, query: identityQ, kind: 'Identity', path: '/identity/', param: 'id' },
-    { value: contract?.id, query: contractQ, kind: 'Contract', path: '/contract/', param: 'id' },
-    { value: token?.id, query: tokenQ, kind: 'Token', path: '/token/', param: 'id' },
+    { value: identity?.id, query: identityQ, kind: 'Identity', path: '/identity/', param: 'id', prefetch: identity && { kind: 'identity' as const, id: identity.id } },
+    { value: contract?.id, query: contractQ, kind: 'Contract', path: '/contract/', param: 'id', prefetch: contract && { kind: 'contract' as const, id: contract.id } },
+    { value: token?.id, query: tokenQ, kind: 'Token', path: '/token/', param: 'id', prefetch: token && { kind: 'token' as const, id: token.id } },
     { value: address?.addr, query: addressQ, kind: 'Address', path: '/address/', param: 'addr' },
     { value: pkh?.pkh, query: pkhQ, kind: 'Identity by public-key hash', path: '/identity/lookup/', param: 'pkh' },
     { value: nonUniquePkh, query: nonUniqueQ, kind: 'Identities by non-unique public-key hash', path: '/identity/lookup/', param: 'pkh' },
-    { value: dpns?.name, query: dpnsQ, kind: 'DPNS', path: '/dpns/', param: 'name' },
+    { value: dpns?.name, query: dpnsQ, kind: 'DPNS', path: '/dpns/', param: 'name', prefetch: dpns && { kind: 'dpns' as const, name: dpns.name } },
   ].filter((lookup) => lookup.value !== undefined);
   const matches: ResolvedMatch[] = lookups
     .filter(({ query }) => hasResult(query.data))
-    .map(({ value, kind, path, param }) => ({
+    .map(({ value, kind, path, param, prefetch }) => ({
       kind,
       confirmed: true,
       href: `${path}?${param}=${encodeURIComponent(value!)}`,
       primary: value!,
+      prefetch,
     }));
 
   // Always-present static links that the user might want regardless of resolution:
@@ -116,6 +148,7 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
       kind: 'Epoch',
       href: `/epoch/detail/?index=${epoch.index}`,
       primary: String(epoch.index),
+      prefetch: { kind: 'epoch', index: epoch.index },
     });
   }
 
@@ -147,11 +180,13 @@ function SearchContent() {
   const q = params.get('q') ?? '';
 
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Search' }]);
+  usePageTitle(q.trim() ? `Search: ${q.trim()}` : 'Search');
 
   const classification = useMemo(() => classifyQuery(q), [q]);
   const { matches, loading, complete, failures, retry, requiresLookup } = useResolveCandidates(classification.candidates);
   const unavailable = requiresLookup && status === 'error';
   const prefix = findByKind(classification.candidates, 'dpnsPrefix');
+  const looksLikeNameOnly = classification.candidates.every((c) => c.kind === 'dpnsName' || c.kind === 'dpnsPrefix' || c.kind === 'epoch');
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -229,34 +264,24 @@ function SearchContent() {
               </Heading>
               <Wrap spacing={3}>
                 {matches.map((m) => (
-                  <WrapItem key={`${m.kind}-${m.primary}`}>
-                    <Button
-                      as={NextLink}
-                      href={withNetwork(m.href, network)}
-                      aria-label={`Open ${m.kind} ${m.primary} on ${network}`}
-                      variant="outline"
-                      colorScheme="blue"
-                      size="md"
-                      height="auto"
-                      py={2}
-                    >
-                      <VStack align="flex-start" spacing={1}>
-                        <Text fontSize="2xs" color="gray.400" textTransform="uppercase">
-                          {m.kind}{m.confirmed ? '' : ' · open lookup'}
-                        </Text>
-                        <Identifier value={m.primary} avatar={false} copy={false} dense />
-                      </VStack>
-                    </Button>
+                  <WrapItem key={`${m.kind}-${m.primary}`} maxW="100%">
+                    <MatchButton match={m} network={network} />
                   </WrapItem>
                 ))}
               </Wrap>
             </VStack>
           </InfoBlock>
         ) : null}
-        {prefix ? (
-          <Button as={NextLink} href={withNetwork(`/dpns/search/?q=${encodeURIComponent(prefix.prefix)}`, network)} alignSelf="start" variant="outline">
-            Find DPNS names with this prefix
-          </Button>
+        {prefix && !unavailable ? (
+          // An ID or hash also passes the DPNS label check; list names inline
+          // only when the query reads as a name.
+          looksLikeNameOnly ? (
+            <DpnsPrefixResults prefix={prefix.prefix} />
+          ) : (
+            <Button as={NextLink} href={withNetwork(`/dpns/search/?q=${encodeURIComponent(prefix.prefix)}`, network)} alignSelf="start" variant="outline">
+              Find DPNS names with this prefix
+            </Button>
+          )
         ) : null}
       </VStack>
     </Container>
