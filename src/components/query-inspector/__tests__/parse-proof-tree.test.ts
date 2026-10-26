@@ -296,6 +296,20 @@ describe('parseProofTree printed values', () => {
     expect(buildLayerTree(root).root?.kind).toBe('kv');
     expect(summarizeProof(root).totals).toMatchObject({ kv: 1, kvValueHash: 0 });
   });
+
+  it.each(['NonCounted(Tree(01))', 'NotSummed(SumTree(01, 5))', 'NotCountedOrSummed(NonCounted(CountTree(01, 2)))', 'PrivateDocumentStore(count: 2, entry_size: 8, chunk_power: 4)'])(
+    'treats the wrapped tree element %s as a subtree',
+    (element) => {
+      const text = ['LayerProof {', '  proof: Merk(', `    0: Push(KVValueHash(t, ${element}, HASH[aa])))`, '  lower_layers: {', '    t => {', '      LayerProof {', '        proof: Merk(', '          0: Push(KV(k, Item(0x01))))', '      }', '    }', '  }', '}'].join('\n');
+      const root = parseProofTree(text)!;
+      expect(root.ops[0]).toMatchObject({ kind: 'kvValueHash', isTree: true });
+      expect(buildLayerTree(root).root?.kind).toBe('subtree');
+    },
+  );
+  it('does not read a wrapped item as a tree', () => {
+    const root = parseProofTree(['LayerProof {', '  proof: Merk(', '    0: Push(KVValueHash(t, NonCounted(Item(0x54726565283031)), HASH[aa])))', '}'].join('\n'))!;
+    expect(root.ops[0]).toMatchObject({ isTree: false });
+  });
 });
 
 describe('buildLayerTree on malformed proofs', () => {

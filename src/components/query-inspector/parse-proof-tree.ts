@@ -111,8 +111,10 @@ const COMBINE_RULES: Record<CombineOp, { topIsParent: boolean; childGoesLeft: bo
   ChildInverted:  { topIsParent: false, childGoesLeft: true  },
 };
 
-/** Element descriptors that open a nested subtree (Tree, SumTree, CountTree, MmrTree, …). */
-const TREE_ELEMENT = /^\w*Tree\(/;
+/** Element descriptors that open a nested subtree (Tree, SumTree, CountTree,
+ *  MmrTree, PrivateDocumentStore, …), including the NonCounted / NotSummed /
+ *  NotCountedOrSummed wrappers Drive 5 puts around aggregate-index subtrees. */
+const TREE_ELEMENT = /^(?:(?:NonCounted|NotSummed|NotCountedOrSummed)\()*(?:\w*Tree|PrivateDocumentStore)\(/;
 
 /** A tree element is a subtree only when the proof descends into it; a tree
  *  element without a lower layer is itself the result (e.g. a count tree). */
@@ -411,9 +413,8 @@ function parseNode(shape: NodeShape, inner: string): ParsedNode | null {
     case 'kvDigest':
       return { kind: 'kvDigest', key, hash: extractHash(parts.join(', ')), ...aggregates };
     case 'kvHash':
-      return { kind: 'kvHash', hash: extractHash(parts.join(', ')), ...aggregates };
     case 'hash':
-      return { kind: 'hash', hash: extractHash(parts.join(', ')) };
+      return { kind: shape.base, hash: extractHash(parts.join(', ')), ...aggregates };
     case 'hashWith': {
       // `kv_hash=HASH[..], left=HASH[..], right=HASH[..]`
       const kvHash = parts.find((p) => p.startsWith('kv_hash='));
