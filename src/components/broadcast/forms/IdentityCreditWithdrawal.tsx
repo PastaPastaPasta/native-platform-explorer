@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Box, Input, Radio, RadioGroup, Stack, Text, VStack } from '@chakra-ui/react';
+import { useCurrentEpoch } from '@sdk/queries';
 import type { OperationFormProps } from '../OperationShell';
 import { parseDecimalBigInt } from './amount';
 
@@ -11,11 +12,19 @@ export interface IdentityCreditWithdrawalOptions {
   toAddress?: string;
   amountCredits: bigint;
   coreFeePerByte: number;
+  /** The network's active protocol version (from the current epoch), if known. */
+  protocolVersion?: number;
 }
 
 // Platform system limits (min_withdrawal_amount / max_withdrawal_amount).
-const MIN_WITHDRAWAL_CREDITS = 190_000n;
+// SYSTEM_LIMITS_V1 (protocol 1–11) allows 190,000 credits; SYSTEM_LIMITS_V2
+// raised it to 1,000,000 in protocol 12 and later limits keep that value.
+// Without a known version, use the stricter minimum.
+export function minWithdrawalCredits(protocolVersion?: number): bigint {
+  return protocolVersion !== undefined && protocolVersion <= 11 ? 190_000n : 1_000_000n;
+}
 const MAX_WITHDRAWAL_CREDITS = 50_000_000_000_000n;
+const formatCredits = (credits: bigint) => credits.toLocaleString('en-US');
 /** Platform requires a Fibonacci core fee per byte; cap it far above normal relay fees. */
 const CORE_FEE_PER_BYTE_OPTIONS = [1, 2, 3, 5, 8, 13, 21, 34, 55, 89];
 
@@ -28,13 +37,18 @@ export function validateCoreFeePerByte(text: string): { fee?: number; error?: st
   return { fee };
 }
 
-export function validateWithdrawalAmount(text: string): { amount?: bigint; error?: string } {
+function withdrawalRange(protocolVersion?: number): string {
+  return `${formatCredits(minWithdrawalCredits(protocolVersion))} to ${formatCredits(MAX_WITHDRAWAL_CREDITS)} credits`;
+}
+
+export function validateWithdrawalAmount(
+  text: string,
+  protocolVersion?: number,
+): { amount?: bigint; error?: string } {
   const amount = parseDecimalBigInt(text);
   if (amount === null) return { error: 'Enter a whole number of credits.' };
-  if (amount < MIN_WITHDRAWAL_CREDITS || amount > MAX_WITHDRAWAL_CREDITS)
-    return {
-      error: 'Withdrawals must be between 190,000 credits and 50,000,000,000,000 credits (500 DASH).',
-    };
+  if (amount < minWithdrawalCredits(protocolVersion) || amount > MAX_WITHDRAWAL_CREDITS)
+    return { error: `Withdrawals must be ${withdrawalRange(protocolVersion)} (500 DASH).` };
   return { amount };
 }
 
@@ -66,12 +80,18 @@ export function IdentityCreditWithdrawalForm({
   }, [address, network]);
   const addressValid = addressCheck?.address === address ? addressCheck.valid : undefined;
 
-  const amount = validateWithdrawalAmount(amountStr);
+  // The minimum depends on the network's active protocol version. The SDK's
+  // version() reports its own built-in version, so read the current epoch.
+  // If that read fails, fall back to the stricter minimum.
+  const epoch = useCurrentEpoch();
+  const protocolVersion = epoch.data?.protocolVersion;
+  const versionKnown = protocolVersion !== undefined || epoch.isError;
+  const amount = validateWithdrawalAmount(amountStr, protocolVersion);
   const fee = validateCoreFeePerByte(feePerByte);
 
   useEffect(() => {
     const ready = destination === 'payout' || addressValid === true;
-    if (!ready || amount.amount === undefined || fee.fee === undefined) {
+    if (!ready || !versionKnown || amount.amount === undefined || fee.fee === undefined) {
       onOptionsChange(null);
       return;
     }
@@ -80,8 +100,19 @@ export function IdentityCreditWithdrawalForm({
       ...(destination === 'address' ? { toAddress: address } : {}),
       amountCredits: amount.amount,
       coreFeePerByte: fee.fee,
+      ...(protocolVersion !== undefined ? { protocolVersion } : {}),
     });
-  }, [destination, address, addressValid, amount.amount, fee.fee, network, onOptionsChange]);
+  }, [
+    destination,
+    address,
+    addressValid,
+    versionKnown,
+    protocolVersion,
+    amount.amount,
+    fee.fee,
+    network,
+    onOptionsChange,
+  ]);
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -150,7 +181,12 @@ export function IdentityCreditWithdrawalForm({
         <Text fontSize="xs" color={amountStr && amount.error ? 'danger' : 'gray.400'} mt={1}>
           {amountStr && amount.error
             ? amount.error
-            : '190,000 to 50,000,000,000,000 credits (1 DASH = 100,000,000,000 credits). Platform fees are deducted from the identity balance.'}
+            : `${withdrawalRange(protocolVersion)} (1 DASH = 100,000,000,000 credits). Platform fees are deducted from the identity balance.`}
+          {versionKnown
+            ? protocolVersion === undefined
+              ? ' Could not read the network protocol version, so the strictest minimum applies.'
+              : ''
+            : ' Checking the network protocol version…'}
         </Text>
       </Box>
       <Box>

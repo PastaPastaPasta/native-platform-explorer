@@ -620,7 +620,7 @@ export async function executeIdentityCreditWithdrawal(
   const { sdk, options } = args;
   const criteria = () => resolveSigningCriteria('identity.creditWithdrawal', sdk, options);
   return withSigningMaterial(args, criteria, async (material, submit) => {
-    const amount = validateWithdrawalAmount(String(options.amountCredits));
+    const amount = validateWithdrawalAmount(String(options.amountCredits), options.protocolVersion);
     const fee = validateCoreFeePerByte(String(options.coreFeePerByte));
     if (amount.error || fee.error) throw new Error(amount.error ?? fee.error);
     if (options.toAddress !== undefined) {

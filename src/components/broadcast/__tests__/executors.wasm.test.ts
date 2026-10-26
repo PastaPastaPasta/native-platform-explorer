@@ -208,7 +208,7 @@ describe('executors with the real WASM SDK', () => {
       const execution = executeIdentityCreditWithdrawal({
         sdk: { identities: { fetch: vi.fn(), creditWithdrawal } } as never,
         signer: createMockSigner(),
-        options: { network, toAddress: otherNetwork, amountCredits: 190_000n, coreFeePerByte: 1 },
+        options: { network, toAddress: otherNetwork, amountCredits: 1_000_000n, coreFeePerByte: 1 },
       });
       await expect(execution).rejects.toMatchObject({ name: 'OperationNotSubmittedError' });
       expect(creditWithdrawal).not.toHaveBeenCalled();

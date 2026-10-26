@@ -111,20 +111,22 @@ describe('broadcast executors', () => {
     await executeIdentityCreditWithdrawal({
       sdk: {} as never,
       signer: createMockSigner({ prepareSdk }),
-      options: { network: 'testnet', toAddress, amountCredits: 190_000n, coreFeePerByte: 1 },
+      options: { network: 'testnet', toAddress, amountCredits: 1_000_000n, coreFeePerByte: 1 },
     }).catch(() => undefined);
     expect(prepareSdk).toHaveBeenCalledWith({ purpose, allowedSecurityLevels: ['CRITICAL'] });
   });
 
   it.each([
-    [{ amountCredits: 0x10n }, /between 190,000/],
+    [{ amountCredits: 0x10n, protocolVersion: 11 }, /must be 190,000 to/],
+    [{ amountCredits: 190_000n, protocolVersion: 12 }, /must be 1,000,000 to/],
+    [{ amountCredits: 999_999n }, /must be 1,000,000 to/],
     [{ coreFeePerByte: 4 }, /Fibonacci/],
   ])('rejects invalid withdrawal parameters before submitting', async (patch, message) => {
     const creditWithdrawal = vi.fn();
     const execution = executeIdentityCreditWithdrawal({
       sdk: { identities: { fetch: vi.fn(), creditWithdrawal } } as never,
       signer: createMockSigner(),
-      options: { network: 'testnet', amountCredits: 190_000n, coreFeePerByte: 1, ...patch },
+      options: { network: 'testnet', amountCredits: 1_000_000n, coreFeePerByte: 1, ...patch },
     });
     await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
     await expect(execution).rejects.toThrow(message);
