@@ -1,38 +1,37 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { toPlain } from '@util/contract';
 import { useSdk } from './hooks';
 import { useSystemStatus } from './queries';
+import {
+  networkProtocolVersion,
+  protocolVersionMismatch,
+  sessionProtocolVersion,
+  type ProtocolVersionMismatch,
+} from './protocol-version';
 
-/** Platform protocol version the responding node currently runs
- *  (`status.version.protocol.drive.current`). */
-export function networkProtocolVersion(status: unknown): number | null {
-  const plain = toPlain(status) as { version?: { protocol?: { drive?: { current?: unknown } } } } | null | undefined;
-  const current = plain?.version?.protocol?.drive?.current;
-  const n = typeof current === 'bigint' ? Number(current) : current;
-  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
-}
+export { networkProtocolVersion } from './protocol-version';
 
 export interface ProtocolVersionCheck {
   /** Newest Platform protocol version the bundled SDK supports
    *  (`EvoSDK.getLatestVersionNumber()`). */
   sdkVersion: number | null;
+  /** Protocol version this SDK session currently uses (`sdk.version()`). */
+  sessionVersion: number | null;
   networkVersion: number | null;
-  /** The network runs a protocol newer than the bundled SDK supports. */
-  mismatch: boolean;
+  mismatch: ProtocolVersionMismatch;
 }
 
 /**
  * PRD §11.7 version check. Since evo-sdk 5.0 a session detects the network's
- * protocol version from its responses (`sdk.version()` starts at the
- * network's floor and rises after the first proved answer), so it follows an
- * older network on its own. What it cannot follow is a network newer than the
- * newest version it was built with, so that is the comparison made here.
- * Shares the polled `system.status` query, so it adds no network requests.
+ * protocol version from its responses, but only upward (see
+ * `protocolVersionMismatch`). So it warns when the network is newer than the
+ * bundled SDK supports, or older than the version the session already uses.
+ * Shares the polled `system.status` query, so it adds no network requests;
+ * each poll re-reads the session's version.
  */
 export function useProtocolVersionCheck(): ProtocolVersionCheck {
-  const { status } = useSdk();
+  const { sdk, status } = useSdk();
   const statusQ = useSystemStatus();
   const latestQ = useQuery({
     queryKey: ['sdk', 'latestProtocolVersion'],
@@ -49,10 +48,13 @@ export function useProtocolVersionCheck(): ProtocolVersionCheck {
   });
   const latest = latestQ.data;
   const sdkVersion = typeof latest === 'number' && Number.isInteger(latest) ? latest : null;
-  const networkVersion = status === 'ready' ? networkProtocolVersion(statusQ.data) : null;
+  const ready = status === 'ready';
+  const networkVersion = ready ? networkProtocolVersion(statusQ.data) : null;
+  const sessionVersion = ready ? sessionProtocolVersion(sdk) : null;
   return {
     sdkVersion,
+    sessionVersion,
     networkVersion,
-    mismatch: sdkVersion !== null && networkVersion !== null && networkVersion > sdkVersion,
+    mismatch: protocolVersionMismatch(sdkVersion, sessionVersion, networkVersion),
   };
 }

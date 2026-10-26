@@ -301,7 +301,8 @@ export default function Page() {
               label="Protocol version"
               value={
                 <Text fontFamily="mono" color={protocol.mismatch ? 'warning' : undefined}>
-                  SDK up to v{protocol.sdkVersion ?? '—'} · network v{protocol.networkVersion ?? '—'}
+                  SDK up to v{protocol.sdkVersion ?? '—'} · session v{protocol.sessionVersion ?? '—'} ·
+                  network v{protocol.networkVersion ?? '—'}
                 </Text>
               }
             />

@@ -5,6 +5,7 @@ import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
 import { SdkSessionError } from '@sdk/errors';
 import { networkProtocolVersion } from '@sdk/version';
+import { protocolVersionMismatch } from '@sdk/protocol-version';
 import { createCustomDevnetConfig, removeCustomDevnet, saveCustomDevnet } from '@sdk/networks';
 import { SdkSessionNotice, SdkVersionNotice } from '../SdkNotices';
 
@@ -93,14 +94,24 @@ describe('SdkVersionNotice', () => {
   });
 
   it('warns when the network runs a protocol newer than the SDK supports and can be dismissed', async () => {
-    // A session's own version() follows the network, so it is not compared.
-    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(15), system: { status: vi.fn().mockResolvedValue(status(15)) } });
+    // The session ratchets no higher than the newest version it supports.
+    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(14), system: { status: vi.fn().mockResolvedValue(status(15)) } });
     renderWithProviders(<SdkVersionNotice />, { sdk: { sdk } });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Testnet runs Platform protocol v15'));
     expect(screen.getByRole('status')).toHaveTextContent('supports up to v14');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss protocol version warning' }));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:14:15');
+    expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:network-newer:14:15');
+  });
+
+  it('warns when the network runs a protocol older than the session uses', async () => {
+    // A devnet session starts at v14 and cannot step down to a v13 devnet.
+    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(14), system: { status: vi.fn().mockResolvedValue(status(13)) } });
+    renderWithProviders(<SdkVersionNotice />, { sdk: { sdk } });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Testnet runs Platform protocol v13, older than the v14 this SDK session uses'));
+    expect(screen.getByRole('status')).toHaveTextContent('writes are disabled');
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss protocol version warning' }));
+    expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:network-older:14:13');
   });
 
   it.each([14, 13])('stays silent when the network runs v%s, which the SDK supports', async (current) => {
@@ -112,5 +123,18 @@ describe('SdkVersionNotice', () => {
     // Let the supported-version lookup settle before asserting silence.
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+});
+
+describe('protocolVersionMismatch', () => {
+  it('flags networks the session cannot follow, in either direction', () => {
+    expect(protocolVersionMismatch(14, 14, 15)).toBe('network-newer');
+    expect(protocolVersionMismatch(14, 14, 13)).toBe('network-older');
+    expect(protocolVersionMismatch(14, 14, 12)).toBe('network-older');
+    // A fresh session below a supported network catches up on its first proved read.
+    expect(protocolVersionMismatch(14, 13, 14)).toBeNull();
+    expect(protocolVersionMismatch(14, 13, 13)).toBeNull();
+    expect(protocolVersionMismatch(14, 14, null)).toBeNull();
+    expect(protocolVersionMismatch(null, null, 13)).toBeNull();
   });
 });

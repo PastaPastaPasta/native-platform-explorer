@@ -85,24 +85,36 @@ export function SdkSessionNotice() {
 const DISMISS_KEY = 'npe:protocolWarningDismissed';
 
 /** Small, dismissible (per tab session) warning that the network runs a
- *  protocol newer than the bundled SDK supports. */
+ *  protocol the SDK session cannot follow: newer than the bundled SDK
+ *  supports, or older than the version the session already uses. */
 export function SdkVersionNotice() {
   const { network } = useSdk();
-  const { sdkVersion, networkVersion, mismatch } = useProtocolVersionCheck();
-  const id = `${network}:${sdkVersion}:${networkVersion}`;
+  const { sdkVersion, sessionVersion, networkVersion, mismatch } = useProtocolVersionCheck();
+  const id = `${network}:${mismatch}:${mismatch === 'network-older' ? sessionVersion : sdkVersion}:${networkVersion}`;
   const [dismissed, setDismissed] = useState<string | null>(null);
   useEffect(() => {
     try { setDismissed(window.sessionStorage.getItem(DISMISS_KEY)); } catch { /* optional */ }
   }, []);
   if (!mismatch || dismissed === id) return null;
+  const label = getNetwork(network).label || network;
   return (
     <Box role="status" mb={3} px={3} py={2} borderWidth="1px" borderColor="warning" borderRadius="md">
       <HStack justify="space-between" align="flex-start" spacing={3}>
         <Text fontSize="xs" color="muted">
           <Text as="span" color="warning" fontWeight={600}>Protocol version mismatch: </Text>
-          {getNetwork(network).label || network} runs Platform protocol v{networkVersion}; the bundled
-          SDK (@dashevo/evo-sdk {EVO_SDK_VERSION}) supports up to v{sdkVersion}. The explorer still
-          works, but data added by newer protocol features may fail to load.
+          {mismatch === 'network-newer' ? (
+            <>
+              {label} runs Platform protocol v{networkVersion}; the bundled SDK (@dashevo/evo-sdk{' '}
+              {EVO_SDK_VERSION}) supports up to v{sdkVersion}. The explorer still works, but data
+              added by newer protocol features may fail to load. Writes are disabled.
+            </>
+          ) : (
+            <>
+              {label} runs Platform protocol v{networkVersion}, older than the v{sessionVersion} this
+              SDK session uses (@dashevo/evo-sdk {EVO_SDK_VERSION}), and a session cannot step down.
+              Reads may fail to decode or verify, and writes are disabled.
+            </>
+          )}
         </Text>
         <CloseButton
           size="sm"
