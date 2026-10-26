@@ -8,8 +8,11 @@ import { TokenOverview } from '../TokenOverview';
 import { TokenBalanceLookup } from '../TokenBalanceLookup';
 import { TokenPrice } from '../TokenPrice';
 
-const signer = vi.hoisted(() => ({ current: null as { identityId: string } | null }));
-vi.mock('@/signer/SignerProvider', () => ({ useSigner: () => ({ signer: signer.current }) }));
+const signer = vi.hoisted(() => ({
+  current: null as { identityId: string } | null,
+  stash: null as { kind: 'mnemonic'; identityId: string } | null,
+}));
+vi.mock('@/signer/SignerProvider', () => ({ useSigner: () => ({ signer: signer.current, stash: signer.stash }) }));
 
 const OWNER = '3sL6q6eVCR6y8Ld6Gr14cedhJWNBPmBp3S5VtRcckxzE';
 const HOLDER = 'DTFPLKMVbnkVQWEfkxHX7Ch62ytjvbtqH6eG1TF3nMbD';
@@ -90,12 +93,14 @@ describe('TokenBalanceLookup', () => {
     return { sdk: createMockSdk({ tokens }), tokens };
   }
 
-  it('defaults to the connected signer identity without modifying the signer', async () => {
-    signer.current = { identityId: HOLDER };
+  it('defaults to the last connected identity, which read pages keep only as the public reconnect hint', async () => {
+    // Read pages clear the live signer; the stash holds the kind and identity ID.
+    signer.current = null;
+    signer.stash = { kind: 'mnemonic', identityId: HOLDER };
     const { sdk, tokens } = sdkWith();
     renderWithProviders(<Url><TokenBalanceLookup tokenId={TOKEN} decimals={2} hasPerpetualDistribution /></Url>, { sdk: { sdk } });
     expect(await screen.findByText('12.34')).toBeVisible();
-    expect(screen.getByText("Showing the connected signer's identity.")).toBeVisible();
+    expect(screen.getByText('Showing the identity you last connected on /wallet in this tab.')).toBeVisible();
     expect(await screen.findByText('frozen')).toBeVisible();
     expect(await screen.findByText('block 4200')).toBeVisible();
     const calls = [...tokens.identityBalances.mock.calls, ...tokens.identityBalancesWithProof.mock.calls];
@@ -104,13 +109,14 @@ describe('TokenBalanceLookup', () => {
 
   it('looks up an entered identity, keeps it in the URL and skips the claim without perpetual distribution', async () => {
     signer.current = null;
+    signer.stash = null;
     const { sdk, tokens } = sdkWith();
     const onUrlUpdate = vi.fn();
     renderWithProviders(
       <Url onUrlUpdate={onUrlUpdate}><TokenBalanceLookup tokenId={TOKEN} decimals={0} hasPerpetualDistribution={false} /></Url>,
       { sdk: { sdk } },
     );
-    expect(screen.getByText(/connect a signer/)).toBeVisible();
+    expect(screen.getByText(/connect an identity on \/wallet/)).toBeVisible();
     fireEvent.change(screen.getByLabelText('Identity ID for balance lookup'), { target: { value: OWNER } });
     fireEvent.click(screen.getByRole('button', { name: 'Look up' }));
     expect(await screen.findByText('1,234')).toBeVisible();
