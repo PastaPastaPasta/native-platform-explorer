@@ -2,13 +2,16 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   DataContract,
   DataContractUpdateTransition,
+  Identity,
   IdentityPublicKey,
+  IdentitySigner,
   PlatformVersion,
   PrivateKey,
   wallet,
 } from '@dashevo/evo-sdk';
+import type { IdentityPublicKeyInCreation } from '@dashevo/evo-sdk';
 import { createMockSigner, createSigningMaterial } from '@/test/signer';
-import { executeContractUpdate } from '../executors';
+import { executeContractUpdate, executeIdentityUpdateKeys } from '../executors';
 
 // These tests use the real pinned WASM SDK. Only network reads and the final
 // SDK write call are replaced; the captured transition inputs are then signed
@@ -118,5 +121,74 @@ describe('executors with the real WASM SDK', () => {
       }),
     ).rejects.toMatchObject({ name: 'OperationNotSubmittedError' });
     expect(update).not.toHaveBeenCalled();
+  });
+
+  describe('identity key additions', () => {
+    const NEW_KEY_HEX = '0'.repeat(63) + '2';
+    async function run(network: 'mainnet' | 'testnet', keyType: 'ECDSA_SECP256K1' | 'ECDSA_HASH160') {
+      const newKey = await wallet.keyPairFromHex(NEW_KEY_HEX, 'testnet');
+      const newWif = newKey.privateKeyWif;
+      const newPublicKey = newKey.publicKey;
+      newKey.free();
+      const master = PrivateKey.fromHex(THROWAWAY_HEX, 'testnet');
+      const identitySigner = new IdentitySigner();
+      identitySigner.addKey(master);
+      master.free();
+      const release = vi.fn(() => identitySigner.free());
+      let signerKeysAtSubmit = 0;
+      const update = vi.fn(async (options: { addPublicKeys?: IdentityPublicKeyInCreation[] }) => {
+        signerKeysAtSubmit = identitySigner.keyCount;
+        return options;
+      });
+      const execution = executeIdentityUpdateKeys({
+        sdk: {
+          identities: { fetch: vi.fn().mockResolvedValue(new Identity(OWNER)), update },
+        } as never,
+        signer: createMockSigner({
+          identityId: OWNER,
+          prepareSdk: vi
+            .fn()
+            .mockResolvedValue(createSigningMaterial({ identityId: OWNER, identitySigner, release })),
+        }),
+        options: {
+          network,
+          addKeys: [
+            { purpose: 'AUTHENTICATION', securityLevel: 'HIGH', keyType, privateKeyWif: newWif },
+          ],
+        },
+      });
+      return { execution, update, newPublicKey, signerKeysAtSubmit: () => signerKeysAtSubmit, release };
+    }
+
+    it('derives new key data from its private key and lets the SDK sign with it', async () => {
+      const { execution, update, newPublicKey, signerKeysAtSubmit, release } = await run(
+        'testnet',
+        'ECDSA_SECP256K1',
+      );
+      await execution;
+      const added = update.mock.calls[0]![0].addPublicKeys!;
+      expect(added).toHaveLength(1);
+      expect(added[0]!.toJSON()).toMatchObject({ purpose: 0, securityLevel: 2, type: 0 });
+      expect(Buffer.from(added[0]!.data).toString('hex')).toBe(newPublicKey);
+      // Master key plus the new key: identityUpdate signs each new key with this signer.
+      expect(signerKeysAtSubmit()).toBe(2);
+      expect(release).toHaveBeenCalledOnce();
+    });
+
+    it('stores the public key hash for ECDSA_HASH160 keys', async () => {
+      const { execution, update } = await run('testnet', 'ECDSA_HASH160');
+      await execution;
+      const added = update.mock.calls[0]![0].addPublicKeys![0]!;
+      expect(added.data).toHaveLength(20);
+      expect(added.toJSON()).toMatchObject({ type: 2 });
+    });
+
+    it('rejects a private key for another network before submitting', async () => {
+      const { execution, update, release } = await run('mainnet', 'ECDSA_SECP256K1');
+      await expect(execution).rejects.toMatchObject({ name: 'OperationNotSubmittedError' });
+      await expect(execution).rejects.toThrow(/for testnet, not mainnet/);
+      expect(update).not.toHaveBeenCalled();
+      expect(release).toHaveBeenCalledOnce();
+    });
   });
 });

@@ -155,20 +155,6 @@ describe('JSON operation forms', () => {
     );
   });
 
-  it('clears key-add errors when valid JSON replaces invalid JSON', () => {
-    const options = props();
-    renderWithProviders(<IdentityUpdateKeysForm {...options} />);
-    const adds = screen.getByRole('textbox', { name: /Keys to add/ });
-    fireEvent.change(adds, { target: { value: '{}' } });
-    expect(screen.getByText('Add-keys must be a JSON array.')).toBeInTheDocument();
-    fireEvent.change(adds, { target: { value: '[{"keyId":5}]' } });
-    expect(screen.queryByText('Add-keys must be a JSON array.')).not.toBeInTheDocument();
-    expect(options.onOptionsChange).toHaveBeenLastCalledWith({
-      addPublicKeysJson: [{ keyId: 5 }],
-      disableKeyIds: undefined,
-    });
-  });
-
   it.each(['1,wrong', '-1', '1.5', '4294967296', '1e2'])(
     'rejects invalid disable-key IDs: %s',
     (input) => {

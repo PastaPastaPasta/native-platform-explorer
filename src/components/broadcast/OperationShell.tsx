@@ -54,6 +54,8 @@ export interface OperationDescriptor<TOptions, TResult> {
   destructive?: boolean;
   FormComponent: React.ComponentType<OperationFormProps<TOptions>>;
   summarise: (options: TOptions) => string;
+  /** What the review step shows for the inputs; use it to hide secrets. Defaults to the options. */
+  reviewData?: (options: TOptions) => unknown;
   execute: (args: {
     sdk: EvoSDK;
     signer: ExplorerSigner;
@@ -467,7 +469,9 @@ export function OperationShell<TOptions, TResult>({
               Identity: {review.identityId} · Network: {review.network} ·{' '}
               {review.trusted ? 'trusted quorum source' : 'proof verification'}
             </Text>
-            <CodeBlock value={review.options} />
+            <CodeBlock
+              value={review.descriptor.reviewData?.(review.options) ?? review.options}
+            />
             {descriptor.destructive ? (
               <InfoBlock>
                 <VStack align="stretch" spacing={2}>

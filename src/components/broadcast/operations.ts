@@ -18,7 +18,11 @@ import {
   IdentityCreditWithdrawalForm,
   type IdentityCreditWithdrawalOptions,
 } from './forms/IdentityCreditWithdrawal';
-import { IdentityUpdateKeysForm, type IdentityUpdateKeysOptions } from './forms/IdentityUpdateKeys';
+import {
+  IdentityUpdateKeysForm,
+  redactIdentityUpdateKeys,
+  type IdentityUpdateKeysOptions,
+} from './forms/IdentityUpdateKeys';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
 import { DpnsRegisterForm, type DpnsRegisterOptions } from './forms/DpnsRegister';
 import { VotingCastVoteForm, type VotingCastVoteOptions } from './forms/VotingCastVote';
@@ -280,11 +284,11 @@ export const OPERATIONS: OperationEntry[] = [
       destructive: true,
       FormComponent: IdentityUpdateKeysForm,
       summarise: (o) => {
-        const adds = (o.addPublicKeysJson?.length ?? 0) > 0 ? 'add keys' : '';
-        const disables =
-          (o.disableKeyIds?.length ?? 0) > 0 ? `disable ${o.disableKeyIds!.length} key(s)` : '';
+        const adds = o.addKeys?.length ? `add ${o.addKeys.length} key(s)` : '';
+        const disables = o.disableKeyIds?.length ? `disable ${o.disableKeyIds.length} key(s)` : '';
         return [adds, disables].filter(Boolean).join(', ') || 'no-op';
       },
+      reviewData: redactIdentityUpdateKeys,
       execute: executeIdentityUpdateKeys,
     },
   ),

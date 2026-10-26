@@ -9,6 +9,7 @@ import type {
   Identity,
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
+import { decodeWif } from '@/signer/local';
 import type { ExplorerSigner, KeySelectionCriteria, SdkSigningMaterial } from '@/signer/types';
 import {
   BroadcastOutcomeUnknownError,
@@ -27,7 +28,7 @@ import type { DocumentSetPriceOptions } from './forms/DocumentSetPrice';
 import type { DocumentPurchaseOptions } from './forms/DocumentPurchase';
 import type { IdentityCreditTransferOptions } from './forms/IdentityCreditTransfer';
 import type { IdentityCreditWithdrawalOptions } from './forms/IdentityCreditWithdrawal';
-import type { IdentityUpdateKeysOptions } from './forms/IdentityUpdateKeys';
+import type { IdentityUpdateKeysOptions, NewIdentityKey } from './forms/IdentityUpdateKeys';
 import type { IdentityTopUpOptions } from './forms/IdentityTopUp';
 import type { DpnsRegisterOptions } from './forms/DpnsRegister';
 import type { VotingCastVoteOptions } from './forms/VotingCastVote';
@@ -634,15 +635,9 @@ export async function executeIdentityUpdateKeys(args: {
     operationRequirement('identity.updateKeys').criteria,
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
-      const { IdentityPublicKeyInCreation } = await import('@dashevo/evo-sdk');
-      const addPublicKeys: IdentityPublicKeyInCreation[] | undefined =
-        options.addPublicKeysJson && options.addPublicKeysJson.length > 0
-          ? options.addPublicKeysJson.map((js) =>
-              IdentityPublicKeyInCreation.fromJSON(
-                js as unknown as Parameters<typeof IdentityPublicKeyInCreation.fromJSON>[0],
-              ),
-            )
-          : undefined;
+      const addPublicKeys = options.addKeys?.length
+        ? await newIdentityKeys(options.addKeys, options.network, material)
+        : undefined;
       await submit(
         () =>
           sdk.identities.update({
@@ -664,6 +659,60 @@ export async function executeIdentityUpdateKeys(args: {
       };
     },
   );
+}
+
+/**
+ * Build the keys to add and load their private keys into the update's signer:
+ * the SDK signs each new ECDSA_SECP256K1 key's proof of possession with the
+ * same signer as the master key (overwriting any supplied signature) and
+ * assigns key IDs itself.
+ */
+async function newIdentityKeys(
+  keys: NewIdentityKey[],
+  network: 'mainnet' | 'testnet',
+  material: SdkSigningMaterial,
+): Promise<IdentityPublicKeyInCreation[]> {
+  const { IdentityPublicKeyInCreation, PrivateKey } = await import('@dashevo/evo-sdk');
+  const created: IdentityPublicKeyInCreation[] = [];
+  for (const key of keys) {
+    const decoded = await decodeWif(key.privateKeyWif);
+    try {
+      if (decoded.network !== network)
+        throw new Error(`A new key's private key is for ${decoded.network}, not ${network}.`);
+      const privateKey = PrivateKey.fromBytes(decoded.bytes, decoded.network);
+      try {
+        const publicKey = privateKey.getPublicKey();
+        try {
+          created.push(
+            new IdentityPublicKeyInCreation({
+              keyId: 0,
+              purpose: lower(key.purpose),
+              securityLevel: lower(key.securityLevel),
+              keyType: lower(key.keyType),
+              data:
+                key.keyType === 'ECDSA_HASH160'
+                  ? hexToBytes(privateKey.getPublicKeyHash())
+                  : publicKey.toBytes(),
+            }),
+          );
+        } finally {
+          publicKey.free();
+        }
+        material.identitySigner.addKey(privateKey);
+      } finally {
+        privateKey.free();
+      }
+    } finally {
+      decoded.bytes.fill(0);
+    }
+  }
+  return created;
+}
+
+const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
+
+function hexToBytes(hex: string): Uint8Array {
+  return Uint8Array.from(hex.match(/.{2}/g) ?? [], (byte) => parseInt(byte, 16));
 }
 
 export async function executeIdentityTopUp(_args: {
