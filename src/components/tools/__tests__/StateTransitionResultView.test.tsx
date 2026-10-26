@@ -22,10 +22,12 @@ describe('state transition lookup', () => {
   it('shows a spinner with elapsed time while Platform has not answered', async () => {
     vi.useFakeTimers();
     renderWithProviders(<StateTransitionResultView query={{ ...base, isLoading: true, isFetching: true }} />);
-    expect(screen.getByRole('status')).toHaveTextContent('Waiting for Platform to report the result… 0 s');
+    // The live region holds only the static sentence, not the ticking counter.
+    expect(screen.getByRole('status')).toHaveTextContent(/^Waiting for Platform to report the result…$/);
+    expect(screen.getByText('0 s')).toBeInTheDocument();
     await act(async () => { vi.advanceTimersByTime(3_000); });
-    expect(screen.getByRole('status')).toHaveTextContent('3 s');
-    expect(screen.getByRole('status')).toHaveTextContent('Gives up after 60 s');
+    expect(screen.getByText('3 s')).toBeInTheDocument();
+    expect(screen.getByText(/Gives up after 60 s/)).toBeInTheDocument();
   });
 
   it('reports a timeout as "no result yet" with Retry', () => {

@@ -52,20 +52,15 @@ function statusScheme(summary: StateTransitionSummary): string {
 }
 
 function useElapsedSeconds(running: boolean): number {
-  const [startedAt, setStartedAt] = useState<number | null>(null);
-  const [now, setNow] = useState(0);
+  const [elapsed, setElapsed] = useState(0);
   useEffect(() => {
-    if (!running) {
-      setStartedAt(null);
-      return;
-    }
+    setElapsed(0);
+    if (!running) return;
     const start = Date.now();
-    setStartedAt(start);
-    setNow(start);
-    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    const timer = window.setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1_000)), 1_000);
     return () => window.clearInterval(timer);
   }, [running]);
-  return startedAt === null ? 0 : Math.max(0, Math.floor((now - startedAt) / 1_000));
+  return elapsed;
 }
 
 type ResultQuery = Pick<UseQueryResult<unknown, Error>, 'data' | 'error' | 'isError' | 'isFetching' | 'isLoading' | 'refetch'>;
@@ -73,16 +68,21 @@ type ResultQuery = Pick<UseQueryResult<unknown, Error>, 'data' | 'error' | 'isEr
 /** Waiting state, timeout and structured result for a state transition lookup. */
 export function StateTransitionResultView({ query }: { query: ResultQuery }) {
   const raw = useDisclosure();
+  const refetch = () => { void query.refetch(); };
   const waiting = query.isLoading || (query.isFetching && query.data === undefined);
   const elapsed = useElapsedSeconds(waiting);
 
   if (waiting) {
     return (
       <InfoBlock>
-        <HStack spacing={3} role="status" aria-live="polite">
+        <HStack spacing={3}>
           <Spinner size="sm" color="accent" />
           <VStack align="start" spacing={0}>
-            <Text fontSize="sm">Waiting for Platform to report the result… {elapsed} s</Text>
+            {/* Only the static sentence is announced; the counter updates every second. */}
+            <Text fontSize="sm">
+              <span role="status">Waiting for Platform to report the result…</span>{' '}
+              <span aria-hidden>{elapsed} s</span>
+            </Text>
             <Text fontSize="xs" color="muted">
               Gives up after {STATE_TRANSITION_WAIT_MS / 1000} s. A transition that is still pending,
               was never broadcast, or executed long ago may not return a result.
@@ -99,7 +99,7 @@ export function StateTransitionResultView({ query }: { query: ResultQuery }) {
       <ErrorCard
         title={timedOut ? 'No result yet' : 'Lookup failed'}
         error={query.error}
-        onRetry={() => { void query.refetch(); }}
+        onRetry={refetch}
       />
     );
   }
@@ -109,7 +109,7 @@ export function StateTransitionResultView({ query }: { query: ResultQuery }) {
       <InfoBlock>
         <VStack align="start" spacing={2}>
           <Text fontSize="sm">Platform returned no result for this hash yet.</Text>
-          <Button size="sm" variant="outline" onClick={() => { void query.refetch(); }}>Retry</Button>
+          <Button size="sm" variant="outline" onClick={refetch}>Retry</Button>
         </VStack>
       </InfoBlock>
     );
@@ -131,7 +131,7 @@ export function StateTransitionResultView({ query }: { query: ResultQuery }) {
           <InfoLine label="Reported hash" value={<Text fontFamily="mono" fontSize="xs" wordBreak="break-all">{summary.hash}</Text>} />
         ) : null}
         <HStack spacing={2}>
-          <Button size="sm" variant="outline" onClick={() => { void query.refetch(); }} isLoading={query.isFetching}>
+          <Button size="sm" variant="outline" onClick={refetch} isLoading={query.isFetching}>
             Refresh
           </Button>
           <Button size="sm" variant="ghost" onClick={raw.onToggle} aria-expanded={raw.isOpen}>

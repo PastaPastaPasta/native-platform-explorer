@@ -21,29 +21,19 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import { Alias } from '@components/data/Alias';
+import { DpnsNameLink } from '@components/data/DpnsNameLink';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { CursorPagination } from '@components/pagination/CursorPagination';
 import { DpnsDirectoryPanel } from '@components/identity/DpnsDirectoryPanel';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { usePageTitle } from '@hooks/usePageTitle';
-import { usePrefetchProps } from '@hooks/usePrefetch';
 import { useDpnsPrefixSearch } from '@sdk/queries';
 import { useSdk } from '@sdk/hooks';
-import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
+import { dpnsContractId } from '@constants/system-data-contracts';
 import { convertToHomographSafeChars, dpnsDomainRows } from '@util/dpns';
-import { cursorStackParser, sanitizeCursorStack } from '@util/url-state';
+import { cursorStackParser, MAX_CURSOR_PAGES } from '@util/url-state';
 
 const LIMIT = 25;
-
-function NameLink({ fqdn, normalizedFqdn }: { fqdn: string; normalizedFqdn: string }) {
-  const prefetch = usePrefetchProps({ kind: 'dpns', name: normalizedFqdn });
-  return (
-    <span {...prefetch}>
-      <Alias name={fqdn} href={`/dpns/?name=${encodeURIComponent(normalizedFqdn)}`} />
-    </span>
-  );
-}
 
 function Content() {
   // The prefix and the page cursors live in the URL (?q=…&after=id1,id2), so
@@ -53,14 +43,13 @@ function Content() {
     { history: 'push' },
   );
   const q = url.q.trim();
-  const cursors = sanitizeCursorStack(url.after);
+  const cursors = url.after;
   const [input, setInput] = useState(q);
   useEffect(() => setInput(q), [q]);
   const startAfter = cursors[cursors.length - 1];
 
   const { network } = useSdk();
-  const dpns = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns');
-  const contractId = network === 'mainnet' ? dpns?.mainnetId : dpns?.testnetId;
+  const contractId = dpnsContractId(network);
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -75,7 +64,7 @@ function Content() {
 
   const searchQ = useDpnsPrefixSearch(
     q ? normalizedPrefix : undefined,
-    contractId ?? undefined,
+    contractId,
     LIMIT,
     startAfter,
   );
@@ -159,7 +148,7 @@ function Content() {
                   {rows.map((row) => (
                     <Tr key={row.docId ?? row.fqdn} _hover={{ bg: 'gray.800' }}>
                       <Td borderColor="gray.750">
-                        <NameLink fqdn={row.fqdn} normalizedFqdn={row.normalizedFqdn} />
+                        <DpnsNameLink fqdn={row.fqdn} normalizedFqdn={row.normalizedFqdn} />
                       </Td>
                       <Td borderColor="gray.750">
                         {row.ownerId ? <IdentityLink id={row.ownerId} dense /> : '—'}
@@ -174,7 +163,7 @@ function Content() {
               <CursorPagination
                 pageIndex={cursors.length}
                 hasPrev={cursors.length > 0}
-                hasNext={rows.length === LIMIT}
+                hasNext={rows.length === LIMIT && cursors.length < MAX_CURSOR_PAGES}
                 onPrev={() => void setUrl({ after: cursors.length > 1 ? cursors.slice(0, -1) : null })}
                 onNext={() => {
                   const lastId = rows[rows.length - 1]?.docId;

@@ -6,24 +6,20 @@ import { Button, Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import { Alias } from '@components/data/Alias';
+import { DpnsNameLink } from '@components/data/DpnsNameLink';
 import { IdentityLink } from '@components/data/IdentityLink';
-import { usePrefetchProps } from '@hooks/usePrefetch';
 import { useSdk } from '@sdk/hooks';
 import { useDpnsPrefixSearch } from '@sdk/queries';
-import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
+import { dpnsContractId } from '@constants/system-data-contracts';
 import { convertToHomographSafeChars, dpnsDomainRows, type DpnsDomainRow } from '@util/dpns';
 import { withNetwork } from '@util/exploration';
 
 export const INLINE_PREFIX_LIMIT = 10;
 
 function NameRow({ row }: { row: DpnsDomainRow }) {
-  const prefetch = usePrefetchProps({ kind: 'dpns', name: row.normalizedFqdn });
   return (
     <HStack spacing={3} flexWrap="wrap" py={1}>
-      <span {...prefetch}>
-        <Alias name={row.fqdn} href={`/dpns/?name=${encodeURIComponent(row.normalizedFqdn)}`} />
-      </span>
+      <DpnsNameLink fqdn={row.fqdn} normalizedFqdn={row.normalizedFqdn} />
       {row.ownerId ? <IdentityLink id={row.ownerId} dense showAlias={false} /> : null}
     </HStack>
   );
@@ -34,8 +30,7 @@ function NameRow({ row }: { row: DpnsDomainRow }) {
  *  `dpns.usernames` only lists one identity's names). */
 export function DpnsPrefixResults({ prefix }: { prefix: string }) {
   const { network } = useSdk();
-  const dpns = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns');
-  const contractId = (network === 'mainnet' ? dpns?.mainnetId : dpns?.testnetId) ?? undefined;
+  const contractId = dpnsContractId(network);
   const normalized = useMemo(() => convertToHomographSafeChars(prefix), [prefix]);
   const q = useDpnsPrefixSearch(normalized, contractId, INLINE_PREFIX_LIMIT);
   const rows = useMemo(() => dpnsDomainRows(q.data), [q.data]);

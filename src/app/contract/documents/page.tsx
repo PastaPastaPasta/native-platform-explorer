@@ -124,7 +124,7 @@ function Content() {
   const rows = useMemo(() => extractRows(docsQ.data), [docsQ.data]);
 
   if (!id || !type) {
-    return <DocumentsLanding initialContractId={id} />;
+    return <DocumentsLanding key={id} initialContractId={id} />;
   }
 
   // Any change to the query invalidates the cursor stack: a document ID is

@@ -1,4 +1,4 @@
-import { createParser, parseAsArrayOf, parseAsStringLiteral } from 'nuqs';
+import { createParser, parseAsStringLiteral } from 'nuqs';
 import { isEpochIndex } from '@sdk/epoch-queries';
 import { isBase58Identifier } from './identifier';
 
@@ -52,20 +52,18 @@ export type PollWindow = (typeof POLL_WINDOWS)[number];
 export const pollWindowParser = parseAsStringLiteral(POLL_WINDOWS);
 
 /** Cursor stack for `startAfter` paging: the document ID after which each
- *  page past the first starts. Its length is the 0-based page index. */
+ *  page past the first starts, so its length is the 0-based page index.
+ *  One invalid cursor, or an implausibly deep stack, drops the whole stack:
+ *  skipping a single cursor would silently shift every later page. */
 export const MAX_CURSOR_PAGES = 100;
-export const cursorStackParser = parseAsArrayOf(
-  createParser({
-    parse: (value: string) => (isBase58Identifier(value) ? value : null),
-    serialize: (value: string) => value,
-  }),
-).withDefault([]);
-
-/** Parse a cursor-stack param, dropping it entirely when any cursor is invalid
- *  or the stack is implausibly deep. */
-export function sanitizeCursorStack(stack: readonly string[]): string[] {
-  return stack.length > MAX_CURSOR_PAGES ? [] : [...stack];
-}
+export const cursorStackParser = createParser({
+  parse: (value: string) => {
+    const cursors = value.split(',');
+    return cursors.length <= MAX_CURSOR_PAGES && cursors.every(isBase58Identifier) ? cursors : null;
+  },
+  serialize: (value: string[]) => value.join(','),
+  eq: (a: string[], b: string[]) => a.length === b.length && a.every((cursor, i) => cursor === b[i]),
+}).withDefault([]);
 
 export const SAVED_SCOPES = ['current', 'all'] as const;
 export const SAVED_KINDS = ['all', 'identity', 'contract', 'token'] as const;

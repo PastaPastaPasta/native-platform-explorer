@@ -6,7 +6,6 @@ import {
   Box,
   Button,
   FormControl,
-  FormErrorMessage,
   FormLabel,
   HStack,
   Input,
@@ -20,11 +19,6 @@ import { useWellKnownRegistry } from '@hooks/useWellKnownRegistry';
 import type { WellKnownKind } from '@constants/well-known';
 import type { WellKnownSource } from '@util/well-known-registry';
 
-const SOURCE_LABEL: Record<WellKnownSource, string> = {
-  bundled: 'bundled',
-  remote: 'remote',
-  local: 'local',
-};
 const SOURCE_SCHEME: Record<WellKnownSource, string> = {
   bundled: 'gray',
   remote: 'purple',
@@ -66,6 +60,15 @@ export function WellKnownRegistrySettings() {
   const [tags, setTags] = useState('');
   const [scope, setScope] = useState<'current' | 'all'>('current');
   const [error, setError] = useState<string | null>(null);
+  // Local entries are listed from storage, not from the merged list, so one
+  // that a bundled or remote entry now shadows can still be seen and removed.
+  const shared = registry.allEntries.filter((entry) => entry.source !== 'local');
+  const shadowedBy = (entry: { id: string; network?: string }) => shared.find((other) => other.id === entry.id
+    && (!other.network || !entry.network || other.network === entry.network));
+  const rows = [
+    ...shared.map((entry) => ({ entry, shadow: undefined })),
+    ...registry.local.map((entry) => ({ entry: { ...entry, source: 'local' as const }, shadow: shadowedBy(entry) })),
+  ];
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -91,7 +94,7 @@ export function WellKnownRegistrySettings() {
       <RemoteStatus />
       <Box as="form" onSubmit={submit} aria-label="Add a local well-known entry">
         <SimpleGrid columns={{ base: 1, md: 5 }} spacing={3} alignItems="end">
-          <FormControl isInvalid={!!error}>
+          <FormControl>
             <FormLabel fontSize="xs">Identifier</FormLabel>
             <Input size="sm" fontFamily="mono" value={id} onChange={(e) => setId(e.target.value)} placeholder="base58 ID" />
           </FormControl>
@@ -120,9 +123,7 @@ export function WellKnownRegistrySettings() {
           </FormControl>
         </SimpleGrid>
         {error ? (
-          <FormControl isInvalid>
-            <FormErrorMessage fontSize="xs">{error}</FormErrorMessage>
-          </FormControl>
+          <Text role="alert" mt={2} fontSize="xs" color="failed">{error}</Text>
         ) : null}
         <HStack mt={3}>
           <Button size="sm" variant="outline" type="submit" isDisabled={!id.trim() || !name.trim()}>
@@ -133,15 +134,18 @@ export function WellKnownRegistrySettings() {
       </Box>
 
       <VStack align="stretch" spacing={0} divider={<Box h="1px" bg="hairline" />}>
-        {registry.allEntries.map((entry) => (
+        {rows.map(({ entry, shadow }) => (
           <HStack key={`${entry.source}:${entry.network ?? '*'}:${entry.id}`} py={2} spacing={3} flexWrap="wrap" justify="space-between">
             <VStack align="start" spacing={1} minW={0}>
               <HStack spacing={2} flexWrap="wrap">
                 <Text fontSize="sm" color="ink">{entry.name}</Text>
                 <Badge variant="subtle">{entry.kind}</Badge>
-                <Badge variant="subtle" colorScheme={SOURCE_SCHEME[entry.source]}>{SOURCE_LABEL[entry.source]}</Badge>
+                <Badge variant="subtle" colorScheme={SOURCE_SCHEME[entry.source]}>{entry.source}</Badge>
                 <Text fontSize="xs" color="muted">{entry.network ?? 'every network'}</Text>
                 {entry.tags?.length ? <Text fontSize="xs" color="muted">#{entry.tags.join(' #')}</Text> : null}
+                {shadow ? (
+                  <Text fontSize="xs" color="warning">not used: the {shadow.source} entry &ldquo;{shadow.name}&rdquo; names this ID</Text>
+                ) : null}
               </HStack>
               <Identifier value={entry.id} dense copy={false} />
             </VStack>

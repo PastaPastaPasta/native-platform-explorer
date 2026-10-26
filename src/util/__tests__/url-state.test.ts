@@ -7,7 +7,6 @@ import {
   pageParser,
   pollWindowParser,
   resolveEpochRange,
-  sanitizeCursorStack,
   savedKindParser,
   savedScopeParser,
 } from '../url-state';
@@ -46,10 +45,11 @@ describe('URL state parsers', () => {
     expect(savedKindParser.parse('token')).toBe('token');
   });
 
-  it('keeps only identifier cursors and drops implausibly deep stacks', () => {
+  it('drops the whole cursor stack when any cursor is invalid or it is implausibly deep', () => {
     expect(cursorStackParser.parse(`${id},${id}`)).toEqual([id, id]);
     expect(cursorStackParser.serialize([id, id])).toBe(`${id},${id}`);
-    expect(sanitizeCursorStack(Array(MAX_CURSOR_PAGES + 1).fill(id))).toEqual([]);
-    expect(sanitizeCursorStack([id])).toEqual([id]);
+    expect(cursorStackParser.parse(`${id},bogus,${id}`)).toBeNull();
+    expect(cursorStackParser.parse(Array(MAX_CURSOR_PAGES + 1).fill(id).join(','))).toBeNull();
+    expect(cursorStackParser.parse(Array(MAX_CURSOR_PAGES).fill(id).join(','))).toHaveLength(MAX_CURSOR_PAGES);
   });
 });

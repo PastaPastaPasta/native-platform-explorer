@@ -91,6 +91,15 @@ describe('remote registry loading', () => {
     expect(fetchImpl.mock.calls[0]![1]).toMatchObject({ credentials: 'omit' });
   });
 
+  it('resolves a relative URL against the app root, not the current page', async () => {
+    vi.stubEnv('NEXT_PUBLIC_BASE_PATH', '/native-platform-explorer');
+    window.history.replaceState(null, '', '/native-platform-explorer/identity/?id=x');
+    const fetchImpl = vi.fn().mockResolvedValue(response(JSON.stringify({ version: 1, entries: [] })));
+    await fetchRemoteRegistry('well-known.json', fetchImpl);
+    expect(fetchImpl.mock.calls[0]![0]).toBe(`${window.location.origin}/native-platform-explorer/well-known.json`);
+    vi.unstubAllEnvs();
+  });
+
   it('fails safe on HTTP errors, oversize bodies, bad JSON, plain HTTP and timeouts', async () => {
     await expect(fetchRemoteRegistry('https://r.example/a', vi.fn().mockResolvedValue(response('', { status: 404 })))).rejects.toThrow(/HTTP 404/);
     await expect(fetchRemoteRegistry('https://r.example/a', vi.fn().mockResolvedValue(response('{}', { headers: { 'content-length': String(MAX_REMOTE_BYTES + 1) } })))).rejects.toThrow(/larger than/);

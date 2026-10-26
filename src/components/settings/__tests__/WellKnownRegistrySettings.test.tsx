@@ -43,6 +43,16 @@ describe('well-known registry settings', () => {
     expect(window.localStorage.getItem(LOCAL_REGISTRY_KEY)).toBeNull();
   });
 
+  it('keeps a local entry that a bundled entry shadows visible and removable', () => {
+    window.localStorage.setItem(LOCAL_REGISTRY_KEY, JSON.stringify([
+      { id: 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec', kind: 'contract', name: 'My DPNS', network: 'testnet' },
+    ]));
+    renderWithProviders(<WellKnownRegistrySettings />);
+    expect(screen.getByText(/not used: the bundled entry “DPNS” names this ID/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Remove local entry My DPNS' }));
+    expect(window.localStorage.getItem(LOCAL_REGISTRY_KEY)).toBeNull();
+  });
+
   it('explains why an entry was refused', () => {
     renderWithProviders(<WellKnownRegistrySettings />);
     fireEvent.change(screen.getByLabelText('Identifier'), { target: { value: 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec' } });

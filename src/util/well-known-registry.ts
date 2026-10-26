@@ -121,7 +121,12 @@ export async function fetchRemoteRegistry(
 ): Promise<WellKnown[]> {
   let resolved: URL;
   try {
-    resolved = new URL(url, typeof window === 'undefined' ? undefined : window.location.href);
+    // A relative URL is relative to the app root (deployment base path), not
+    // to whichever page happened to load first.
+    const appRoot = typeof window === 'undefined'
+      ? undefined
+      : `${window.location.origin}${(process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/+$/, '')}/`;
+    resolved = new URL(url, appRoot);
   } catch {
     throw new RegistryError('NEXT_PUBLIC_WELL_KNOWN_URL is not a valid URL.');
   }
@@ -139,11 +144,10 @@ export async function fetchRemoteRegistry(
     });
     if (!response.ok) throw new RegistryError(`The registry request failed with HTTP ${response.status}.`);
     const length = Number(response.headers.get('content-length') ?? 0);
-    if (length > MAX_REMOTE_BYTES) throw new RegistryError(`The registry is larger than ${MAX_REMOTE_BYTES / 1024} KiB.`);
+    const tooLarge = new RegistryError(`The registry is larger than ${MAX_REMOTE_BYTES / 1024} KiB.`);
+    if (length > MAX_REMOTE_BYTES) throw tooLarge;
     const body = await response.text();
-    if (new TextEncoder().encode(body).length > MAX_REMOTE_BYTES) {
-      throw new RegistryError(`The registry is larger than ${MAX_REMOTE_BYTES / 1024} KiB.`);
-    }
+    if (new TextEncoder().encode(body).length > MAX_REMOTE_BYTES) throw tooLarge;
     let json: unknown;
     try { json = JSON.parse(body); } catch { throw new RegistryError('The registry is not valid JSON.'); }
     return parseRegistryDocument(json);

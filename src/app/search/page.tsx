@@ -110,9 +110,9 @@ function useResolveCandidates(candidates: SearchCandidate[]): {
     { value: identity?.id, query: identityQ, kind: 'Identity', path: '/identity/', param: 'id', prefetch: identity && { kind: 'identity' as const, id: identity.id } },
     { value: contract?.id, query: contractQ, kind: 'Contract', path: '/contract/', param: 'id', prefetch: contract && { kind: 'contract' as const, id: contract.id } },
     { value: token?.id, query: tokenQ, kind: 'Token', path: '/token/', param: 'id', prefetch: token && { kind: 'token' as const, id: token.id } },
-    { value: address?.addr, query: addressQ, kind: 'Address', path: '/address/', param: 'addr', prefetch: undefined },
-    { value: pkh?.pkh, query: pkhQ, kind: 'Identity by public-key hash', path: '/identity/lookup/', param: 'pkh', prefetch: undefined },
-    { value: nonUniquePkh, query: nonUniqueQ, kind: 'Identities by non-unique public-key hash', path: '/identity/lookup/', param: 'pkh', prefetch: undefined },
+    { value: address?.addr, query: addressQ, kind: 'Address', path: '/address/', param: 'addr' },
+    { value: pkh?.pkh, query: pkhQ, kind: 'Identity by public-key hash', path: '/identity/lookup/', param: 'pkh' },
+    { value: nonUniquePkh, query: nonUniqueQ, kind: 'Identities by non-unique public-key hash', path: '/identity/lookup/', param: 'pkh' },
     { value: dpns?.name, query: dpnsQ, kind: 'DPNS', path: '/dpns/', param: 'name', prefetch: dpns && { kind: 'dpns' as const, name: dpns.name } },
   ].filter((lookup) => lookup.value !== undefined);
   const matches: ResolvedMatch[] = lookups
@@ -186,6 +186,7 @@ function SearchContent() {
   const { matches, loading, complete, failures, retry, requiresLookup } = useResolveCandidates(classification.candidates);
   const unavailable = requiresLookup && status === 'error';
   const prefix = findByKind(classification.candidates, 'dpnsPrefix');
+  const looksLikeNameOnly = classification.candidates.every((c) => c.kind === 'dpnsName' || c.kind === 'dpnsPrefix' || c.kind === 'epoch');
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -271,7 +272,17 @@ function SearchContent() {
             </VStack>
           </InfoBlock>
         ) : null}
-        {prefix && !unavailable ? <DpnsPrefixResults prefix={prefix.prefix} /> : null}
+        {prefix && !unavailable ? (
+          // An ID or hash also passes the DPNS label check; list names inline
+          // only when the query reads as a name.
+          looksLikeNameOnly ? (
+            <DpnsPrefixResults prefix={prefix.prefix} />
+          ) : (
+            <Button as={NextLink} href={withNetwork(`/dpns/search/?q=${encodeURIComponent(prefix.prefix)}`, network)} alignSelf="start" variant="outline">
+              Find DPNS names with this prefix
+            </Button>
+          )
+        ) : null}
       </VStack>
     </Container>
   );

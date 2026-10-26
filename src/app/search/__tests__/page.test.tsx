@@ -148,4 +148,13 @@ describe('search resolution states', () => {
     expect(screen.getByRole('link', { name: 'Alice.dash' }).getAttribute('href')).toMatch(/\/dpns\/?\?name=a11ce\.dash/);
     expect(screen.getByRole('link', { name: 'All results →' }).getAttribute('href')).toMatch(/\/dpns\/search\/?\?q=Alic&network=testnet/);
   });
+
+  it('keeps the DPNS prefix query off identifier searches', () => {
+    state.q = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
+    state.prefixArgs = [];
+    render(<SearchPage />);
+    expect(screen.queryByRole('heading', { name: /DPNS names starting with/ })).not.toBeInTheDocument();
+    expect(state.prefixArgs).toEqual([]);
+    expect(screen.getByRole('link', { name: 'Find DPNS names with this prefix' })).toBeInTheDocument();
+  });
 });

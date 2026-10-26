@@ -410,6 +410,9 @@ export function useContractsPreview(ids: string[], enabled = true) {
           const one = await sdk.contracts.getMany([id]);
           out.set(id, one.get(id) ?? null);
         } catch (error) {
+          assertActive();
+          // An outage is not a per-contract result; fail the query so it retries.
+          if (isAllEndpointsFailure(error)) throw error;
           out.set(id, normalizeError(error));
         }
         assertActive();
@@ -610,15 +613,31 @@ export class StateTransitionWaitTimeout extends Error {
   override name = 'StateTransitionWaitTimeout';
 }
 
+// The SDK cannot abort a wait, so a timed-out wait keeps running. A retry
+// races a fresh timer against the wait already in flight instead of opening
+// another one per attempt.
+const stateTransitionWaits = new WeakMap<EvoSDK, Map<string, Promise<unknown>>>();
+
+function waitForStateTransition(sdk: EvoSDK, hash: string): Promise<unknown> {
+  let waits = stateTransitionWaits.get(sdk);
+  if (!waits) stateTransitionWaits.set(sdk, (waits = new Map()));
+  let wait = waits.get(hash);
+  if (!wait) {
+    wait = sdk.stateTransitions.waitForStateTransitionResult(hash).finally(() => waits.delete(hash));
+    waits.set(hash, wait);
+  }
+  return new Promise<unknown>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new StateTransitionWaitTimeout(
+      `Platform reported no result within ${STATE_TRANSITION_WAIT_MS / 1000} s.`,
+    )), STATE_TRANSITION_WAIT_MS);
+    wait.then(resolve, reject).finally(() => clearTimeout(timer));
+  });
+}
+
 export function useStateTransitionResult(hash: string | undefined) {
   return useSdkQuery(
     ['stateTransitions', 'waitForStateTransitionResult', hash],
-    (sdk) => new Promise<unknown>((resolve, reject) => {
-      const timer = setTimeout(() => reject(new StateTransitionWaitTimeout(
-        `Platform reported no result within ${STATE_TRANSITION_WAIT_MS / 1000} s.`,
-      )), STATE_TRANSITION_WAIT_MS);
-      sdk.stateTransitions.waitForStateTransitionResult(hash!).then(resolve, reject).finally(() => clearTimeout(timer));
-    }),
+    (sdk) => waitForStateTransition(sdk, hash!),
     // Each attempt can take the full wait; the page offers Retry instead.
     { enabled: !!hash, staleTime: LIVE, retry: false, hasProofVariant: false, methodName: 'stateTransitions.waitForResult', methodParams: { hash } },
   );
