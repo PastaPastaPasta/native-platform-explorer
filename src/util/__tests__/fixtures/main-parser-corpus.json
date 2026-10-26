@@ -1,0 +1,504 @@
+[
+  {
+    "sql": "SELECT * FROM domain WHERE normalizedParentDomainName == 'dash' ORDER BY normalizedLabel ASC LIMIT 25",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "normalizedParentDomainName",
+            "==",
+            "dash"
+          ]
+        ],
+        "orderBy": [
+          [
+            "normalizedLabel",
+            "asc"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE normalizedParentDomainName == 'dash' AND normalizedLabel startsWith 'a' ORDER BY normalizedLabel ASC LIMIT 25",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "normalizedParentDomainName",
+            "==",
+            "dash"
+          ],
+          [
+            "normalizedLabel",
+            "startsWith",
+            "a"
+          ]
+        ],
+        "orderBy": [
+          [
+            "normalizedLabel",
+            "asc"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM profile LIMIT 25",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "profile",
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM rewardShare LIMIT 25",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "rewardShare",
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT COUNT(*) FROM grade",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT AVG(score) FROM grade",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT COUNT(*) FROM grade WHERE class IN ('CS101','CS202','MATH150','MATH250','PHYS200','BIO110','ENG101') GROUP BY class",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade",
+        "where": [
+          [
+            "class",
+            "in",
+            [
+              "CS101",
+              "CS202",
+              "MATH150",
+              "MATH250",
+              "PHYS200",
+              "BIO110",
+              "ENG101"
+            ]
+          ]
+        ],
+        "groupBy": [
+          "class"
+        ]
+      }
+    ]
+  },
+  {
+    "sql": "SELECT AVG(score) FROM grade WHERE class IN ('CS101','CS202','MATH150','MATH250','PHYS200','BIO110','ENG101') GROUP BY class",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade",
+        "where": [
+          [
+            "class",
+            "in",
+            [
+              "CS101",
+              "CS202",
+              "MATH150",
+              "MATH250",
+              "PHYS200",
+              "BIO110",
+              "ENG101"
+            ]
+          ]
+        ],
+        "groupBy": [
+          "class"
+        ]
+      }
+    ]
+  },
+  {
+    "sql": "SELECT AVG(score) FROM grade WHERE class == 'CS101' AND semester BETWEEN 20251 AND 20253",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade",
+        "where": [
+          [
+            "class",
+            "==",
+            "CS101"
+          ],
+          [
+            "semester",
+            "Between",
+            [
+              20251,
+              20253
+            ]
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "sql": "SELECT AVG(score) FROM grade WHERE class == 'CS101' AND semester BETWEEN 20241 AND 20262 GROUP BY semester ORDER BY semester ASC",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade",
+        "where": [
+          [
+            "class",
+            "==",
+            "CS101"
+          ],
+          [
+            "semester",
+            "Between",
+            [
+              20241,
+              20262
+            ]
+          ]
+        ],
+        "orderBy": [
+          [
+            "semester",
+            "asc"
+          ]
+        ],
+        "groupBy": [
+          "semester"
+        ]
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE $ownerId == GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "$ownerId",
+            "==",
+            "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE $ownerId = GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec LIMIT 10",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "$ownerId",
+            "==",
+            "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec"
+          ]
+        ],
+        "limit": 10
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE x IN (abc, def) ORDER BY x",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "x",
+            "in",
+            [
+              "abc",
+              "def"
+            ]
+          ]
+        ],
+        "orderBy": [
+          [
+            "x",
+            "asc"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE normalizedParentDomainName = dash AND normalizedLabel STARTS WITH al ORDER BY normalizedLabel",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "normalizedParentDomainName",
+            "==",
+            "dash"
+          ],
+          [
+            "normalizedLabel",
+            "startsWith",
+            "al"
+          ]
+        ],
+        "orderBy": [
+          [
+            "normalizedLabel",
+            "asc"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE records.identity == GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "records.identity",
+            "==",
+            "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE like = 1",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "like",
+            "==",
+            1
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM domain WHERE like == 'x' ORDER BY like DESC",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "like",
+            "==",
+            "x"
+          ]
+        ],
+        "orderBy": [
+          [
+            "like",
+            "desc"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM t WHERE x = 1.",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "t",
+        "where": [
+          [
+            "x",
+            "==",
+            1
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM t WHERE x = 1.5 LIMIT 10.",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "t",
+        "where": [
+          [
+            "x",
+            "==",
+            1.5
+          ]
+        ],
+        "limit": 10
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM t WHERE x = -1",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "t",
+        "where": [
+          [
+            "x",
+            "==",
+            -1
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM t WHERE x BETWEEN -5 AND -1",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "t",
+        "where": [
+          [
+            "x",
+            "Between",
+            [
+              -5,
+              -1
+            ]
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM t WHERE x = `abc`",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "t",
+        "where": [
+          [
+            "x",
+            "==",
+            "abc"
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM t WHERE `x` = true AND y = false AND z = null",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "t",
+        "where": [
+          [
+            "x",
+            "==",
+            true
+          ],
+          [
+            "y",
+            "==",
+            false
+          ],
+          [
+            "z",
+            "==",
+            null
+          ]
+        ],
+        "limit": 25
+      }
+    ]
+  },
+  {
+    "sql": "SELECT * FROM dpns.domain WHERE normalizedParentDomainName = 'dash'; SELECT COUNT(*) FROM grade;",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "domain",
+        "where": [
+          [
+            "normalizedParentDomainName",
+            "==",
+            "dash"
+          ]
+        ],
+        "limit": 25
+      },
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade"
+      }
+    ]
+  },
+  {
+    "sql": "SELECT SUM(score) FROM grade WHERE class == 'CS101' GROUP BY class, semester LIMIT 5",
+    "params": [
+      {
+        "dataContractId": "GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec",
+        "documentTypeName": "grade",
+        "where": [
+          [
+            "class",
+            "==",
+            "CS101"
+          ]
+        ],
+        "limit": 5,
+        "groupBy": [
+          "class",
+          "semester"
+        ]
+      }
+    ]
+  }
+]

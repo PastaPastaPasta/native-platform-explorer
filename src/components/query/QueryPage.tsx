@@ -8,7 +8,7 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useSdk } from '@sdk/hooks';
-import { parseSqlMulti, type ParsedQuery } from '@util/sql-parser';
+import { parseSqlMulti, type ParsedQuery, type ParseHint } from '@util/sql-parser';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { SqlEditor } from './SqlEditor';
 import { ContractPicker } from './ContractPicker';
@@ -44,6 +44,7 @@ export function QueryPage() {
   const [sqlText, setSqlText] = useState(params.get('q') ?? '');
   const [run, setRun] = useState<QueryRun | null>(null);
   const [parseError, setParseError] = useState<{ message: string; position: number } | null>(null);
+  const [parseHints, setParseHints] = useState<ParseHint[]>([]);
   const [notice, setNotice] = useState('');
   const initialQueryPending = useRef(!!params.get('q'));
   // Links record the sender's trust setting so a recipient can tell whether
@@ -64,6 +65,7 @@ export function QueryPage() {
       initialQueryPending.current = false;
       const parsed = parseSqlMulti(sql);
       setParseError(parsed.ok ? null : parsed);
+      setParseHints(parsed.ok ? parsed.hints : []);
       setRun(null);
       if (!parsed.ok) return;
       if (status !== 'ready' || !sdk) {
@@ -131,6 +133,7 @@ export function QueryPage() {
     initialQueryPending.current = false;
     setSqlText(sql);
     setParseError(null);
+    setParseHints([]);
   }, []);
 
   return (
@@ -167,6 +170,7 @@ export function QueryPage() {
               onChange={editSql}
               onRun={() => startRun(sqlText, pickerContractId)}
               parseError={parseError}
+              parseHints={parseHints}
               isLoading={isRunning}
               isDisabled={status !== 'ready'}
               onCancel={() => {

@@ -30,12 +30,18 @@ export interface ParsedCondition {
   value: unknown;
 }
 
+/** A non-blocking note about how part of the SQL was read. */
+export interface ParseHint {
+  message: string;
+  position: number;
+}
+
 export type ParseResult =
-  | { ok: true; query: ParsedQuery }
+  | { ok: true; query: ParsedQuery; hints: ParseHint[] }
   | { ok: false; message: string; position: number };
 
 export type MultiParseResult =
-  | { ok: true; queries: ParsedQuery[] }
+  | { ok: true; queries: ParsedQuery[]; hints: ParseHint[] }
   | { ok: false; message: string; position: number };
 
 // ── Tokenizer ──────────────────────────────────────────────────────────
@@ -86,7 +92,6 @@ const KEYWORDS = new Set([
   'COUNT',
   'SUM',
   'AVG',
-  'LIKE',
   'NOT',
   'NULL',
   'TRUE',
@@ -107,7 +112,8 @@ function tokenize(sql: string): Token[] {
     const ch = sql[i]!;
     const pos = i;
 
-    // `--` line comment
+    // `--` starts a line comment anywhere outside a string, as in standard
+    // SQL, so `x == --1` is `x ==` followed by a comment (it never parsed).
     if (ch === '-' && sql[i + 1] === '-') {
       while (i < sql.length && sql[i] !== '\n') i++;
       continue;
@@ -200,7 +206,8 @@ function tokenize(sql: string): Token[] {
         tokens.push({ type: TT.BareWord, value: num, pos });
         continue;
       }
-      if (!/^-?\d+(?:\.\d+)?$/.test(num)) throw new ParseError(`Invalid number '${num}'.`, pos);
+      // A trailing point (`1.`) has always been accepted as the integer.
+      if (!/^-?\d+(?:\.\d*)?$/.test(num)) throw new ParseError(`Invalid number '${num}'.`, pos);
       tokens.push({ type: TT.Number, value: num, pos });
       continue;
     }
@@ -265,6 +272,8 @@ function canBeNegativeNumber(tokens: Token[]): boolean {
 class Parser {
   private tokens: Token[];
   private pos = 0;
+  /** Unquoted or backticked values read as strings, for one combined hint. */
+  private bareValues: Token[] = [];
 
   constructor(tokens: Token[]) {
     this.tokens = tokens;
@@ -277,7 +286,7 @@ class Parser {
       // come from a `;`-terminated multi-statement source.
       if (this.peek().type === TT.Semicolon) this.advance();
       this.expect(TT.EOF, 'end of query');
-      return { ok: true, query };
+      return { ok: true, query, hints: this.hints() };
     } catch (e) {
       if (e instanceof ParseError) {
         return { ok: false, message: e.message, position: e.position };
@@ -297,13 +306,26 @@ class Parser {
         // Statements are `;`-separated; trailing `;` is optional.
         while (this.peek().type === TT.Semicolon) this.advance();
       }
-      return { ok: true, queries };
+      return { ok: true, queries, hints: this.hints() };
     } catch (e) {
       if (e instanceof ParseError) {
         return { ok: false, message: e.message, position: e.position };
       }
       throw e;
     }
+  }
+
+  private hints(): ParseHint[] {
+    const [first] = this.bareValues;
+    if (!first) return [];
+    const words = Array.from(new Set(this.bareValues.map((t) => t.value)));
+    const shown = words.slice(0, 3);
+    const more = words.length > shown.length ? ` and ${words.length - shown.length} more` : '';
+    const quoted = shown.map((w) => `'${w.replace(/'/g, "''")}'`).join(', ');
+    return [{
+      message: `Read ${quoted}${more} as text, not as ${words.length === 1 ? 'a field' : 'fields'}. Put string values, including IDs, in single quotes${this.bareValues.some((t) => t.quoted) ? '; backticks are for field names' : ''}.`,
+      position: first.pos,
+    }];
   }
 
   private parseQuery(): ParsedQuery {
@@ -454,7 +476,8 @@ class Parser {
       return { field, operator: 'startsWith', value };
     }
 
-    if (this.peekKeyword('LIKE')) {
+    // LIKE is only a keyword here, so a field may still be named `like`.
+    if (this.peek().type === TT.Identifier && !this.peek().quoted && this.peek().value.toUpperCase() === 'LIKE') {
       this.advance();
       return { field, operator: 'startsWith', value: this.parseLikePrefix() };
     }
@@ -567,13 +590,15 @@ class Parser {
       this.advance();
       return null;
     }
-    if (tok.type === TT.Identifier && tok.quoted) {
-      throw new ParseError(
-        `Backticks quote field names. Write string values in single quotes: '${tok.value.replace(/'/g, "''")}'.`,
-        tok.pos,
-      );
+    // Unquoted words (e.g. base58 IDs) have always been read as strings;
+    // keep that for saved and shared queries, with a hint to quote them.
+    if (tok.type === TT.Identifier) {
+      this.advance();
+      this.bareValues.push(tok);
+      return tok.value;
     }
-    if (tok.type === TT.Identifier || tok.type === TT.BareWord) {
+    // A digit-led word was never a value, so it still asks for quotes.
+    if (tok.type === TT.BareWord) {
       throw new ParseError(
         `Unquoted value '${tok.value}'. Write string values, including IDs, in single quotes: '${tok.value}'.`,
         tok.pos,

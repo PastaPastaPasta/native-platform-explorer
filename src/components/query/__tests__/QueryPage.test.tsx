@@ -73,6 +73,17 @@ describe('Query workspace execution', () => {
     );
   });
 
+  it('runs an older unquoted-ID query and suggests quoting it', async () => {
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain WHERE $ownerId == GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec LIMIT 1');
+    await screen.findByText('0 documents returned');
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ where: [['$ownerId', '==', 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec']] }));
+    expect(screen.getByTestId('sql-hint')).toHaveTextContent("Read 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec' as text");
+    setSql("SELECT * FROM domain WHERE $ownerId == 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec' LIMIT 1");
+    expect(screen.queryByTestId('sql-hint')).not.toBeInTheDocument();
+  });
+
   it('tells a recipient when a shared link came from a different trust mode', async () => {
     navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '0' });
     // Running the shared query rewrites the address with the recipient's mode.

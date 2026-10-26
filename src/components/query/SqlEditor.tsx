@@ -17,6 +17,8 @@ export interface SqlEditorProps {
   onChange: (value: string) => void;
   onRun: () => void;
   parseError?: { message: string; position: number } | null;
+  /** Non-blocking notes from the last successful parse. */
+  parseHints?: Array<{ message: string; position: number }>;
   isLoading?: boolean;
   isDisabled?: boolean;
   onCancel?: () => void;
@@ -43,6 +45,7 @@ export function SqlEditor({
   onChange,
   onRun,
   parseError,
+  parseHints,
   isLoading,
   isDisabled,
   onCancel,
@@ -87,6 +90,11 @@ export function SqlEditor({
       />
       <HStack mt={2} justify="space-between" align="flex-start">
         <Box flex={1}>
+          {!parseError && parseHints?.map((hint) => (
+            <Text key={hint.message} fontSize="xs" color="yellow.300" data-testid="sql-hint">
+              {hint.message}
+            </Text>
+          ))}
           {parseError && (
             <Box>
               <Text fontSize="xs" color="red.300" mb={1}>
