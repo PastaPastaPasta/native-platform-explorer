@@ -32,6 +32,8 @@ const useSignerMock = vi.mocked(useSigner);
 interface TestOptions {
   id: string;
   amount?: bigint;
+  secret?: string;
+  secretBytes?: Uint8Array;
 }
 let changeOptions: OperationFormProps<TestOptions>['onOptionsChange'];
 let initialOptions: TestOptions;
@@ -486,6 +488,129 @@ describe('OperationShell', () => {
       review();
       expect(screen.queryByText(/"secret-value"/)).not.toBeInTheDocument();
       expect(screen.getByText(/"hidden"/)).toBeInTheDocument();
+    });
+  });
+
+  describe('private keys in the inputs', () => {
+    const WIF = 'cVt4o7BGAig1UXywgGSmARhxMdzP5qvQsxKkSsc1XEkw3tDTQFpy';
+    const redactSecrets = ({ secret: _secret, secretBytes: _bytes, ...rest }: TestOptions) => rest;
+    beforeEach(() => {
+      initialOptions = { id: 'add-key', secret: WIF, secretBytes: new Uint8Array([7, 7, 7]) };
+    });
+
+    /** Paths in the mounted tree's hook state, refs, props and effect deps that hold the secret. */
+    function secretsHeldByReact(container: HTMLElement): string[] {
+      const rootKey = Object.keys(container).find((key) => key.startsWith('__reactContainer$'))!;
+      type Fiber = Record<string, unknown> & { child?: Fiber; sibling?: Fiber; elementType?: unknown };
+      const rootFiber = (container as unknown as Record<string, { stateNode: { current: Fiber } }>)[
+        rootKey
+      ]!.stateNode.current;
+      const found: string[] = [];
+      const seen = new Set<object>();
+      const search = (value: unknown, path: string): void => {
+        if (typeof value === 'string') {
+          if (value.includes(WIF)) found.push(path);
+          return;
+        }
+        if (!value || typeof value !== 'object' || seen.has(value) || value instanceof Node) return;
+        seen.add(value);
+        if (value instanceof Uint8Array) {
+          if (value.some((byte) => byte === 7)) found.push(`${path} (bytes)`);
+          return;
+        }
+        // Do not follow links into other fibers; the walk below visits each one.
+        if ('stateNode' in value && 'return' in value) return;
+        for (const [key, item] of Object.entries(value))
+          if (key !== '_owner') search(item, `${path}.${key}`);
+      };
+      const visit = (fiber: Fiber | undefined, depth: number): void => {
+        for (let node = fiber; node; node = node.sibling) {
+          const name =
+            typeof node.elementType === 'function' ? node.elementType.name : String(node.elementType);
+          search(node.memoizedState, `${name}.state`);
+          search(node.memoizedProps, `${name}.props`);
+          search(node.updateQueue, `${name}.effects`);
+          visit(node.child, depth + 1);
+        }
+      };
+      visit(rootFiber, 0);
+      return found;
+    }
+
+    it.each([
+      ['success', () => Promise.resolve({ ok: true }), 'Broadcast succeeded'],
+      [
+        'not submitted',
+        () => Promise.reject(new OperationNotSubmittedError('No eligible key')),
+        'Not submitted.',
+      ],
+      [
+        'outcome unknown',
+        () => Promise.reject(new BroadcastOutcomeUnknownError(new Error('timeout'))),
+        'Outcome unknown.',
+      ],
+    ])('keeps only redacted inputs once execution settles (%s)', async (_, outcome, settled) => {
+      const execute = vi.fn((args: { options: TestOptions }) => {
+        expect(args.options.secret).toBe(WIF);
+        return outcome();
+      });
+      const { container, descriptor, rerender } = setup({ execute, redactSecrets });
+      const original = initialOptions.secretBytes!;
+      review();
+      // The walk does see the secret while the inputs are still needed.
+      expect(secretsHeldByReact(container)).not.toEqual([]);
+      broadcast();
+      await screen.findByText(settled);
+
+      expect(execute).toHaveBeenCalledOnce();
+      expect(secretsHeldByReact(container)).toEqual([]);
+      expect(Array.from(original)).toEqual([0, 0, 0]);
+      expect(container.innerHTML).not.toContain(WIF);
+
+      // Clearing the signer afterwards leaves the receipt and nothing secret.
+      useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+      rerender(<OperationShell descriptor={descriptor} />);
+      expect(screen.getByText(settled)).toBeInTheDocument();
+      expect(secretsHeldByReact(container)).toEqual([]);
+    });
+
+    it('drops secrets when the signer is cleared during review', async () => {
+      const { container, descriptor, rerender } = setup({
+        redactSecrets,
+        capability: { status: 'available' },
+        signingCriteria: vi.fn().mockResolvedValue({}),
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      await screen.findByText(/Signing key: #0/);
+      useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+      rerender(<OperationShell descriptor={descriptor} />);
+      expect(screen.getByText('No signer connected')).toBeInTheDocument();
+      expect(secretsHeldByReact(container)).toEqual([]);
+    });
+
+    it('drops secrets from shell state when the signer is cleared mid-flight', async () => {
+      let finish!: (value: unknown) => void;
+      const execute = vi.fn(
+        () =>
+          new Promise((resolve) => {
+            finish = resolve;
+          }),
+      );
+      const { container, descriptor, rerender } = setup({ execute, redactSecrets });
+      review();
+      broadcast();
+      expect(execute).toHaveBeenCalledOnce();
+      expect(secretsHeldByReact(container)).not.toEqual([]);
+
+      useSignerMock.mockReturnValue({ ...useSignerMock(), signer: null });
+      rerender(<OperationShell descriptor={descriptor} />);
+      expect(secretsHeldByReact(container)).toEqual([]);
+      expect(screen.getByText(/Signing via your connected signer/)).toBeInTheDocument();
+
+      await act(async () => finish({ ok: true }));
+      expect(secretsHeldByReact(container)).toEqual([]);
+      expect(Array.from(initialOptions.secretBytes!)).toEqual([0, 0, 0]);
     });
   });
 

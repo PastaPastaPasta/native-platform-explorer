@@ -62,6 +62,11 @@ export interface OperationDescriptor<TOptions, TResult> {
   summarise: (options: TOptions) => string;
   /** What the review step shows for the inputs; use it to hide secrets. Defaults to the options. */
   reviewData?: (options: TOptions) => unknown;
+  /**
+   * Copy of the inputs without private key material. Once execution settles,
+   * or the signer is cleared, the shell keeps only this copy for the receipt.
+   */
+  redactSecrets?: (options: TOptions) => TOptions;
   /** Key requirements for these inputs; the review step shows the key they select. */
   signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
   execute: (args: ExecuteArgs<TOptions>) => Promise<TResult>;
@@ -83,6 +88,14 @@ function fingerprint(value: unknown): string {
     ];
   }
   return JSON.stringify(encode(value));
+}
+
+/** Zero byte arrays in inputs the shell is discarding (strings cannot be wiped). */
+function wipeBytes(value: unknown, seen = new Set<object>()): void {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+  if (value instanceof Uint8Array) value.fill(0);
+  else Object.values(value).forEach((item) => wipeBytes(item, seen));
 }
 
 function describeKey(key: SignerKeyDescriptor): string {
@@ -109,6 +122,17 @@ interface Review<TOptions, TResult> {
   sessionSignal: AbortSignal | null;
 }
 
+type Submission<TOptions, TResult> = Review<TOptions, TResult> & { submittedAt: string };
+
+function withoutSecrets<TOptions, TResult>(
+  snapshot: Submission<TOptions, TResult>,
+): Submission<TOptions, TResult> {
+  const redact = snapshot.descriptor.redactSecrets;
+  if (!redact) return snapshot;
+  const options = structuredClone(redact(snapshot.options));
+  return { ...snapshot, options, fingerprint: fingerprint(options) };
+}
+
 export function OperationShell<TOptions, TResult>({
   descriptor,
 }: {
@@ -119,9 +143,7 @@ export function OperationShell<TOptions, TResult>({
   const queryClient = useQueryClient();
   const [options, setOptions] = useState<TOptions | null>(null);
   const [review, setReview] = useState<Review<TOptions, TResult> | null>(null);
-  const [submission, setSubmission] = useState<
-    (Review<TOptions, TResult> & { submittedAt: string }) | null
-  >(null);
+  const [submission, setSubmission] = useState<Submission<TOptions, TResult> | null>(null);
   const [activeStep, setActiveStep] = useState(0);
   const [formRevision, setFormRevision] = useState(0);
   const [destructiveAck, setDestructiveAck] = useState(false);
@@ -261,8 +283,17 @@ export function OperationShell<TOptions, TResult>({
   const reviewSigningKey = reviewKey?.review === review ? reviewKey : null;
   const signingKeyReady = !review?.descriptor.signingCriteria || !!reviewSigningKey?.key;
 
+  // Keep only the redacted receipt once the inputs can no longer be submitted.
+  const purgeSecrets = useCallback(() => {
+    setOptions(null);
+    setReview(null);
+    setReviewKey(null);
+    setSubmission((snapshot) => snapshot && withoutSecrets<TOptions, TResult>(snapshot));
+  }, []);
+
   const reset = useCallback(() => {
     setReview(null);
+    setReviewKey(null);
     setSubmission(null);
     setOptions(null);
     setDestructiveAck(false);
@@ -275,16 +306,19 @@ export function OperationShell<TOptions, TResult>({
   }, []);
 
   // Input edits invalidate review; context changes reset even a partially
-  // built form. Keep a submitted receipt until its SDK call resolves.
+  // built form. Keep a submitted receipt until its SDK call resolves, but
+  // drop its secrets when the context (e.g. the cleared signer) changes.
   const previousContext = useRef(contextBinding);
   useEffect(() => {
     const changed = previousContext.current !== contextBinding;
     previousContext.current = contextBinding;
-    if (!submission && (changed || (review && !reviewIsCurrent))) {
+    if (submission) {
+      if (changed) purgeSecrets();
+    } else if (changed || (review && !reviewIsCurrent)) {
       reset();
       setNotice('Transaction context changed. Build and review the operation again.');
     }
-  }, [contextBinding, review, reviewIsCurrent, submission, reset]);
+  }, [contextBinding, review, reviewIsCurrent, submission, reset, purgeSecrets]);
 
   const onReview = () => {
     if (
@@ -325,6 +359,7 @@ export function OperationShell<TOptions, TResult>({
   const onExecute = async () => {
     if (!review || !canProceed || !isCurrent(review) || inFlight.current) return;
     const submitted = { ...review, submittedAt: new Date().toISOString() };
+    const sourceOptions = options;
     inFlight.current = true;
     setSubmission(submitted);
     setActiveStep(2);
@@ -353,7 +388,14 @@ export function OperationShell<TOptions, TResult>({
       if (mounted.current) setError(normalizeError(e));
     } finally {
       inFlight.current = false;
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+        purgeSecrets();
+      }
+      if (submitted.descriptor.redactSecrets) {
+        wipeBytes(submitted.options);
+        wipeBytes(sourceOptions);
+      }
     }
   };
 

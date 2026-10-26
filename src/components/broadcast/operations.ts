@@ -21,6 +21,7 @@ import {
 import {
   IdentityUpdateKeysForm,
   redactIdentityUpdateKeys,
+  stripIdentityUpdateKeySecrets,
   type IdentityUpdateKeysOptions,
 } from './forms/IdentityUpdateKeys';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
@@ -292,6 +293,7 @@ export const OPERATIONS: OperationEntry[] = [
         return [adds, disables].filter(Boolean).join(', ') || 'no-op';
       },
       reviewData: redactIdentityUpdateKeys,
+      redactSecrets: stripIdentityUpdateKeySecrets,
       execute: executeIdentityUpdateKeys,
     },
   ),
