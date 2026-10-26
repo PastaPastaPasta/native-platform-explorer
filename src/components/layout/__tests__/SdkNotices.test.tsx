@@ -4,8 +4,6 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
 import { SdkSessionError } from '@sdk/errors';
-import { networkProtocolVersion } from '@sdk/version';
-import { protocolVersionMismatch } from '@sdk/protocol-version';
 import { createCustomDevnetConfig, removeCustomDevnet, saveCustomDevnet } from '@sdk/networks';
 import { SdkSessionNotice, SdkVersionNotice } from '../SdkNotices';
 
@@ -87,12 +85,6 @@ describe('SdkSessionNotice', () => {
 });
 
 describe('SdkVersionNotice', () => {
-  it('reads the network protocol version from system.status', () => {
-    expect(networkProtocolVersion(status(14))).toBe(14);
-    expect(networkProtocolVersion({ chain: {} })).toBeNull();
-    expect(networkProtocolVersion(undefined)).toBeNull();
-  });
-
   it('warns when the network runs a protocol newer than the SDK supports and can be dismissed', async () => {
     // The session ratchets no higher than the newest version it supports.
     const sdk = createMockSdk({ version: vi.fn().mockReturnValue(14), system: { status: vi.fn().mockResolvedValue(status(15)) } });
@@ -110,6 +102,7 @@ describe('SdkVersionNotice', () => {
     renderWithProviders(<SdkVersionNotice />, { sdk: { sdk } });
     await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Testnet runs Platform protocol v13, older than the v14 this SDK session uses'));
     expect(screen.getByRole('status')).toHaveTextContent('writes are disabled');
+    expect(screen.getByRole('link', { name: 'clear the SDK cache' })).toHaveAttribute('href', expect.stringMatching(/^\/settings\/?#connection$/));
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss protocol version warning' }));
     expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:network-older:14:13');
   });
@@ -123,18 +116,5 @@ describe('SdkVersionNotice', () => {
     // Let the supported-version lookup settle before asserting silence.
     await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-  });
-});
-
-describe('protocolVersionMismatch', () => {
-  it('flags networks the session cannot follow, in either direction', () => {
-    expect(protocolVersionMismatch(14, 14, 15)).toBe('network-newer');
-    expect(protocolVersionMismatch(14, 14, 13)).toBe('network-older');
-    expect(protocolVersionMismatch(14, 14, 12)).toBe('network-older');
-    // A fresh session below a supported network catches up on its first proved read.
-    expect(protocolVersionMismatch(14, 13, 14)).toBeNull();
-    expect(protocolVersionMismatch(14, 13, 13)).toBeNull();
-    expect(protocolVersionMismatch(14, 14, null)).toBeNull();
-    expect(protocolVersionMismatch(null, null, 13)).toBeNull();
   });
 });

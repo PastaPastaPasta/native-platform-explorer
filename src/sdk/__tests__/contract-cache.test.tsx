@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
 import { isStaleContractError, withContractRefresh } from '../contract-cache';
-import { useDocument, useDocumentsQuery } from '../queries';
+import { useDocument, useDocumentsAggregate, useDocumentsQuery } from '../queries';
 
 // The WasmSdkError shape: a plain object, not an Error.
 const typeNotFound = { name: 'NotFound', kind: 28, message: 'Document type not found: document type avatar not found' };
@@ -11,7 +11,10 @@ const typeNotFound = { name: 'NotFound', kind: 28, message: 'Document type not f
 describe('withContractRefresh', () => {
   it('recognises the errors a stale cached contract causes', () => {
     expect(isStaleContractError(typeNotFound)).toBe(true);
-    expect(isStaleContractError(new Error('query syntax error: where clause on non indexed property error: score'))).toBe(true);
+    // Queries and aggregates: DataContractError::DocumentTypeNotFound.
+    expect(isStaleContractError(new Error('Protocol error: data contract error: document type not found: avatar'))).toBe(true);
+    // A query against no index is the user's, not a stale cache: types' indexes cannot change.
+    expect(isStaleContractError(new Error('query syntax error: where clause on non indexed property error: score'))).toBe(false);
     expect(isStaleContractError({ name: 'NotFound', kind: 28, message: 'Data contract not found' })).toBe(false);
     expect(isStaleContractError(new Error('no available addresses to retry'))).toBe(false);
   });
@@ -58,6 +61,11 @@ function QueryProbe() {
   return <div data-testid="state">{q.status}:{Array.isArray(q.data) ? q.data.length : ''}</div>;
 }
 
+function CountProbe() {
+  const q = useDocumentsAggregate({ dataContractId: 'contract', documentTypeName: 'avatar' }, 'count', undefined);
+  return <div data-testid="state">{q.status}:{q.data instanceof Map ? String(q.data.get('')) : ''}</div>;
+}
+
 describe('document reads after a contract changed on chain', () => {
   it.each([true, false])('documents.get refreshes the cached contract and retries (trusted: %s)', async (trusted) => {
     const fetch = vi.fn().mockResolvedValue({ id: 'contract' });
@@ -79,5 +87,16 @@ describe('document reads after a contract changed on chain', () => {
     expect(fetch).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledWith('contract');
     expect(query).toHaveBeenCalledTimes(2);
+  });
+
+  it('documents.count refreshes the cached contract and retries through the proof variant', async () => {
+    const fetch = vi.fn().mockResolvedValue({ id: 'contract' });
+    const stale = new Error('Protocol error: data contract error: document type not found: avatar');
+    const countWithProof = vi.fn().mockRejectedValueOnce(stale).mockResolvedValueOnce({ data: new Map([['', 7n]]) });
+    const sdk = createMockSdk({ contracts: { fetch }, documents: { count: vi.fn(), countWithProof } });
+    renderWithProviders(<CountProbe />, { sdk: { sdk, trusted: true } });
+    await waitFor(() => expect(screen.getByTestId('state')).toHaveTextContent('success:7'));
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(countWithProof).toHaveBeenCalledTimes(2);
   });
 });

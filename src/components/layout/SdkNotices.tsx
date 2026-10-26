@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import NextLink from 'next/link';
-import { Box, Button, CloseButton, Heading, HStack, Text, VStack } from '@chakra-ui/react';
+import { Box, Button, CloseButton, Heading, HStack, Link, Text, VStack } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { useSdk } from '@sdk/hooks';
 import { SdkSessionError, type SdkSessionFailure } from '@sdk/errors';
@@ -112,7 +112,8 @@ export function SdkVersionNotice() {
             <>
               {label} runs Platform protocol v{networkVersion}, older than the v{sessionVersion} this
               SDK session uses (@dashevo/evo-sdk {EVO_SDK_VERSION}), and a session cannot step down.
-              Reads may fail to decode or verify, and writes are disabled.
+              Reads may fail to decode or verify, and writes are disabled. If the network was reset,{' '}
+              <Link as={NextLink} href="/settings/#connection" color="brand.light">clear the SDK cache</Link>.
             </>
           )}
         </Text>

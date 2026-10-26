@@ -4,12 +4,12 @@ import { extractErrorMessage } from './errors';
 // evo-sdk 5.0 builds document queries from a cached data contract, which it
 // also persists in localStorage (`dash-sdk.contracts.<network>`, mainnet and
 // testnet only) and only refreshes when a returned document is stamped with a
-// newer contract version. A type or index added on chain after caching makes
-// the query fail locally with one of these messages (wasm-sdk's
-// "Document type not found", Drive's QuerySyntaxError texts) until the
-// contract is fetched again.
-const STALE_CONTRACT_MESSAGE =
-  /document type not found|where clause on non indexed property|query is too far from index|query on document type with no indexes|invalid order by properties/i;
+// newer contract version. A document type added on chain after caching makes
+// get/history fail with wasm-sdk's "Document type not found: …" and queries
+// and aggregates with DataContractError's "document type not found: …" until
+// the contract is fetched again. Indexes of an existing type cannot change
+// on chain, so index errors never mean a stale contract.
+const STALE_CONTRACT_MESSAGE = /document type not found/i;
 
 export function isStaleContractError(error: unknown): boolean {
   return STALE_CONTRACT_MESSAGE.test(extractErrorMessage(error));
@@ -30,26 +30,24 @@ export async function withContractRefresh<T>(
     return await read();
   } catch (error) {
     if (!isStaleContractError(error)) throw error;
-    let refreshed: unknown;
-    try {
-      refreshed = await sdk.contracts.fetch(contractId);
-    } catch {
-      throw error;
-    }
+    const refreshed = await sdk.contracts.fetch(contractId).catch(() => null);
     if (!refreshed) throw error;
     return read();
   }
 }
 
-/** The SDK's persisted contract maps (wasm-sdk `contract_store`). */
+/** What the SDK persists per network (wasm-sdk `contract_store` and
+ *  `protocol_version_store`). The protocol version only ratchets upward, so
+ *  after a network reset it must be cleared for a session to follow it. */
 const PERSISTED_CONTRACT_KEYS = ['dash-sdk.contracts.mainnet', 'dash-sdk.contracts.testnet'];
+const PERSISTED_VERSION_KEYS = ['dash-sdk.protocol-version.mainnet', 'dash-sdk.protocol-version.testnet'];
 
 /**
- * Remove the SDK's persisted contracts and return how many there were. A
- * running session keeps its in-memory copies; reconnect so the next session
- * starts with an empty cache.
+ * Remove the SDK's persisted contracts and protocol versions, returning how
+ * many contracts there were. A running session keeps its in-memory state;
+ * reconnect so the next session starts fresh.
  */
-export function clearPersistedContracts(storage: Storage = window.localStorage): number {
+export function clearPersistedSdkCache(storage: Storage = window.localStorage): number {
   let count = 0;
   for (const key of PERSISTED_CONTRACT_KEYS) {
     try {
@@ -60,5 +58,6 @@ export function clearPersistedContracts(storage: Storage = window.localStorage):
     }
     storage.removeItem(key);
   }
+  for (const key of PERSISTED_VERSION_KEYS) storage.removeItem(key);
   return count;
 }

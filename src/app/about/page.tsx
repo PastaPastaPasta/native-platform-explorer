@@ -126,7 +126,7 @@ export default function Page() {
             fetched (<code>dash-sdk.contracts.&lt;network&gt;</code>) and the network&apos;s
             protocol version (<code>dash-sdk.protocol-version.&lt;network&gt;</code>) in
             localStorage, so later visits load faster. These hold public Platform data only,
-            nothing about you or your keys. You can remove the cached contracts from{' '}
+            nothing about you or your keys. You can clear them from{' '}
             <Link as={NextLink} href="/settings/#connection" color="brand.light">
               Settings → Connection
             </Link>
