@@ -14,7 +14,7 @@ interface NavGroup {
   items: ReadonlyArray<NavItem>;
 }
 
-const NAV_GROUPS: ReadonlyArray<NavGroup> = [
+export const NAV_GROUPS: ReadonlyArray<NavGroup> = [
   {
     title: 'Browse',
     items: [
@@ -29,30 +29,34 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
       { href: '/identity/', label: 'Identity' },
       { href: '/contract/', label: 'Contract' },
       { href: '/token/', label: 'Tokens' },
-      { href: '/dpns/search', label: 'DPNS' },
+      { href: '/dpns/search/', label: 'DPNS' },
       { href: '/evonode/', label: 'Evonodes' },
     ],
   },
   {
     title: 'Network',
     items: [
-      { href: '/network/status', label: 'Status' },
+      { href: '/network/status/', label: 'Status' },
+      { href: '/network/quorums/', label: 'Quorums' },
       { href: '/epoch/', label: 'Epoch' },
-      { href: '/network/protocol', label: 'Protocol' },
+      { href: '/epoch/history/', label: 'Epoch history' },
+      { href: '/network/protocol/', label: 'Protocol' },
+      { href: '/network/credits/', label: 'Credits' },
     ],
   },
   {
     title: 'Governance',
     items: [
-      { href: '/governance/contested', label: 'Contested' },
+      { href: '/governance/contested/', label: 'Contested' },
       { href: '/governance/polls/', label: 'Polls' },
+      { href: '/groups/', label: 'Groups' },
     ],
   },
   {
     title: 'Write',
     items: [
-      { href: '/broadcast', label: 'Broadcast' },
-      { href: '/wallet', label: 'Wallet' },
+      { href: '/broadcast/', label: 'Broadcast' },
+      { href: '/wallet/', label: 'Wallet' },
     ],
   },
   {
@@ -60,21 +64,31 @@ const NAV_GROUPS: ReadonlyArray<NavGroup> = [
     items: [
       { href: '/query/', label: 'Query' },
       { href: '/tools/', label: 'Tools' },
-      { href: '/sdk-reference', label: 'SDK ref' },
-      { href: '/about', label: 'About' },
+      { href: '/sdk-reference/', label: 'SDK ref' },
+      { href: '/settings/', label: 'Settings' },
+      { href: '/about/', label: 'About' },
     ],
   },
 ];
 
-function isActive(pathname: string, href: string) {
+const ALL_HREFS = NAV_GROUPS.flatMap((g) => g.items.map((item) => item.href));
+
+function matches(pathname: string, href: string) {
   if (href === '/') return pathname === '/';
   // Match exact path or first-segment prefix.
   const stripped = href.replace(/\/$/, '');
   return pathname === stripped || pathname.startsWith(`${stripped}/`);
 }
 
+/** The single nav item for a path: the longest matching href, so
+ *  /epoch/history/ marks "Epoch history" and not also "Epoch". */
+export function activeHref(pathname: string): string | undefined {
+  return ALL_HREFS.filter((href) => matches(pathname, href)).sort((a, b) => b.length - a.length)[0];
+}
+
 export function SidebarNavBody({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
+  const current = activeHref(pathname ?? '/');
   return (
     <VStack align="stretch" spacing={5}>
       {NAV_GROUPS.map((g) => (
@@ -84,7 +98,7 @@ export function SidebarNavBody({ onNavigate }: { onNavigate?: () => void }) {
           </Eyebrow>
           <VStack align="stretch" spacing="2px">
             {g.items.map((item) => {
-              const active = isActive(pathname ?? '/', item.href);
+              const active = item.href === current;
               return (
                 <Box
                   key={item.href}
