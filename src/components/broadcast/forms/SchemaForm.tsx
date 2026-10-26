@@ -6,6 +6,8 @@ import {
   Box,
   Button,
   Checkbox,
+  FormControl,
+  FormLabel,
   HStack,
   Input,
   NumberDecrementStepper,
@@ -90,9 +92,9 @@ function FieldLabel({
   return (
     <Box>
       <HStack spacing={1} align="baseline">
-        <Text fontSize="sm" color="gray.100" fontWeight={500}>
+        <FormLabel m={0} fontSize="sm" color="gray.100" fontWeight={500}>
           {name}
-        </Text>
+        </FormLabel>
         {required ? (
           <Text fontSize="xs" color="danger">
             *
@@ -357,11 +359,12 @@ function FieldNode(props: FieldNodeProps) {
     }
   }
 
+  // FormControl ties the label to the field's input, so it has an accessible name.
   return (
-    <Box>
+    <FormControl>
       <FieldLabel name={name} required={required} description={description} />
       <Box mt={1}>{renderer}</Box>
-    </Box>
+    </FormControl>
   );
 }
 
