@@ -41,6 +41,19 @@ describe('GroupActionCard', () => {
     const call = [...group.actionSigners.mock.calls, ...group.actionSignersWithProof.mock.calls][0]!;
     expect(call[0]).toEqual({ dataContractId: CONTRACT, groupContractPosition: 0, status: 'CLOSED', actionId: ACTION });
   });
+
+  it('summarizes the evo-sdk 5.0 toJSON() form', () => {
+    // 5.0.0-rc.8 GroupActionJSON: the event is tagged with `$kind` and the
+    // token event's `$type` and fields are flattened beside it.
+    const mint = { toJSON: () => ({
+      ...actionJson,
+      event: { $kind: 'tokenEvent', $type: 'mint', amount: 5, recipient: A, publicNote: null },
+    }) };
+    expect(summarizeGroupAction(mint)).toMatchObject({
+      proposerId: B, tokenPosition: 0, eventType: 'tokenEvent', kind: 'mint',
+      payload: { amount: 5, recipient: A, publicNote: null },
+    });
+  });
 });
 
 describe('ContenderVoters', () => {

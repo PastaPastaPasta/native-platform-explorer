@@ -52,6 +52,25 @@ describe('identity votes', () => {
     } })[0]).toMatchObject({ choice: 'lock', indexValues: ['dash', 'b0st0n'] });
   });
 
+  it('reads the evo-sdk 5.0 toJSON() form', () => {
+    // Live mainnet 5.0.0-rc.8 ResourceVote.toJSON(): poll fields flattened into
+    // `votePoll`, the choice tagged with `$type`.
+    const lock = { toJSON: () => ({
+      $formatVersion: '0',
+      votePoll: { $type: 'contestedDocumentResourceVotePoll', contractId: DPNS, documentTypeName: 'domain', indexName: 'parentNameAndLabel', indexValues: ['dash', 'n1ke'] },
+      resourceVoteChoice: { $type: 'lock' },
+    }) };
+    expect(identityVoteRows(new Map([['v', lock]]))).toEqual([{
+      voteId: 'v', choice: 'lock', towardsIdentity: undefined,
+      contractId: DPNS, documentTypeName: 'domain', indexName: 'parentNameAndLabel', indexValues: ['dash', 'n1ke'],
+    }]);
+    const towards = {
+      votePoll: { $type: 'contestedDocumentResourceVotePoll', contractId: DPNS, documentTypeName: 'domain', indexName: 'parentNameAndLabel', indexValues: ['dash', 'a1pha'] },
+      resourceVoteChoice: { $type: 'towardsIdentity', identity: CONTENDER },
+    };
+    expect(identityVoteRows({ v: towards })[0]).toMatchObject({ choice: 'towardsIdentity', towardsIdentity: CONTENDER, indexValues: ['dash', 'a1pha'] });
+  });
+
   it('links each resource to its contested-resource page', async () => {
     const votes = new Map([['vote1', resourceVote('a1pha', 'TowardsIdentity', CONTENDER)], ['vote2', resourceVote('b0st0n', 'Abstain')]]);
     const sdk = createMockSdk({ voting: {

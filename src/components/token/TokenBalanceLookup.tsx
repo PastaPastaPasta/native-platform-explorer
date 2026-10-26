@@ -18,7 +18,7 @@ import { isBase58Identifier } from '@util/identifier';
 import { readProp } from '@util/sdk-shape';
 import { formatTokenAmount } from '@util/token-rules';
 
-/** rc.2 `RewardDistributionMoment`: one of block height, time or epoch. */
+/** `RewardDistributionMoment` (rc.2 and 5.0): one of block height, time or epoch. */
 export function describeClaimMoment(moment: unknown): { kind: string; value: React.ReactNode } | null {
   if (!moment) return null;
   const type = readProp<string>(moment, 'type') ?? '';
