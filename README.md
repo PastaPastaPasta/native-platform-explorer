@@ -67,6 +67,7 @@ build time.
 | `NEXT_PUBLIC_WELL_KNOWN_URL` | Extra well-known registry JSON loaded at runtime | unset |
 | `NEXT_PUBLIC_BRIDGE_URL` | Bridge for identity create/top-up shortcuts; empty disables them | `https://bridge.dashhq.org` |
 | `NEXT_PUBLIC_BASE_PATH` | Path prefix for project-site hosting, e.g. `/native-platform-explorer` | empty (root) |
+| `NEXT_PUBLIC_SERVICE_WORKER` | `off` removes the offline service worker and ships its kill switch (see [Hardening](#hardening)) | `on` |
 
 `NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported
 (see below).
