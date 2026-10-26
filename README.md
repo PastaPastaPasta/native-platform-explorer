@@ -53,10 +53,13 @@ Operators can set build defaults with `NEXT_PUBLIC_QUORUM_URL_MAINNET` and
 `NEXT_PUBLIC_QUORUM_URL_TESTNET`; like the settings form, they must use
 `https://` (`http://` only for localhost), and other values are ignored with a
 console warning. Explicit DAPI addresses (the PRD's
-`NEXT_PUBLIC_DAPI_ADDRESSES_*`) are not supported for these networks: the
-SDK's trusted context replaces configured addresses with the quorum
-service's list. Custom devnets keep their DAPI addresses, which the SDK uses
-only when the devnet's quorum service publishes no masternodes.
+`NEXT_PUBLIC_DAPI_ADDRESSES_*`) are not offered for these networks: sessions
+use the quorum service's masternode list, so pointing at another quorum
+service is how to use different endpoints. A custom devnet's saved DAPI
+addresses are the endpoints its sessions use: since evo-sdk 5.0 explicit
+addresses take precedence over the quorum service's list, which is then not
+fetched (quorum keys still come from the service). Without saved addresses a
+devnet uses the list its quorum service publishes.
 
 The bridge browser tests use the shipped URL as a fixed fixture. Before running
 `pnpm e2e`, build with `NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build`,
