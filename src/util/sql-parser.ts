@@ -751,10 +751,10 @@ function conditionToWhere(c: ParsedCondition): [string, string, unknown] {
 }
 
 const BOUNDED_RANGE: Record<string, string> = {
-  '>=,<=': 'between',
-  '>,<': 'betweenExcludeBounds',
-  '>,<=': 'betweenExcludeLeft',
-  '>=,<': 'betweenExcludeRight',
+  '>=,<=': 'Between',
+  '>,<': 'BetweenExcludeBounds',
+  '>,<=': 'BetweenExcludeLeft',
+  '>=,<': 'BetweenExcludeRight',
 };
 
 /**

@@ -645,11 +645,11 @@ describe('aggregate range clauses', () => {
   it('sends a two-sided range as one between clause for aggregates only', () => {
     expect(where("SELECT SUM(score) FROM grade WHERE class = 'a' AND semester > 20241 AND semester < 20253")).toEqual([
       ['class', '==', 'a'],
-      ['semester', 'betweenExcludeBounds', [20241, 20253]],
+      ['semester', 'BetweenExcludeBounds', [20241, 20253]],
     ]);
-    expect(where('SELECT COUNT(*) FROM grade WHERE semester <= 9 AND semester >= 1')).toEqual([['semester', 'between', [1, 9]]]);
-    expect(where('SELECT COUNT(*) FROM grade WHERE semester >= 1 AND semester < 9')).toEqual([['semester', 'betweenExcludeRight', [1, 9]]]);
-    expect(where('SELECT COUNT(*) FROM grade WHERE semester > 1 AND semester <= 9')).toEqual([['semester', 'betweenExcludeLeft', [1, 9]]]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester <= 9 AND semester >= 1')).toEqual([['semester', 'Between', [1, 9]]]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester >= 1 AND semester < 9')).toEqual([['semester', 'BetweenExcludeRight', [1, 9]]]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester > 1 AND semester <= 9')).toEqual([['semester', 'BetweenExcludeLeft', [1, 9]]]);
     expect(where('SELECT * FROM grade WHERE semester > 1 AND semester < 9 ORDER BY semester')).toEqual([
       ['semester', '>', 1],
       ['semester', '<', 9],
