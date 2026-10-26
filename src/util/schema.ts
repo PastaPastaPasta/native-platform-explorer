@@ -257,6 +257,9 @@ function clauseWarnings(shape: QueryShape, roles: Roles, checkInCount: boolean):
       );
     }
   }
+  for (const field of roles.inFields.filter((f) => roles.rangeFields.includes(f))) {
+    warnings.push(`\`${field}\` is filtered with IN and with a range; use one filter per field.`);
+  }
   for (const field of roles.equality) {
     if (roles.rangeFields.includes(field) || roles.inFields.includes(field)) {
       warnings.push(`\`${field}\` is filtered with = and with another operator; use one filter per field.`);
@@ -347,17 +350,20 @@ export function checkQueryAgainstIndices(shape: QueryShape, indices: SchemaIndex
   if (indices.length === 0) {
     return { warnings: [...warnings, 'This document type declares no indices, so it can only be listed by $id.'] };
   }
+  // Protocol 14 places several IN fields with its own index search
+  // (`find_best_index_for_multiple_in_clauses`), which is not modelled here.
+  if (contiguous && roles.inFields.length > 1) return { warnings };
 
   const candidates = indices.map((index) => {
     const difference = indexDifference(index, roles);
-    const reason = typeof difference === 'string' ? difference : contiguous ? contiguityMismatch(index, roles) : null;
-    return { index, difference: reason === null ? (difference as number) : Infinity, reason };
+    if (typeof difference === 'string') return { index, reason: difference as string | null, difference: 0 };
+    return { index, reason: contiguous ? contiguityMismatch(index, roles) : null, difference };
   });
-  // `index_for_types`: the fitting index with the fewest unused properties.
-  const best = candidates.reduce<(typeof candidates)[number] | undefined>(
-    (found, c) => (c.reason === null && (!found || c.difference < found.difference) ? c : found),
-    undefined,
-  );
+  // `index_for_types`: the fitting index with the fewest unused properties,
+  // ties going to the first by name (Drive keeps indices in a BTreeMap).
+  const best = candidates
+    .filter((c) => c.reason === null)
+    .sort((a, b) => a.difference - b.difference || (a.index.name < b.index.name ? -1 : a.index.name > b.index.name ? 1 : 0))[0];
   if (best && best.difference <= MAX_INDEX_DIFFERENCE) return { matchedIndex: best.index.name, warnings };
   if (best) {
     return {
@@ -385,8 +391,9 @@ export type AggregateGroupMode = 'aggregate' | 'perIn' | 'range' | 'compound';
 /** The GROUP BY mode, or why Platform does not support the GROUP BY. */
 export function aggregateGroupMode(shape: QueryShape): AggregateGroupMode | { unsupported: string } {
   const groupBy = shape.groupBy ?? [];
-  const isIn = (f: string) => shape.where.some((w) => w.field === f && w.operator === 'in');
-  const isRange = (f: string) => shape.where.some((w) => w.field === f && RANGE_OPERATORS.has(w.operator));
+  const { inFields, rangeFields } = queryRoles(shape);
+  const isIn = (f: string) => inFields.includes(f);
+  const isRange = (f: string) => rangeFields.includes(f);
   if (groupBy.length === 0) return 'aggregate';
   if (groupBy.length === 1) {
     const [field] = groupBy as [string];
@@ -405,23 +412,18 @@ export function aggregateGroupMode(shape: QueryShape): AggregateGroupMode | { un
 /**
  * The most per-group entries Platform returns for a GROUP BY, when that bound
  * can truncate the result. `entriesPerGroup` is how many server entries one
- * displayed row can stand for: the SDK merges a compound GROUP BY (in, range)
- * by its range value after the server applied the limit to (in, range) pairs.
+ * displayed row can stand for: with an IN filter, a range GROUP BY returns
+ * (in, range) pairs, limited before the SDK merges them by range value.
  * IN groups are bounded by the IN list instead (Drive ignores LIMIT there).
  */
 export function aggregateGroupBound(shape: QueryShape): { limit: number; entriesPerGroup: number } | undefined {
   const mode = aggregateGroupMode(shape);
-  if (mode === 'range') {
-    const ranges = unique(shape.where.filter((w) => RANGE_OPERATORS.has(w.operator)).map((w) => w.field));
-    // Two ranges on different fields: the carrier walk stops after 10 outer values by default.
-    return { limit: shape.limit ?? (ranges.length === 2 ? CARRIER_OUTER_RANGE_LIMIT : DEFAULT_AGGREGATE_GROUP_LIMIT), entriesPerGroup: 1 };
-  }
-  if (mode === 'compound') {
-    const inValues = shape.where.find((w) => w.operator === 'in')?.value;
-    const count = Array.isArray(inValues) ? new Set(inValues.map((v) => JSON.stringify(v))).size : 1;
-    return { limit: shape.limit ?? DEFAULT_AGGREGATE_GROUP_LIMIT, entriesPerGroup: Math.max(1, count) };
-  }
-  return undefined;
+  if (mode !== 'range' && mode !== 'compound') return undefined;
+  const inValues = shape.where.find((w) => w.operator === 'in')?.value;
+  const entriesPerGroup = Array.isArray(inValues) ? Math.max(1, new Set(inValues.map((v) => JSON.stringify(v))).size) : 1;
+  // Two ranges on different fields: the carrier walk stops after 10 outer values by default.
+  const carrier = mode === 'range' && queryRoles(shape).rangeFields.length === 2;
+  return { limit: shape.limit ?? (carrier ? CARRIER_OUTER_RANGE_LIMIT : DEFAULT_AGGREGATE_GROUP_LIMIT), entriesPerGroup };
 }
 
 /**
@@ -454,11 +456,15 @@ export function checkAggregateAgainstIndices(
   }
   const ranges = roles.rangeFields;
   const hasIn = roles.inFields.length > 0;
-  const carrier = ranges.length === 2 && mode === 'range' && !hasIn;
+  // Only COUNT has the carrier walk; SUM/AVG route a range GROUP BY to the distinct walk.
+  const carrier = select === 'count' && ranges.length === 2 && mode === 'range' && !hasIn;
   if (ranges.length > 1 && !carrier) {
     warnings.push(
-      `Only one field can use range filters in an aggregate; this query uses ${list(ranges)}. Two ranges on different fields work only with GROUP BY the first one and no IN filter.`,
+      `Only one field can use range filters in an aggregate; this query uses ${list(ranges)}. Two ranges on different fields work only for COUNT with GROUP BY one of them and no IN filter.`,
     );
+  }
+  if (carrier && shape.limit !== undefined && shape.limit > CARRIER_OUTER_RANGE_LIMIT) {
+    warnings.push(`A COUNT grouped over two ranges returns at most ${CARRIER_OUTER_RANGE_LIMIT} groups; use LIMIT ${CARRIER_OUTER_RANGE_LIMIT} or less.`);
   }
   if (ranges.length === 1 && hasIn && mode === 'aggregate') {
     warnings.push(`An IN filter with a range filter needs GROUP BY ${roles.inFields[0]} (or GROUP BY ${roles.inFields[0]}, ${ranges[0]}) when proofs are requested.`);
@@ -485,11 +491,11 @@ export function checkAggregateAgainstIndices(
   const props = (idx: SchemaIndex) => idx.properties.map((p) => p.field);
   const outer = shape.groupBy?.[0];
   const match = carrier
-    ? // `find_range_countable_index`: the GROUP BY range first, the other range last, filtered fields between.
+    ? // `find_range_countable_index`: one range first, the other last, filtered fields between.
       indices.find((idx) => {
         const p = props(idx);
-        const inner = ranges.find((f) => f !== outer);
-        return fits(idx, true) && p.length >= 2 && p[0] === outer && p[p.length - 1] === inner && p.slice(1, -1).every((f) => pointFields.includes(f));
+        return fits(idx, true) && p.length >= 2 && ranges.includes(p[0]!) && ranges.includes(p[p.length - 1]!) && p[0] !== p[p.length - 1]
+          && p.slice(1, -1).every((f) => pointFields.includes(f));
       })
     : rangeField
       ? indices.find((idx) => {
@@ -501,9 +507,17 @@ export function checkAggregateAgainstIndices(
           const p = props(idx);
           return fits(idx, false) && p.length === pointFields.length && p.every((f) => pointFields.includes(f));
         });
+  if (match && carrier) {
+    // The picker checks only the properties between the two ranges, and the
+    // walk groups by the index's first property whatever GROUP BY says.
+    const p = props(match);
+    const ignored = pointFields.filter((f) => !p.includes(f));
+    if (ignored.length) warnings.push(`Platform ignores the filter on ${list(ignored)} for this shape, because ${describeIndex(match)} does not include it.`);
+    if (p[0] !== outer) warnings.push(`Platform groups this by \`${p[0]}\`, the first property of ${describeIndex(match)}, not by \`${outer}\`.`);
+  }
   if (match) return { matchedIndex: match.name, warnings };
 
-  const range = carrier || !!rangeField;
+  const range = ranges.length > 0;
   const flagged = indices.filter((idx) => fits(idx, range));
   const where = list([...pointFields, ...ranges]);
   const hint = flagged.length
@@ -513,7 +527,7 @@ export function checkAggregateAgainstIndices(
     warnings: [
       ...warnings,
       carrier
-        ? `A ${fn} with ranges on ${list(ranges)} grouped by \`${outer}\` needs a range ${requirement} index that starts with \`${outer}\`, ends with ${list(ranges.filter((f) => f !== outer))} and has only filtered fields in between.${hint}`
+        ? `A ${fn} with ranges on ${list(ranges)} needs a range ${requirement} index that starts with one of them, ends with the other and has only filtered fields in between.${hint}`
         : rangeField
           ? `A ${fn} with a range on \`${rangeField}\` needs a range ${requirement} index whose last property is \`${rangeField}\` and whose other properties are the filtered fields (${where}).${hint}`
           : `A filtered ${fn} needs a ${requirement} index whose properties are exactly the filtered fields (${where}).${hint}`,

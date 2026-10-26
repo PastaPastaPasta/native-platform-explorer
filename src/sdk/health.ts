@@ -101,14 +101,12 @@ export function extractPlatformStatus(raw: unknown): PlatformStatus {
 export function platformProtocolVersion(raw: unknown): number | undefined {
   const plain = raw ? (toPlain(raw) as Record<string, unknown> | undefined) : undefined;
   const version = plain?.version as { protocol?: { drive?: { current?: unknown } } } | undefined;
-  const current = firstNum(version?.protocol?.drive?.current);
-  return current === null ? undefined : current;
+  return firstNum(version?.protocol?.drive?.current) ?? undefined;
 }
 
 /** Protocol version from the status the meter bar already polls. */
 export function usePlatformProtocolVersion(): number | undefined {
-  const statusQ = useSystemStatus();
-  return useMemo(() => platformProtocolVersion(statusQ.data), [statusQ.data]);
+  return platformProtocolVersion(useSystemStatus().data);
 }
 
 // ----- health verdict -----

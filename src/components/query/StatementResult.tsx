@@ -42,6 +42,9 @@ import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { QueryResults } from './QueryResults';
 import { AggregateResults, type AggregateResultMap } from './AggregateResults';
 
+/** Protocol versions as of 2026-10-26, used until system.status answers. */
+const KNOWN_PROTOCOL_VERSIONS: Partial<Record<string, number>> = { mainnet: 13, testnet: 14 };
+
 /** The GROUP BY field that also carries the range filter (RangeDistinct mode). */
 function rangeGroupField(parsed: ParsedQuery): string | undefined {
   const field = parsed.groupBy?.[parsed.groupBy.length - 1];
@@ -75,7 +78,7 @@ export function StatementResult({
     retrievedAt: number;
   } | null>(null);
   const { network } = useSdk();
-  const protocolVersion = usePlatformProtocolVersion();
+  const protocolVersion = usePlatformProtocolVersion() ?? KNOWN_PROTOCOL_VERSIONS[network];
   const stateChangeRef = useRef(onStateChange);
   stateChangeRef.current = onStateChange;
 

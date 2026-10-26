@@ -750,6 +750,30 @@ function conditionToWhere(c: ParsedCondition): [string, string, unknown] {
   }
 }
 
+const BOUNDED_RANGE: Record<string, string> = {
+  '>=,<=': 'between',
+  '>,<': 'betweenExcludeBounds',
+  '>,<=': 'betweenExcludeLeft',
+  '>=,<': 'betweenExcludeRight',
+};
+
+/**
+ * Aggregates need a two-sided range as one `between*` clause: the SUM/AVG
+ * index pickers and the SDK's COUNT proof check don't pair two clauses on a
+ * field (document queries do, so they keep the clauses as written).
+ */
+function aggregateWhere(where: ParsedCondition[]): Array<[string, string, unknown]> {
+  const out: Array<[string, string, unknown]> = [];
+  for (const c of where) {
+    const onField = where.filter((o) => o.field === c.field);
+    const low = onField.find((o) => o.operator === '>' || o.operator === '>=');
+    const high = onField.find((o) => o.operator === '<' || o.operator === '<=');
+    if (onField.length !== 2 || !low || !high) out.push(conditionToWhere(c));
+    else if (c === low) out.push([c.field, BOUNDED_RANGE[`${low.operator},${high.operator}`]!, [low.value, high.value]]);
+  }
+  return out;
+}
+
 export function toDocumentsQuery(
   parsed: ParsedQuery,
   contractId: string,
@@ -758,7 +782,9 @@ export function toDocumentsQuery(
   return {
     dataContractId: contractId,
     documentTypeName: parsed.from,
-    where: parsed.where.length ? parsed.where.map(conditionToWhere) : undefined,
+    where: parsed.where.length
+      ? parsed.select === 'documents' ? parsed.where.map(conditionToWhere) : aggregateWhere(parsed.where)
+      : undefined,
     orderBy: parsed.orderBy.length ? parsed.orderBy.map((o) => [o.field, o.direction]) : undefined,
     limit: parsed.limit ?? (parsed.select === 'documents' ? 25 : undefined),
     startAfter: overrides?.startAfter,

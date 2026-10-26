@@ -190,6 +190,9 @@ describe('checkQueryAgainstIndices', () => {
       { name: 'ab', properties: ['a', 'b'].map((field) => ({ field, order: 'asc' as const })) },
     ];
     expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }]), indices).matchedIndex).toBe('ab');
+    // Equal fits go to the first index by name, as in Drive's BTreeMap.
+    const twins: SchemaIndex[] = ['zzz', 'aaa'].map((name) => ({ name, properties: [{ field: 'a', order: 'asc' as const }] }));
+    expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }]), twins).matchedIndex).toBe('aaa');
   });
 
   it('requires ORDER BY to reach every other field the query uses', () => {
@@ -217,7 +220,12 @@ describe('checkQueryAgainstIndices', () => {
     expect(checkQueryAgainstIndices(between, DPNS).warnings[0]).toMatch(/conflicting range filters/);
     const twoIn = q([{ field: P, operator: 'in' }, { field: L, operator: 'in' }], [P, L]);
     expect(checkQueryAgainstIndices(twoIn, DPNS).warnings[0]).toBe(`Only one IN filter is allowed per query; this query has IN on \`${P}\`, \`${L}\`.`);
-    expect(checkQueryAgainstIndices(twoIn, DPNS, V14).warnings.join(' ')).not.toMatch(/Only one IN/);
+    // Protocol 14 places several IN fields with a search this check does not model.
+    const abc: SchemaIndex[] = [{ name: 'abc', properties: ['a', 'b', 'c'].map((field) => ({ field, order: 'asc' as const })) }];
+    expect(checkQueryAgainstIndices(q([{ field: 'a', operator: 'in' }, { field: 'b', operator: 'in' }], ['a', 'b']), abc, V14)).toEqual({ warnings: [] });
+    expect(checkQueryAgainstIndices(q([{ field: P, operator: 'in' }, { field: P, operator: '>' }], [P]), DPNS).warnings[0]).toBe(
+      `\`${P}\` is filtered with IN and with a range; use one filter per field.`,
+    );
     expect(checkQueryAgainstIndices(q([{ field: P, operator: '==' }, { field: P, operator: '==' }]), DPNS).warnings[0]).toBe(
       `\`${P}\` has more than one = filter; use one filter per field.`,
     );
@@ -302,12 +310,22 @@ describe('aggregate index flags', () => {
   it('accepts two ranges on different fields grouped by the outer one (carrier aggregate)', () => {
     const shape = g([{ field: 'class', operator: '>' }, { field: 'semester', operator: '>' }], ['class']);
     expect(checkAggregateAgainstIndices(shape, 'count', undefined, indices, docType)).toEqual({ matchedIndex: 'byClassSemester', warnings: [] });
-    expect(checkAggregateAgainstIndices(g(shape.where, ['semester']), 'count', undefined, indices, docType).warnings).toEqual([
-      'A COUNT with ranges on `class`, `semester` grouped by `semester` needs a range countable index that starts with `semester`, ends with `class` and has only filtered fields in between. Indices with those flags: byClassSemester (class, semester).',
+    // The carrier picker ignores GROUP BY and walks the index's first property.
+    expect(checkAggregateAgainstIndices(g(shape.where, ['semester']), 'count', undefined, indices, docType)).toEqual({
+      matchedIndex: 'byClassSemester',
+      warnings: ['Platform groups this by `class`, the first property of byClassSemester (class, semester), not by `semester`.'],
+    });
+    expect(checkAggregateAgainstIndices(g([...shape.where, { field: 'student', operator: '==' }], ['class']), 'count', undefined, indices, docType).warnings).toEqual([
+      'Platform ignores the filter on `student` for this shape, because byClassSemester (class, semester) does not include it.',
     ]);
-    expect(checkAggregateAgainstIndices(g(shape.where), 'count', undefined, indices, docType).warnings[0]).toBe(
-      'Only one field can use range filters in an aggregate; this query uses `class`, `semester`. Two ranges on different fields work only with GROUP BY the first one and no IN filter.',
-    );
+    expect(checkAggregateAgainstIndices(g(shape.where, ['class'], 50), 'count', undefined, indices, docType).warnings).toEqual([
+      'A COUNT grouped over two ranges returns at most 10 groups; use LIMIT 10 or less.',
+    ]);
+    const twoRanges = 'Only one field can use range filters in an aggregate; this query uses `class`, `semester`. Two ranges on different fields work only for COUNT with GROUP BY one of them and no IN filter.';
+    expect(checkAggregateAgainstIndices(g(shape.where), 'count', undefined, indices, docType).warnings[0]).toBe(twoRanges);
+    // SUM and AVG have no carrier walk.
+    expect(checkAggregateAgainstIndices(shape, 'sum', 'score', indices, docType).warnings[0]).toBe(twoRanges);
+    expect(checkAggregateAgainstIndices(shape, 'avg', 'score', indices, docType).warnings[0]).toBe(twoRanges);
   });
 
   it('rejects the shapes Drive 4.0 rejects under proof', () => {
@@ -357,5 +375,8 @@ describe('aggregateGroupBound', () => {
     const compound = g([{ field: 'class', operator: 'in', value: ['a', 'b', 'b', 'c'] }, { field: 'semester', operator: '>' }], ['class', 'semester'], 20);
     expect(aggregateGroupBound(compound)).toEqual({ limit: 20, entriesPerGroup: 3 });
     expect(aggregateGroupBound(g([{ field: 'class', operator: '>' }, { field: 'semester', operator: '>' }], ['class']))).toEqual({ limit: 10, entriesPerGroup: 1 });
+    // A range GROUP BY with an IN on another field also returns (in, range) pairs.
+    const rangeWithIn = g([{ field: 'class', operator: 'in', value: ['a', 'b'] }, { field: 'semester', operator: '>' }], ['semester']);
+    expect(aggregateGroupBound(rangeWithIn)).toEqual({ limit: 100, entriesPerGroup: 2 });
   });
 });
