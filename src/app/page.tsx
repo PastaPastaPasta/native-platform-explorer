@@ -6,6 +6,7 @@ import {
   Grid,
   Heading,
   HStack,
+  Progress,
   SimpleGrid,
   Skeleton,
   Text,
@@ -16,16 +17,18 @@ import NextLink from 'next/link';
 import { useMemo } from 'react';
 import { Eyebrow } from '@ui/Eyebrow';
 import { LoadingCard } from '@ui/LoadingCard';
+import { LookupInput } from '@ui/LookupInput';
 import { EvonodesLeaderboard } from '@components/charts/EvonodesLeaderboard';
 import { VotePollsList } from '@components/governance/VotePollsList';
 import { CreditsBlock } from '@components/data/CreditsBlock';
 import { Identifier } from '@components/data/Identifier';
 import { ProofGlyph } from '@components/proof/ProofGlyph';
+import { QuorumBreakdownList } from '@components/network/QuorumsTable';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
+  useAllEvonodeBlocksInEpoch,
   useCurrentEpoch,
   useCurrentQuorumsInfo,
-  useEvonodesBlocksByRange,
   useProtocolVersionUpgradeState,
   useSystemStatus,
   useTotalCreditsInPlatform,
@@ -33,9 +36,13 @@ import {
 } from '@sdk/queries';
 import { WELL_KNOWN } from '@constants/well-known';
 import { useSdk } from '@sdk/hooks';
-import { evonodesMapToBars, normaliseEpoch } from '@util/epoch';
+import { normaliseEpoch, summariseProposers, withEpochDuration } from '@util/epoch';
+import { networkEpochDurationMs } from '@sdk/current-epoch';
+import { isEpochIndex } from '@sdk/epoch-queries';
 import { toPlain } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
+import { normaliseQuorums, quorumBreakdown } from '@util/quorums';
+import { isBase58Identifier, looksLikeDpnsName } from '@util/identifier';
 import type { ProofStatus } from '@components/proof/ProofInspectorContext';
 import type { QueryProofEntry } from '@/contexts/QueryProofStore';
 import type { ProofState } from '@sdk/proofs';
@@ -72,18 +79,44 @@ function SectionHeading({
   );
 }
 
-function getQuorumsCount(raw: unknown): number | null {
-  if (!raw) return null;
-  if (Array.isArray(raw)) return raw.length;
-  if (raw instanceof Map) return raw.size;
-  const qt = readProp<unknown[]>(raw, 'quorums');
-  return Array.isArray(qt) ? qt.length : null;
-}
+const QUICK_ACTIONS: Array<{
+  label: string;
+  placeholder: string;
+  validate: (v: string) => string | null;
+  buildHref: (v: string) => string;
+}> = [
+  {
+    label: 'Look up identity',
+    placeholder: 'identity id (base58)',
+    validate: (v) => (isBase58Identifier(v) ? null : 'Expected a base58 identifier.'),
+    buildHref: (v) => `/identity/?id=${encodeURIComponent(v)}`,
+  },
+  {
+    label: 'Resolve DPNS name',
+    placeholder: 'alice.dash',
+    validate: (v) => (looksLikeDpnsName(v) ? null : 'Expected a DPNS name such as alice.dash.'),
+    buildHref: (v) => `/dpns/?name=${encodeURIComponent(v)}`,
+  },
+  {
+    label: 'Check token',
+    placeholder: 'token id (base58)',
+    validate: (v) => (isBase58Identifier(v) ? null : 'Expected a base58 token id.'),
+    buildHref: (v) => `/token/?id=${encodeURIComponent(v)}`,
+  },
+  {
+    label: 'Check epoch',
+    placeholder: 'epoch index',
+    validate: (v) => (/^\d+$/.test(v) && isEpochIndex(Number(v)) ? null : 'Expected a whole epoch index.'),
+    buildHref: (v) => `/epoch/detail/?index=${Number(v)}`,
+  },
+];
 
 function StatCell({
   label,
   value,
   footnote,
+  meter,
+  meterLabel,
   proofStatus,
   proofTitle,
   proofEntry,
@@ -93,6 +126,9 @@ function StatCell({
   label: string;
   value: React.ReactNode;
   footnote?: React.ReactNode;
+  /** Optional 0–100 progress bar shown between the value and footnote. */
+  meter?: number;
+  meterLabel?: string;
   proofStatus?: ProofStatus;
   proofTitle?: string;
   proofEntry?: QueryProofEntry;
@@ -107,6 +143,7 @@ function StatCell({
     <Box
       px={{ base: 4, md: 5 }}
       py={4}
+      minW={0}
       borderRight={{ base: 'none', lg: '1px solid' }}
       borderRightColor={{ base: 'transparent', lg: 'hairline' }}
       borderBottom={{ base: '1px solid', lg: 'none' }}
@@ -114,7 +151,7 @@ function StatCell({
       _last={{ borderRight: 'none', borderBottom: 'none' }}
     >
       <Eyebrow mb={2}>{label}</Eyebrow>
-      <HStack spacing={2} align="baseline">
+      <HStack spacing={2} align="baseline" minW={0}>
         {effectiveStatus && !loading ? (
           <ProofGlyph
             status={effectiveStatus}
@@ -159,6 +196,16 @@ function StatCell({
           value
         )}
       </HStack>
+      {meter !== undefined && !loading && !errored ? (
+        <Progress
+          value={meter}
+          size="xs"
+          borderRadius="full"
+          bg="sunken"
+          mt={2}
+          aria-label={meterLabel}
+        />
+      ) : null}
       {footnote ? (
         <Text fontFamily="mono" fontSize="11px" color="muted" mt={1.5}>
           {footnote}
@@ -179,9 +226,12 @@ export default function HomePage() {
   const protocolQ = useProtocolVersionUpgradeState();
   const quorumsQ = useCurrentQuorumsInfo();
 
-  const epoch = epochQ.data ? normaliseEpoch(epochQ.data) : null;
-  const evonodesQ = useEvonodesBlocksByRange(epoch?.index, 20);
-  const bars = evonodesMapToBars(evonodesQ.data);
+  const epoch = epochQ.data
+    ? withEpochDuration(normaliseEpoch(epochQ.data), networkEpochDurationMs(network))
+    : null;
+  // Rank across every evonode: one page is a proTxHash-ordered slice.
+  const evonodesQ = useAllEvonodeBlocksInEpoch(epoch?.index);
+  const proposers = summariseProposers(evonodesQ.data);
 
   const nowBucket = Math.floor(Date.now() / 60_000) * 60_000;
   const in30d = nowBucket + 30 * 86_400_000;
@@ -201,10 +251,22 @@ export default function HomePage() {
   const statusNetwork = (statusPlain.network as Record<string, unknown> | undefined) ?? {};
   const chainId =
     (statusNetwork.chainId as string | undefined) ?? readProp<string>(statusPlain, 'chainId');
-  const quorumsCount = getQuorumsCount(quorumsQ.data);
+  const quorums = useMemo(() => normaliseQuorums(quorumsQ.data).quorums, [quorumsQ.data]);
+  const quorumGroups = useMemo(() => quorumBreakdown(quorums), [quorums]);
 
-  const protocolCurrent = readProp<unknown>(protocolQ.data, 'currentProtocolVersion');
-  const protocolPending = readProp<unknown>(protocolQ.data, 'nextProtocolVersion');
+  // The running version is the current epoch's; rc.2's versionUpgradeState
+  // currentProtocolVersion disagrees with it on both public networks.
+  const epochProtocol = readProp<number>(epochQ.data, 'protocolVersion');
+  const versionQ = typeof epochProtocol === 'number' ? epochQ : protocolQ;
+  const protocolCurrent =
+    typeof epochProtocol === 'number'
+      ? epochProtocol
+      : readProp<number>(protocolQ.data, 'currentProtocolVersion');
+  const protocolNext = readProp<number | undefined>(protocolQ.data, 'nextProtocolVersion');
+  const protocolPending =
+    typeof protocolNext === 'number' && (protocolCurrent === undefined || protocolNext > protocolCurrent)
+      ? protocolNext
+      : undefined;
 
   return (
     <VStack align="stretch" spacing={8} py={{ base: 4, md: 8 }}>
@@ -278,8 +340,12 @@ export default function HomePage() {
                 #{epoch?.index ?? '—'}
               </Text>
             }
+            meter={epoch?.progressPct ?? undefined}
+            meterLabel="Epoch progress"
             footnote={
-              epoch?.progressPct != null ? `${epoch.progressPct.toFixed(1)}% complete` : undefined
+              epoch?.progressPct != null
+                ? `${epoch.progressPct.toFixed(1)}% elapsed (est.)`
+                : undefined
             }
           />
 
@@ -290,17 +356,22 @@ export default function HomePage() {
             proofEntry={creditsQ.proofEntry}
             loading={creditsQ.isLoading}
             error={creditsQ.error}
-            value={<CreditsBlock credits={(creditsQ.data as bigint | undefined) ?? null} />}
+            value={
+              <CreditsBlock
+                credits={(creditsQ.data as bigint | undefined) ?? null}
+                layout="headline"
+              />
+            }
             footnote="platform supply"
           />
 
           <StatCell
             label="Protocol version"
-            proofStatus={glyphStatus(protocolQ.proofState)}
+            proofStatus={glyphStatus(versionQ.proofState)}
             proofTitle="Protocol version proof"
-            proofEntry={protocolQ.proofEntry}
-            loading={protocolQ.isLoading}
-            error={protocolQ.error}
+            proofEntry={versionQ.proofEntry}
+            loading={versionQ.isLoading}
+            error={versionQ.error}
             value={
               <Text
                 fontFamily="heading"
@@ -309,7 +380,7 @@ export default function HomePage() {
                 fontWeight={500}
                 sx={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {protocolCurrent !== undefined ? `v${String(protocolCurrent)}` : '—'}
+                {protocolCurrent !== undefined ? `v${protocolCurrent}` : '—'}
               </Text>
             }
             footnote={
@@ -338,7 +409,7 @@ export default function HomePage() {
                 fontWeight={500}
                 sx={{ fontVariantNumeric: 'tabular-nums' }}
               >
-                {quorumsCount ?? '—'}
+                {quorumsQ.data ? quorums.length : '—'}
               </Text>
             }
             footnote="signing this height"
@@ -349,7 +420,11 @@ export default function HomePage() {
       {/* Top proposers */}
       <Box as="section">
         <SectionHeading
-          label={`Top proposers · epoch ${epoch ? `#${epoch.index}` : '—'}`}
+          label={`Top proposers · epoch ${epoch ? `#${epoch.index}` : '—'}${
+            evonodesQ.isSuccess
+              ? ` · ${proposers.totalBlocks.toLocaleString('en-US')} blocks by ${proposers.proposers} evonodes`
+              : ''
+          }`}
           action={
             <Button
               as={NextLink}
@@ -365,11 +440,65 @@ export default function HomePage() {
           }
         />
         {epochQ.isLoading || evonodesQ.isLoading ? (
-          <LoadingCard lines={5} />
+          <VStack align="stretch" spacing={2}>
+            <Text fontSize="xs" color="muted">
+              Reading every evonode&apos;s block count before ranking…
+            </Text>
+            <LoadingCard lines={5} />
+          </VStack>
+        ) : evonodesQ.isError ? (
+          <Text fontSize="sm" color="failed" fontFamily="mono">
+            Proposers unavailable: {evonodesQ.error?.message ?? 'request failed'}
+          </Text>
         ) : (
-          <EvonodesLeaderboard entries={bars} limit={10} />
+          <EvonodesLeaderboard entries={proposers.bars} limit={10} />
         )}
       </Box>
+
+      <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={{ base: 8, lg: 10 }}>
+        <Box as="section">
+          <SectionHeading label="Quick actions" />
+          <SimpleGrid columns={{ base: 1, md: 2 }} spacingX={6} spacingY={4}>
+            {QUICK_ACTIONS.map((a) => (
+              <LookupInput
+                key={a.label}
+                label={a.label}
+                placeholder={a.placeholder}
+                validate={a.validate}
+                buildHref={a.buildHref}
+              />
+            ))}
+          </SimpleGrid>
+        </Box>
+
+        <Box as="section">
+          <SectionHeading
+            label="Quorums by type"
+            action={
+              <Button
+                as={NextLink}
+                href="/network/quorums/"
+                size="xs"
+                variant="ghost"
+                color="accent"
+                fontFamily="mono"
+                fontSize="11px"
+              >
+                all quorums →
+              </Button>
+            }
+          />
+          {quorumsQ.isLoading ? (
+            <LoadingCard lines={2} />
+          ) : quorumsQ.isError ? (
+            <Text fontSize="sm" color="failed" fontFamily="mono">
+              Quorums unavailable: {quorumsQ.error?.message ?? 'request failed'}
+            </Text>
+          ) : (
+            <QuorumBreakdownList groups={quorumGroups} />
+          )}
+        </Box>
+      </Grid>
 
       {/* Bottom grid */}
       <Grid templateColumns={{ base: '1fr', lg: '3fr 2fr' }} gap={{ base: 8, lg: 10 }}>

@@ -18,7 +18,9 @@ describe('SDK reference', () => {
     expect(filterReference(reference.pages, 'useIdentityBalanceAndRevision', '/identity/')[0]?.calls.length).toBe(2);
     expect(filterReference(reference.pages, 'definitely-not-a-call', '')).toEqual([]);
     expect(filterReference(reference.pages, '', '/sdk-reference/')[0]?.calls).toEqual([]);
-    expect(reference.pages.find((page) => page.route === '/epoch/')?.calls.length).toBe(4);
+    // The proposer ranking walks every page, so it uses the plain range call.
+    expect(reference.pages.find((page) => page.route === '/epoch/')?.calls.map((call) => call.method))
+      .toEqual(['epoch.epochsInfo', 'epoch.epochsInfoWithProof', 'epoch.evonodesProposedBlocksByRange']);
   });
 
   it('supports route filtering, accessible searching, empty recovery and local-only pages without an SDK', () => {

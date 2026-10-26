@@ -2,7 +2,7 @@
 
 import { Badge, HStack, Text, VStack, Tooltip } from '@chakra-ui/react';
 import BigNumber from 'bignumber.js';
-import { creditsToDash, formatCredits } from '@util/credits';
+import { creditsToDash, formatCredits, formatDashAmount } from '@util/credits';
 import { currencyRound } from '@util/numbers';
 import { useDashUsdRate } from '@sdk/queries';
 import { NotActive } from './NotActive';
@@ -11,8 +11,10 @@ export interface CreditsBlockProps {
   credits: bigint | number | string | null | undefined;
   /** 'stacked' = DASH on top of USD (default, matches Stage 2 call sites).
    *  'inline' = credits + DASH + USD on one line — hero digest style.
-   *  'compact' = single row of DASH + USD, right-align friendly. */
-  layout?: 'stacked' | 'inline' | 'compact';
+   *  'compact' = single row of DASH + USD, right-align friendly.
+   *  'headline' = large DASH rounded to 2 decimals (exact value in the
+   *  tooltip) that wraps inside narrow stat cells. */
+  layout?: 'stacked' | 'inline' | 'compact' | 'headline';
   showUsd?: boolean;
 }
 
@@ -60,6 +62,35 @@ export function CreditsBlock({
           </Badge>
         ) : null}
       </HStack>
+    );
+  }
+
+  if (layout === 'headline') {
+    return (
+      <VStack align="flex-start" spacing={0} minW={0}>
+        <Tooltip label={`${dashStr || '0'} DASH · ${creditsStr} credits`} hasArrow>
+          <Text
+            fontFamily="heading"
+            fontSize="xl"
+            color="ink"
+            fontWeight={500}
+            lineHeight={1.2}
+            sx={{ fontVariantNumeric: 'tabular-nums' }}
+          >
+            <Text as="span" whiteSpace="nowrap">
+              {formatDashAmount(credits)}
+            </Text>{' '}
+            <Text as="span" fontFamily="mono" color="muted" fontSize="xs" fontWeight={400}>
+              DASH
+            </Text>
+          </Text>
+        </Tooltip>
+        {usd !== null ? (
+          <Text fontFamily="mono" fontSize="xs" color="muted">
+            ≈&nbsp;${currencyRound(usd)}
+          </Text>
+        ) : null}
+      </VStack>
     );
   }
 
