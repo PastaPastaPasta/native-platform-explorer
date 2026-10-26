@@ -442,6 +442,19 @@ describe('OperationShell', () => {
       expect(screen.getByRole('button', { name: 'Sign + broadcast' })).toBeEnabled();
     });
 
+    it('binds signing to the reviewed key', async () => {
+      const { execute } = setup({
+        capability: { status: 'available' },
+        signingCriteria: vi.fn().mockResolvedValue({ purpose: 'TRANSFER' }),
+      });
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+      review();
+      await screen.findByText('Signing key: #2 · TRANSFER · CRITICAL');
+      broadcast();
+      await screen.findByText('Broadcast succeeded');
+      expect(execute).toHaveBeenCalledWith(expect.objectContaining({ signingKeyId: 2 }));
+    });
+
     it('names contract bounds and blocks signing when no key qualifies', async () => {
       setup({
         capability: { status: 'available' },

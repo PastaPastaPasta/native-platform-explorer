@@ -44,6 +44,7 @@ import type {
   SignerKeyDescriptor,
 } from '@/signer/types';
 import { selectSigningKey } from '@/signer/keys';
+import type { ExecuteArgs } from './executors';
 
 export interface OperationFormProps<TOptions> {
   signer: ExplorerSigner;
@@ -63,13 +64,7 @@ export interface OperationDescriptor<TOptions, TResult> {
   reviewData?: (options: TOptions) => unknown;
   /** Key requirements for these inputs; the review step shows the key they select. */
   signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
-  execute: (args: {
-    sdk: EvoSDK;
-    signer: ExplorerSigner;
-    options: TOptions;
-    /** Recheck the approved session immediately before entering a write call. */
-    assertCurrent?: () => void;
-  }) => Promise<TResult>;
+  execute: (args: ExecuteArgs<TOptions>) => Promise<TResult>;
 }
 
 // Tag every primitive so bigint credits cannot collide with a string or JSON
@@ -340,6 +335,7 @@ export function OperationShell<TOptions, TResult>({
         sdk: submitted.sdk,
         signer: submitted.signer,
         options: submitted.options,
+        signingKeyId: reviewSigningKey?.key?.id,
         assertCurrent: () => {
           if (!isCurrent(submitted))
             throw new OperationNotSubmittedError(

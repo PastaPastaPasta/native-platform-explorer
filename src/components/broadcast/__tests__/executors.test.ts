@@ -131,6 +131,57 @@ describe('broadcast executors', () => {
     expect(creditWithdrawal).not.toHaveBeenCalled();
   });
 
+  describe('the reviewed signing key', () => {
+    const run = (signer: ReturnType<typeof createMockSigner>, create = vi.fn()) =>
+      executeDocumentCreate({
+        sdk: { contracts: noteContracts(), documents: { create } } as never,
+        signer,
+        options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+        signingKeyId: 3,
+      });
+
+    it('is the only key the signer may use', async () => {
+      const prepareSdk = vi.fn().mockResolvedValue(createSigningMaterial({ keyId: 3 }));
+      const create = vi.fn().mockResolvedValue(undefined);
+      await run(createMockSigner({ prepareSdk }), create);
+      expect(prepareSdk).toHaveBeenCalledWith(expect.objectContaining({ keyId: 3 }));
+      expect(prepareSdk.mock.calls[0]![0]).toMatchObject({ purpose: 'AUTHENTICATION' });
+      expect(create).toHaveBeenCalledOnce();
+    });
+
+    it('fails as not submitted when it is no longer eligible', async () => {
+      const create = vi.fn();
+      const execution = run(
+        createMockSigner({
+          prepareSdk: vi
+            .fn()
+            .mockRejectedValue(new Error('No enabled matching on-chain key satisfies (key 3)')),
+        }),
+        create,
+      );
+      await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(execution).rejects.toThrow(
+        /reviewed signing key #3 can no longer sign this operation \(No enabled matching/,
+      );
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it('refuses material for another key and releases it', async () => {
+      const release = vi.fn();
+      const create = vi.fn();
+      const execution = run(
+        createMockSigner({
+          prepareSdk: vi.fn().mockResolvedValue(createSigningMaterial({ keyId: 4, release })),
+        }),
+        create,
+      );
+      await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(execution).rejects.toThrow(/key #3 .*selected key #4/);
+      expect(create).not.toHaveBeenCalled();
+      expect(release).toHaveBeenCalledOnce();
+    });
+  });
+
   it.each([false, true])('releases all adapter-owned signing material (failure: %s)', async (fails) => {
     const signerFree = vi.fn();
     const keyFree = vi.fn();
