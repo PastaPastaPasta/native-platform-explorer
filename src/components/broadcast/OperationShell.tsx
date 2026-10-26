@@ -83,7 +83,8 @@ export interface OperationDescriptor<TOptions, TResult> {
   capability?: OperationCapabilityRequirement;
   title: string;
   description: string;
-  destructive?: boolean;
+  /** Destructive for every input, or only for some (e.g. a change that gives up control). */
+  destructive?: boolean | ((options: TOptions) => boolean);
   FormComponent: React.ComponentType<OperationFormProps<TOptions>>;
   summarise: (options: TOptions) => string;
   /** Who pays the fee, shown at review. Defaults to the signing identity's balance. */
@@ -129,6 +130,21 @@ function wipeSecretBytes<TOptions>(
   }
 }
 
+/** Whether these inputs need the destructive acknowledgement; fails closed. */
+function destructiveFor<TOptions, TResult>(
+  descriptor: OperationDescriptor<TOptions, TResult>,
+  options: TOptions | null,
+): boolean {
+  const { destructive } = descriptor;
+  if (typeof destructive !== 'function') return destructive === true;
+  if (options === null) return false;
+  try {
+    return destructive(options);
+  } catch {
+    return true;
+  }
+}
+
 function describeKey(key: SignerKeyDescriptor): string {
   const bounds = key.contractBounds
     ? ` · bound to contract ${key.contractBounds.contractId}${
@@ -161,7 +177,7 @@ interface Review<TOptions, TResult> {
 type Submission<TOptions, TResult> = Pick<
   Review<TOptions, TResult>,
   'descriptor' | 'identityId' | 'network' | 'trusted'
-> & { submittedAt: string; entities: ReceiptEntities };
+> & { submittedAt: string; entities: ReceiptEntities; destructive: boolean };
 
 export function OperationShell<TOptions, TResult>({
   descriptor,
@@ -415,11 +431,12 @@ export function OperationShell<TOptions, TResult>({
     setActiveStep(1);
   };
   const mainnetConfirmed = network !== 'mainnet' || (mainnetAck && mainnetTyped === 'MAINNET');
+  const reviewDestructive = review ? destructiveFor(review.descriptor, review.options) : false;
   const canProceed =
     reviewIsCurrent &&
     capabilityAvailable &&
     signingKeyReady &&
-    (!descriptor.destructive || destructiveAck) &&
+    (!reviewDestructive || destructiveAck) &&
     mainnetConfirmed &&
     !busy;
   const onExecute = async () => {
@@ -435,6 +452,7 @@ export function OperationShell<TOptions, TResult>({
       trusted: submitted.trusted,
       submittedAt: new Date().toISOString(),
       entities: receiptEntities(submitted.options, submitted.identityId),
+      destructive: reviewDestructive,
     });
     setActiveStep(2);
     setBusy(true);
@@ -534,7 +552,13 @@ export function OperationShell<TOptions, TResult>({
             <Badge colorScheme="blue" variant="subtle">
               {origin?.network ?? network}
             </Badge>
-            {(origin?.descriptor.destructive ?? descriptor.destructive) ? (
+            {(
+              submission
+                ? submission.destructive
+                : review
+                  ? reviewDestructive
+                  : destructiveFor(descriptor, options)
+            ) ? (
               <Badge colorScheme="red" variant="subtle">
                 destructive
               </Badge>
@@ -661,7 +685,7 @@ export function OperationShell<TOptions, TResult>({
               The SDK does not provide an estimate in advance, so the exact fee is only known
               afterwards.
             </Text>
-            {descriptor.destructive ? (
+            {reviewDestructive ? (
               <InfoBlock>
                 <VStack align="stretch" spacing={2}>
                   <Text color="danger" fontSize="sm" fontWeight={600}>

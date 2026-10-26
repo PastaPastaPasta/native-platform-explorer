@@ -108,4 +108,30 @@ describe('operation receipt navigation', () => {
     });
     expect(screen.queryByRole('link', { name: 'Open identity' })).not.toBeInTheDocument();
   });
+
+  it('links the token and the affected identity and shows the proved balance change', () => {
+    renderWithProviders(
+      <OperationReceipt
+        title="Destroy frozen funds"
+        network="testnet"
+        trusted
+        identityId="owner-1"
+        submittedAt="2026-10-26T09:00:00Z"
+        entities={{ identityId: 'owner-1', contractId: 'contract-1', tokenId: 'token-1', targetIdentityId: 'holder-1' }}
+        result={{
+          kind: 'token',
+          action: 'destroyFrozen',
+          tokenId: 'token-1',
+          balancesProvedAtHeight: '646775',
+          balances: [{ identityId: 'holder-1', before: '500000000', after: '0', display: '5 → 0 npetok' }],
+        }}
+      />,
+    );
+    expectLink('Open token', '/token', { id: 'token-1', network: 'testnet' });
+    expectLink('Open affected identity', '/identity', { id: 'holder-1', network: 'testnet' });
+    expectLink('Open contract', '/contract', { id: 'contract-1', network: 'testnet' });
+    const balances = screen.getByRole('status', { name: 'Token balance change' });
+    expect(balances).toHaveTextContent('Token balances (proved at block 646775)');
+    expect(balances).toHaveTextContent('holder-1: 5 → 0 npetok');
+  });
 });
