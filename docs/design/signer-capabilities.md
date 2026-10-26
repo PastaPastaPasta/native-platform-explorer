@@ -60,7 +60,9 @@ destroys the previous one. Adapter-owned private byte arrays are cleared on
 disconnect, reload/unload, ten minutes without pointer, keyboard, wheel, or touch
 input (visible or hidden; throttled background timers are rechecked when the tab
 becomes visible), or navigation away from `/wallet` and `/broadcast`. Automatic
-clears keep the public reconnect hint; explicit disconnects remove it. Signing material
+clears keep the public reconnect hint; explicit disconnects remove it. Owner-gated
+shortcuts on identity, contract, and document pages match that hint, since the
+live signer is cleared there; the broadcast console still requires a live signer. Signing material
 already returned to an executor owns a separate WASM copy and is released when
 that operation settles; disconnect does not cancel an in-flight operation in this
 PR. JavaScript cannot guarantee erasure of every secret copy. Session storage
