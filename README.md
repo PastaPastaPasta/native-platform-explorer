@@ -80,9 +80,25 @@ Extension support is detection-only until the
 `dash-platform-extension` public API stabilises. See [`/about`](src/app/about/page.tsx)
 for the full proof + privacy explainer.
 
-Identity creation and funding open `https://bridge.dashhq.org` for Mainnet and
-Testnet. Choose Create New Identity, or Manage Identity → Top Up Identity and
-enter the identity/amount in the bridge; the
+Operations that do not use the connected identity take their keys in the
+form and keep them only for that operation: Platform address keys (send between
+addresses, top up an identity, withdraw to a Core address, create an identity
+from address credits), the one-time asset-lock key (create or top up an
+identity, or fund an address, from an asset-lock proof made by a Core wallet),
+and a masternode voting key with its ProTxHash (masternode votes, also linked
+from each open contest). The explorer does not build asset-lock transactions.
+A new identity's keys are derived from a mnemonic on the DIP-13 identity paths
+(so connecting that mnemonic on `/wallet` finds them) or entered as WIFs, and
+keys another identity already uses are refused before anything is signed.
+Address amounts are exact integer credits checked against the protocol's
+minimums; the SDK fetches each input address's nonce. Advanced → Broadcast a
+signed state transition decodes hex or base64 locally, shows its type, owner,
+signing key ID and hash, and broadcasts the same bytes; DAPI's "already in
+mempool/chain" is reported as already submitted, not as a failure.
+
+Without a Core wallet, create or top up an identity through the bridge at
+`https://bridge.dashhq.org` (Mainnet and Testnet): choose Create New Identity,
+or Manage Identity → Top Up Identity and enter the identity there; the
 shortcut passes the selected network only. Import the bridge's backup JSON
 to connect an identity here. Other networks require a separate bridge setup.
 Operators can override the HTTPS base URL with `NEXT_PUBLIC_BRIDGE_URL` at
