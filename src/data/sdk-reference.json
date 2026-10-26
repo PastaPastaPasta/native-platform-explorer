@@ -177,7 +177,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 368,
+              "line": 369,
               "owner": "executeAddressCreateIdentity"
             }
           ]
@@ -188,7 +188,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 317,
+              "line": 318,
               "owner": "executeAddressFundFromAssetLock"
             }
           ]
@@ -226,7 +226,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 231,
+              "line": 232,
               "owner": "executeAddressTopUpIdentity"
             }
           ]
@@ -259,7 +259,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 273,
+              "line": 274,
               "owner": "executeAddressWithdraw"
             }
           ]
@@ -275,7 +275,7 @@
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 269,
+              "line": 270,
               "owner": "executeContractUpdate"
             },
             {
@@ -301,7 +301,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 239,
+              "line": 240,
               "owner": "executeContractRegister"
             }
           ]
@@ -312,7 +312,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 304,
+              "line": 305,
               "owner": "executeContractUpdate"
             }
           ]
@@ -323,7 +323,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 378,
+              "line": 379,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -334,7 +334,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 449,
+              "line": 450,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -345,7 +345,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 349,
+              "line": 350,
               "owner": "fetchExistingDocument"
             },
             {
@@ -361,7 +361,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 577,
+              "line": 578,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -372,7 +372,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 417,
+              "line": 418,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -383,7 +383,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 534,
+              "line": 535,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -394,7 +394,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 494,
+              "line": 495,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -416,7 +416,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 790,
+              "line": 787,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -471,7 +471,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 30,
+              "line": 32,
               "owner": "buildNewIdentity"
             }
           ]
@@ -493,7 +493,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 635,
+              "line": 636,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -504,7 +504,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 668,
+              "line": 669,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -515,7 +515,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 355,
+              "line": 356,
               "owner": "fetchExistingIdentity"
             },
             {
@@ -525,7 +525,7 @@
             },
             {
               "file": "src/components/broadcast/executors/voting.ts",
-              "line": 68,
+              "line": 58,
               "owner": "voterKey"
             },
             {
@@ -552,7 +552,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 129,
+              "line": 127,
               "owner": "executeIdentityTopUp"
             }
           ]
@@ -563,7 +563,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 704,
+              "line": 705,
               "owner": "executeIdentityUpdateKeys"
             }
           ]
@@ -574,7 +574,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/raw.ts",
-              "line": 58,
+              "line": 68,
               "owner": "executeRawBroadcast"
             }
           ]
@@ -585,8 +585,8 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/raw.ts",
-              "line": 83,
-              "owner": "executeRawBroadcast"
+              "line": 41,
+              "owner": "waitForOutcome"
             }
           ]
         },
@@ -596,8 +596,8 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/raw.ts",
-              "line": 77,
-              "owner": "executeRawBroadcast"
+              "line": 36,
+              "owner": "waitForOutcome"
             }
           ]
         },
@@ -651,7 +651,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/voting.ts",
-              "line": 121,
+              "line": 111,
               "owner": "executeMasternodeVote"
             }
           ]
@@ -662,7 +662,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/forms/identity/asset-lock.ts",
-              "line": 56,
+              "line": 57,
               "owner": "parseAssetLockProof"
             }
           ]
@@ -673,7 +673,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/forms/identity/asset-lock.ts",
-              "line": 45,
+              "line": 46,
               "owner": "parseAssetLockProof"
             }
           ]
@@ -683,23 +683,13 @@
           "kind": "utility",
           "sources": [
             {
-              "file": "src/components/broadcast/executors/addresses.ts",
-              "line": 306,
-              "owner": "executeAddressFundFromAssetLock"
-            },
-            {
-              "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 70,
-              "owner": "executeIdentityCreate"
-            },
-            {
-              "file": "src/components/broadcast/executors/identity-create.ts",
-              "line": 119,
-              "owner": "executeIdentityTopUp"
+              "file": "src/components/broadcast/executors/form-signed.ts",
+              "line": 63,
+              "owner": "loadAssetLockProof"
             },
             {
               "file": "src/components/broadcast/forms/identity/asset-lock.ts",
-              "line": 67,
+              "line": 68,
               "owner": "parseAssetLockProof"
             }
           ]
@@ -710,7 +700,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/forms/identity/asset-lock.ts",
-              "line": 66,
+              "line": 67,
               "owner": "parseAssetLockProof"
             }
           ]
@@ -743,18 +733,13 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 491,
+              "line": 492,
               "owner": "executeDocumentTransfer"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 574,
+              "line": 575,
               "owner": "executeDocumentPurchase"
-            },
-            {
-              "file": "src/components/broadcast/executors/voting.ts",
-              "line": 51,
-              "owner": "proTxHashBytes"
             }
           ]
         },
@@ -764,19 +749,8 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/voting.ts",
-              "line": 35,
+              "line": 34,
               "owner": "voterIdentityId"
-            }
-          ]
-        },
-        {
-          "method": "Identifier.fromHex",
-          "kind": "utility",
-          "sources": [
-            {
-              "file": "src/components/broadcast/executors/voting.ts",
-              "line": 50,
-              "owner": "proTxHashBytes"
             }
           ]
         },
@@ -786,7 +760,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 743,
+              "line": 744,
               "owner": "newIdentityKeys"
             },
             {
@@ -802,7 +776,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/voting.ts",
-              "line": 111,
+              "line": 101,
               "owner": "executeMasternodeVote"
             }
           ]
@@ -813,7 +787,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/voting.ts",
-              "line": 112,
+              "line": 102,
               "owner": "executeMasternodeVote"
             }
           ]
@@ -824,7 +798,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/voting.ts",
-              "line": 109,
+              "line": 99,
               "owner": "executeMasternodeVote"
             }
           ]
@@ -835,7 +809,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/forms/raw/decode.ts",
-              "line": 50,
+              "line": 103,
               "owner": "decodeStateTransition"
             }
           ]
@@ -846,7 +820,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors/raw.ts",
-              "line": 51,
+              "line": 61,
               "owner": "executeRawBroadcast"
             }
           ]
@@ -857,7 +831,7 @@
           "sources": [
             {
               "file": "src/signer/new-identity.ts",
-              "line": 108,
+              "line": 120,
               "owner": "prepareNewIdentityKeys"
             }
           ]
@@ -872,11 +846,6 @@
               "owner": "IdentityUpdateKeysForm"
             },
             {
-              "file": "src/components/broadcast/forms/identity/NewIdentityKeysFields.tsx",
-              "line": 68,
-              "owner": "useSecretCheck"
-            },
-            {
               "file": "src/signer/local.ts",
               "line": 182,
               "owner": "decodeWif"
@@ -889,7 +858,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 662,
+              "line": 663,
               "owner": "executeIdentityCreditWithdrawal"
             },
             {
@@ -904,13 +873,8 @@
           "kind": "utility",
           "sources": [
             {
-              "file": "src/components/broadcast/forms/identity/NewIdentityKeysFields.tsx",
-              "line": 59,
-              "owner": "useSecretCheck"
-            },
-            {
               "file": "src/signer/new-identity.ts",
-              "line": 91,
+              "line": 107,
               "owner": "prepareNewIdentityKeys"
             }
           ]
@@ -3965,7 +3929,7 @@
           "sources": [
             {
               "file": "src/signer/mnemonic.ts",
-              "line": 55,
+              "line": 58,
               "owner": "createMnemonicSigner"
             }
           ]
@@ -3987,7 +3951,7 @@
           "sources": [
             {
               "file": "src/signer/mnemonic.ts",
-              "line": 36,
+              "line": 43,
               "owner": "createMnemonicSigner"
             }
           ]
