@@ -160,13 +160,18 @@
           "kind": "facade",
           "sources": [
             {
+              "file": "src/components/broadcast/capabilities.ts",
+              "line": 132,
+              "owner": "resolveSigningCriteria"
+            },
+            {
               "file": "src/components/broadcast/executors.ts",
-              "line": 182,
+              "line": 266,
               "owner": "executeContractUpdate"
             },
             {
               "file": "src/components/broadcast/forms/ContractUpdate.tsx",
-              "line": 30,
+              "line": 49,
               "owner": "ContractUpdateForm"
             },
             {
@@ -176,7 +181,7 @@
             },
             {
               "file": "src/components/broadcast/forms/DocumentReplace.tsx",
-              "line": 60,
+              "line": 62,
               "owner": "DocumentReplaceForm"
             }
           ]
@@ -187,7 +192,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 147,
+              "line": 234,
               "owner": "executeContractRegister"
             }
           ]
@@ -198,7 +203,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 201,
+              "line": 301,
               "owner": "executeContractUpdate"
             }
           ]
@@ -209,7 +214,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 274,
+              "line": 371,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -220,7 +225,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 352,
+              "line": 443,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -231,7 +236,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 246,
+              "line": 346,
               "owner": "fetchExistingDocument"
             },
             {
@@ -247,7 +252,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 484,
+              "line": 571,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -258,7 +263,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 317,
+              "line": 411,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -269,7 +274,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 442,
+              "line": 528,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -280,7 +285,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 398,
+              "line": 488,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -302,7 +307,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 667,
+              "line": 798,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -330,12 +335,34 @@
           ]
         },
         {
+          "method": "epoch.epochsInfo",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 78,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
+          "method": "epoch.epochsInfoWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/current-epoch.ts",
+              "line": 73,
+              "owner": "fetchCurrentEpoch"
+            }
+          ]
+        },
+        {
           "method": "identities.creditTransfer",
           "kind": "facade",
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 533,
+              "line": 628,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -346,7 +373,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 570,
+              "line": 661,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -357,19 +384,8 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 252,
+              "line": 352,
               "owner": "fetchExistingIdentity"
-            }
-          ]
-        },
-        {
-          "method": "identities.nonce",
-          "kind": "facade",
-          "sources": [
-            {
-              "file": "src/components/broadcast/executors.ts",
-              "line": 133,
-              "owner": "executeContractRegister"
             }
           ]
         },
@@ -379,7 +395,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 614,
+              "line": 697,
               "owner": "executeIdentityUpdateKeys"
             }
           ]
@@ -390,19 +406,62 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 116,
+              "line": 194,
               "owner": "getPlatformVersion"
             }
           ]
         },
         {
-          "method": "IdentityPublicKeyInCreation.fromJSON",
+          "method": "Identifier.fromBase58",
           "kind": "utility",
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 607,
-              "owner": "executeIdentityUpdateKeys"
+              "line": 485,
+              "owner": "executeDocumentTransfer"
+            },
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 568,
+              "owner": "executeDocumentPurchase"
+            }
+          ]
+        },
+        {
+          "method": "PrivateKey.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 736,
+              "owner": "newIdentityKeys"
+            }
+          ]
+        },
+        {
+          "method": "wallet.keyPairFromWif",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/forms/IdentityUpdateKeys.tsx",
+              "line": 91,
+              "owner": "IdentityUpdateKeysForm"
+            },
+            {
+              "file": "src/signer/local.ts",
+              "line": 182,
+              "owner": "decodeWif"
+            }
+          ]
+        },
+        {
+          "method": "wallet.validateAddress",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors.ts",
+              "line": 655,
+              "owner": "executeIdentityCreditWithdrawal"
             }
           ]
         }
@@ -2853,7 +2912,7 @@
           "sources": [
             {
               "file": "src/signer/local.ts",
-              "line": 49,
+              "line": 66,
               "owner": "createLocalSigner"
             }
           ]
@@ -2864,30 +2923,8 @@
           "sources": [
             {
               "file": "src/signer/local.ts",
-              "line": 122,
+              "line": 144,
               "owner": "createLocalSigner"
-            }
-          ]
-        },
-        {
-          "method": "wallet.derivationPathDip13Mainnet",
-          "kind": "utility",
-          "sources": [
-            {
-              "file": "src/signer/mnemonic.ts",
-              "line": 22,
-              "owner": "createMnemonicSigner"
-            }
-          ]
-        },
-        {
-          "method": "wallet.derivationPathDip13Testnet",
-          "kind": "utility",
-          "sources": [
-            {
-              "file": "src/signer/mnemonic.ts",
-              "line": 23,
-              "owner": "createMnemonicSigner"
             }
           ]
         },
@@ -2897,7 +2934,7 @@
           "sources": [
             {
               "file": "src/signer/mnemonic.ts",
-              "line": 30,
+              "line": 55,
               "owner": "createMnemonicSigner"
             }
           ]
@@ -2908,7 +2945,7 @@
           "sources": [
             {
               "file": "src/signer/local.ts",
-              "line": 158,
+              "line": 182,
               "owner": "decodeWif"
             }
           ]
@@ -2919,7 +2956,7 @@
           "sources": [
             {
               "file": "src/signer/mnemonic.ts",
-              "line": 16,
+              "line": 36,
               "owner": "createMnemonicSigner"
             }
           ]

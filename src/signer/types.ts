@@ -17,11 +17,18 @@ export interface SignerKeyDescriptor {
   type?: string | number;
   securityLevel?: string | number;
   disabledAt?: bigint;
+  /** Set when the key may only be used for one contract (and optionally one document type). */
+  contractBounds?: KeyContractBounds;
+}
+
+export interface KeyContractBounds {
+  contractId: string;
+  documentType?: string;
 }
 
 export interface KeySelectionCriteria {
-  /** Desired key purpose, e.g. 'AUTHENTICATION', 'TRANSFER', 'OWNER'. */
-  purpose?: string;
+  /** Accepted key purpose(s), e.g. 'AUTHENTICATION', or ['TRANSFER', 'OWNER']. */
+  purpose?: string | string[];
   /**
    * Minimum security level the selected key must satisfy. MASTER is the
    * strongest, MEDIUM the weakest — a key at or stronger than the requested
@@ -34,6 +41,12 @@ export interface KeySelectionCriteria {
   allowedSecurityLevels?: Array<'MASTER' | 'CRITICAL' | 'HIGH' | 'MEDIUM'>;
   /** Explicit key id; purpose and security requirements still apply. */
   keyId?: number;
+  /**
+   * Contract (and document type, when the transition touches only one) the
+   * transition acts on. A contract-bound key qualifies only inside its bounds,
+   * so without a target bound keys never qualify.
+   */
+  target?: KeyContractBounds;
 }
 
 export interface SdkSigningMaterial {
@@ -77,5 +90,21 @@ export class SignerUnavailableError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'SignerUnavailableError';
+  }
+}
+
+/** No enabled on-chain key the signer holds meets the request. */
+export class SigningKeyUnavailableError extends SignerUnavailableError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SigningKeyUnavailableError';
+  }
+}
+
+/** The signer was disconnected and no longer holds its private keys. */
+export class SignerDisconnectedError extends SignerUnavailableError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'SignerDisconnectedError';
   }
 }

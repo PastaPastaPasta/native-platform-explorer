@@ -7,7 +7,7 @@ import type {
   SignerKeyDescriptor,
   SignerKind,
 } from './types';
-import { SignerUnavailableError } from './types';
+import { SignerDisconnectedError, SignerUnavailableError } from './types';
 
 export interface ImportedPrivateKey {
   bytes: Uint8Array;
@@ -16,13 +16,30 @@ export interface ImportedPrivateKey {
   keyId?: number;
 }
 
+function contractBounds(key: IdentityPublicKey): SignerKeyDescriptor['contractBounds'] {
+  const bounds = key.contractBounds;
+  if (!bounds) return undefined;
+  try {
+    const id = bounds.identifier;
+    try {
+      return { contractId: id.toBase58(), documentType: bounds.documentTypeName ?? undefined };
+    } finally {
+      id.free();
+    }
+  } finally {
+    bounds.free();
+  }
+}
+
 function descriptor(key: IdentityPublicKey): SignerKeyDescriptor {
+  const bounds = contractBounds(key);
   return {
     id: key.keyId,
     purpose: key.purpose,
     type: key.keyType,
     securityLevel: key.securityLevel,
     disabledAt: key.disabledAt,
+    ...(bounds ? { contractBounds: bounds } : {}),
   };
 }
 
@@ -40,7 +57,7 @@ export async function createLocalSigner(
   };
   const assertLive = () => {
     if (!privateKeys)
-      throw new SignerUnavailableError('Signer has been disconnected. Reconnect before signing.');
+      throw new SignerDisconnectedError('Signer has been disconnected. Reconnect before signing.');
     return privateKeys;
   };
 
@@ -86,8 +103,13 @@ export async function createLocalSigner(
     initial.forEach((key) => key.publicKey.free());
     if (!initial.length)
       throw new SignerUnavailableError(
-        'The imported private keys do not match any enabled ECDSA key on this identity. Check the identity, network, and derivation path.',
+        'The imported private keys do not match any enabled ECDSA key on this identity. Check the identity, network, identity index, and derivation path.',
       );
+    // Keep only secrets that control an on-chain key (mnemonics scan several).
+    const used = new Set(initial.map((key) => key.secret));
+    const secrets = assertLive();
+    secrets.filter((key) => !used.has(key)).forEach((key) => key.bytes.fill(0));
+    privateKeys = secrets.filter((key) => used.has(key));
   } catch (error) {
     destroy();
     throw error;
@@ -155,7 +177,13 @@ export async function createLocalSigner(
 
 export async function decodeWif(wif: string): Promise<ImportedPrivateKey> {
   const { wallet } = await import('@dashevo/evo-sdk');
-  const pair = await wallet.keyPairFromWif(wif);
+  let pair: Awaited<ReturnType<typeof wallet.keyPairFromWif>>;
+  try {
+    pair = await wallet.keyPairFromWif(wif);
+  } catch {
+    // Never surface SDK parser messages: they could quote the secret.
+    throw new SignerUnavailableError('That is not a valid WIF private key.');
+  }
   try {
     if (pair.network !== 'mainnet' && pair.network !== 'testnet') {
       throw new SignerUnavailableError('The WIF uses an unsupported network.');

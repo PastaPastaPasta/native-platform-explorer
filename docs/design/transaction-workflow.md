@@ -2,7 +2,7 @@
 
 The broadcast console treats review as approval of a specific operation and input snapshot. It binds that approval to the signer instance, identity, network, trust mode, SDK instance and session, connection readiness, and component lifetime. Bigint amounts survive the snapshot unchanged. A changed context returns the user to Build and clears destructive and mainnet confirmations.
 
-The form remains mounted during Review so asynchronous form data cannot change inputs unnoticed. Execution uses a separate copy of the reviewed inputs. Each executor checks the approved context again immediately before entering an SDK write method, after signing preparation and any prerequisite reads. Leaving the form or aborting the SDK session prevents a prepared but unsubmitted operation from proceeding. An SDK call already in progress retains its original operation, identity, and network receipt.
+Review shows the inputs (with secrets such as new keys' private keys redacted), the signing key that the operation's resolved key criteria select (ID, purpose, security level, and contract bounds), and how fees are charged. The SDK has no fee estimate for these writes, so Review says fees are deducted from the identity balance and known only after execution. Signing stays disabled until a key is selected. The form remains mounted during Review so asynchronous form data cannot change inputs unnoticed. Execution uses a separate copy of the reviewed inputs. Each executor checks the approved context again immediately before entering an SDK write method, after signing preparation and any prerequisite reads. Leaving the form or aborting the SDK session prevents a prepared but unsubmitted operation from proceeding. An SDK call already in progress retains its original operation, identity, and network receipt.
 
 ## Capabilities
 
@@ -14,15 +14,15 @@ Top-up runs in the external bridge and has no explorer broadcast button. Raw tra
 
 ## Outcomes
 
-- **Not submitted:** preparation, local validation, prerequisite read, or session checks failed before entering a write method. The user may return to Build and perform a fresh review.
+- **Not submitted:** preparation, local validation, prerequisite read, or session checks failed before entering a write method, or the write method rejected its options with an SDK `InvalidArgument`/`NotImplemented` error. In the pinned SDK those kinds are raised only while reading options, before any request, and are never mapped from network errors. The user may return to Build and perform a fresh review.
 - **Succeeded:** the SDK write resolved and the executor produced its receipt. All query variants for the submitted network are invalidated.
-- **Unknown:** a write method failed or receipt construction failed after entering a write method. The SDK does not expose a reliable broadcast boundary or a typed definitive network rejection. The console does not offer Retry or resubmit. It provides affected entity identifiers and Refresh status so the user can investigate first.
+- **Unknown:** a write method failed with any other error, or receipt construction failed after entering a write method. The SDK does not expose a reliable broadcast boundary or a typed definitive network rejection. The console does not offer Retry or resubmit. It provides affected entity identifiers and Refresh status so the user can investigate first.
 
 Unknown does not imply rejection, and a refreshed balance alone may not establish the outcome of one particular transition. No public transaction is sent by regression tests. The SDK does not consistently return a transition identifier, so receipts only show identifiers actually available from prepared entities, options, and results.
 
 ## Receipts and navigation
 
-Receipts show the original operation, network, trust mode, signer identity, start time, result, and affected identity/recipient/contract/document links. Entity links include the origin network and the configured static base path. Full navigation rehydrates the URL network even when the shared SDK provider would otherwise survive client navigation.
+Receipts show the original operation, network, trust mode, signer identity, start time, result, and affected identity/recipient/contract/document links (including the registered DPNS domain document). When a result carries a `stateTransitionHash`, the receipt links `/state-transition/?hash=…`; none of the SDK write facades used here return one, and the receipt says so. Entity links include the origin network and the configured static base path. Full navigation rehydrates the URL network even when the shared SDK provider would otherwise survive client navigation.
 
 Successful contract registration retains document-type creation shortcuts, and successful document creation retains its repeat-creation link. Those links also keep the receipt's network and static base path.
 

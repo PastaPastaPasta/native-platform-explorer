@@ -17,6 +17,11 @@ import {
 } from '../executors';
 import { operationRequirement } from '../capabilities';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../outcomes';
+import {
+  SignerDisconnectedError,
+  SignerUnavailableError,
+  SigningKeyUnavailableError,
+} from '@/signer/types';
 
 vi.mock('@dashevo/evo-sdk', () => {
   class Document {
@@ -42,10 +47,19 @@ vi.mock('@dashevo/evo-sdk', () => {
   }
 
   return {
-    DataContract: class DataContract {},
+    Identifier: { fromBase58: (base58: string) => ({ base58 }) },
+    DataContract: class DataContract {
+      id = 'placeholder-contract-id';
+      constructor(readonly args: unknown) {}
+    },
     Document,
     IdentityPublicKeyInCreation: class IdentityPublicKeyInCreation {},
   };
+});
+
+// Document executors read the document type's signing requirement first.
+const noteContracts = (schema: object = {}) => ({
+  fetch: vi.fn().mockResolvedValue({ schemas: { note: schema } }),
 });
 
 describe('broadcast executors', () => {
@@ -77,9 +91,111 @@ describe('broadcast executors', () => {
     const prepareSdk = vi.fn().mockRejectedValue(stop);
     const signer = createMockSigner({ prepareSdk });
 
-    await expect(execute({ sdk: {} as never, signer, options: {} as never })).rejects.toThrow('stop before broadcast');
+    await expect(
+      execute({
+        sdk: { contracts: noteContracts() } as never,
+        signer,
+        options: { contractId: 'contract-1', documentType: 'note' } as never,
+      }),
+    ).rejects.toThrow('stop before broadcast');
     expect(prepareSdk).toHaveBeenCalledOnce();
-    expect(prepareSdk).toHaveBeenCalledWith(operationRequirement(id).criteria);
+    // Executors may narrow the declared requirement for the target, never widen it.
+    const used = prepareSdk.mock.calls[0]![0];
+    const declared = operationRequirement(id).criteria!;
+    expect(declared.allowedSecurityLevels).toEqual(
+      expect.arrayContaining(used.allowedSecurityLevels),
+    );
+    expect([declared.purpose].flat()).toEqual(expect.arrayContaining([used.purpose].flat()));
+  });
+
+  it.each([
+    [undefined, 'OWNER'],
+    ['yAddress', 'TRANSFER'],
+  ])('signs withdrawals to %s with a %s key', async (toAddress, purpose) => {
+    const prepareSdk = vi.fn().mockRejectedValue(new Error('stop'));
+    await executeIdentityCreditWithdrawal({
+      sdk: {} as never,
+      signer: createMockSigner({ prepareSdk }),
+      options: { network: 'testnet', toAddress, amountCredits: 1_000_000n, coreFeePerByte: 1 },
+    }).catch(() => undefined);
+    expect(prepareSdk).toHaveBeenCalledWith({ purpose, allowedSecurityLevels: ['CRITICAL'] });
+  });
+
+  it.each([
+    [{ amountCredits: 0x10n, protocolVersion: 11 }, /must be 190,000 to/],
+    [{ amountCredits: 190_000n, protocolVersion: 12 }, /must be 1,000,000 to/],
+    [{ amountCredits: 999_999n }, /must be 1,000,000 to/],
+    [{ coreFeePerByte: 4 }, /Fibonacci/],
+  ])('rejects invalid withdrawal parameters before submitting', async (patch, message) => {
+    const creditWithdrawal = vi.fn();
+    const execution = executeIdentityCreditWithdrawal({
+      sdk: { identities: { fetch: vi.fn(), creditWithdrawal } } as never,
+      signer: createMockSigner(),
+      options: { network: 'testnet', amountCredits: 1_000_000n, coreFeePerByte: 1, ...patch },
+    });
+    await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    await expect(execution).rejects.toThrow(message);
+    expect(creditWithdrawal).not.toHaveBeenCalled();
+  });
+
+  describe('the reviewed signing key', () => {
+    const run = (signer: ReturnType<typeof createMockSigner>, create = vi.fn()) =>
+      executeDocumentCreate({
+        sdk: { contracts: noteContracts(), documents: { create } } as never,
+        signer,
+        options: { contractId: 'contract-1', documentType: 'note', properties: {} },
+        signingKeyId: 3,
+      });
+
+    it('is the only key the signer may use', async () => {
+      const prepareSdk = vi.fn().mockResolvedValue(createSigningMaterial({ keyId: 3 }));
+      const create = vi.fn().mockResolvedValue(undefined);
+      await run(createMockSigner({ prepareSdk }), create);
+      expect(prepareSdk).toHaveBeenCalledWith(expect.objectContaining({ keyId: 3 }));
+      expect(prepareSdk.mock.calls[0]![0]).toMatchObject({ purpose: 'AUTHENTICATION' });
+      expect(create).toHaveBeenCalledOnce();
+    });
+
+    it.each([
+      [
+        new SigningKeyUnavailableError('No enabled matching on-chain key satisfies (key 3)'),
+        /reviewed signing key #3 can no longer sign this operation \(No enabled matching.*disabled or changed on Platform/,
+      ],
+      [
+        new SignerDisconnectedError('Signer has been disconnected.'),
+        /signer was disconnected before it could sign with key #3.*Reconnect it on \/wallet/,
+      ],
+      [
+        new SignerUnavailableError('Identity not found on the current network.'),
+        /signer could not prepare key #3 \(Identity not found/,
+      ],
+      [new Error('Failed to fetch'), /Could not prepare key #3 for signing \(Failed to fetch\)/],
+    ])('fails as not submitted, naming the cause, when it cannot be prepared (%s)', async (cause, message) => {
+      const create = vi.fn();
+      const execution = run(createMockSigner({ prepareSdk: vi.fn().mockRejectedValue(cause) }), create);
+      await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(execution).rejects.toThrow(message);
+      if (!(cause instanceof SigningKeyUnavailableError))
+        await expect(execution).rejects.not.toThrow(/disabled or changed on Platform/);
+      expect(create).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['another key', createSigningMaterial({ keyId: 4 })],
+      // The signer reports the reviewed key but hands the SDK another one.
+      ['a mislabelled key', createSigningMaterial({ keyId: 3, identityKey: { keyId: 4 } as never })],
+    ])('refuses material for %s and releases it', async (_, material) => {
+      const release = vi.fn();
+      const create = vi.fn();
+      const execution = run(
+        createMockSigner({ prepareSdk: vi.fn().mockResolvedValue({ ...material, release }) }),
+        create,
+      );
+      await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(execution).rejects.toThrow(/prepared key #4 instead of the reviewed signing key #3/);
+      expect(create).not.toHaveBeenCalled();
+      expect(release).toHaveBeenCalledOnce();
+    });
   });
 
   it.each([false, true])('releases all adapter-owned signing material (failure: %s)', async (fails) => {
@@ -100,7 +216,7 @@ describe('broadcast executors', () => {
       ? vi.fn().mockRejectedValue(new Error('broadcast failed'))
       : vi.fn().mockResolvedValue(undefined);
     const execution = executeDocumentCreate({
-      sdk: { documents: { create } } as never,
+      sdk: { contracts: noteContracts(), documents: { create } } as never,
       signer,
       options: { contractId: 'contract-1', documentType: 'note', properties: {} },
     });
@@ -124,7 +240,7 @@ describe('broadcast executors', () => {
     });
     const create = vi.fn().mockResolvedValue(undefined);
     const sdk = {
-      documents: { create },
+      contracts: noteContracts(), documents: { create },
     };
 
     const result = await executeDocumentCreate({
@@ -169,7 +285,7 @@ describe('broadcast executors', () => {
       ),
     });
     const sdk = {
-      documents: {
+      contracts: noteContracts(), documents: {
         create: vi.fn().mockRejectedValue(new Error('broadcast failed')),
       },
     };
@@ -191,7 +307,7 @@ describe('broadcast executors', () => {
 
   it('preserves the document identifier when the broadcast outcome is unknown', async () => {
     const sdk = {
-      documents: { create: vi.fn().mockRejectedValue(new Error('request timed out')) },
+      contracts: noteContracts(), documents: { create: vi.fn().mockRejectedValue(new Error('request timed out')) },
     };
     const error = await executeDocumentCreate({
       sdk: sdk as never,
@@ -211,7 +327,7 @@ describe('broadcast executors', () => {
     const create = vi.fn();
     await expect(
       executeDocumentCreate({
-        sdk: { documents: { create } } as never,
+        sdk: { contracts: noteContracts(), documents: { create } } as never,
         signer: createMockSigner({
           prepareSdk: vi.fn().mockRejectedValue(new Error('No eligible key')),
         }),
@@ -226,7 +342,7 @@ describe('broadcast executors', () => {
     const material = createSigningMaterial({ identityId: 'another-identity' });
     await expect(
       executeDocumentCreate({
-        sdk: { documents: { create } } as never,
+        sdk: { contracts: noteContracts(), documents: { create } } as never,
         signer: createMockSigner({ prepareSdk: vi.fn().mockResolvedValue(material) }),
         options: { contractId: 'contract-1', documentType: 'note', properties: {} },
       }),
@@ -240,7 +356,7 @@ describe('broadcast executors', () => {
     await expect(
       executeDocumentTransfer({
         sdk: {
-          documents: { get: vi.fn().mockRejectedValue(new Error('read timeout')), transfer },
+          contracts: noteContracts(), documents: { get: vi.fn().mockRejectedValue(new Error('read timeout')), transfer },
         } as never,
         signer: createMockSigner(),
         options: {
@@ -260,7 +376,7 @@ describe('broadcast executors', () => {
     const create = vi.fn();
     await expect(
       executeDocumentCreate({
-        sdk: { documents: { create } } as never,
+        sdk: { contracts: noteContracts(), documents: { create } } as never,
         signer: createMockSigner({ prepareSdk: vi.fn().mockResolvedValue(material) }),
         options: { contractId: 'contract-1', documentType: 'note', properties: {} },
         assertCurrent: () => {
@@ -283,7 +399,7 @@ describe('broadcast executors', () => {
     });
     await expect(
       executeDocumentCreate({
-        sdk: { documents: { create } } as never,
+        sdk: { contracts: noteContracts(), documents: { create } } as never,
         signer: createMockSigner(),
         options: { contractId: 'contract-1', documentType: 'note', properties: {} },
       }),
@@ -302,5 +418,202 @@ describe('broadcast executors', () => {
       options: { recipientId: 'recipient-1', amountCredits: 100n },
     });
     expect(result.newBalance).toBe('0');
+  });
+
+  it('does not predict a contract ID for an unknown publish outcome', async () => {
+    const nonce = vi.fn();
+    const error = await executeContractRegister({
+      sdk: {
+        version: vi.fn().mockResolvedValue(1),
+        identities: { nonce },
+        contracts: { publish: vi.fn().mockRejectedValue(new Error('request timed out')) },
+      } as never,
+      signer: createMockSigner(),
+      options: { ownerId: 'identity-1', documentSchemas: { note: { type: 'object' } } },
+    }).catch((error: unknown) => error);
+    expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
+    expect((error as BroadcastOutcomeUnknownError).entities).toEqual({ identityId: 'identity-1' });
+    expect(nonce).not.toHaveBeenCalled();
+  });
+
+  it('reports the contract ID the SDK actually published', async () => {
+    const publish = vi.fn().mockResolvedValue({
+      id: 'published-id',
+      ownerId: 'identity-1',
+      version: 1,
+      schemas: { note: {} },
+    });
+    const result = await executeContractRegister({
+      sdk: { version: vi.fn().mockResolvedValue(1), contracts: { publish } } as never,
+      signer: createMockSigner(),
+      options: {
+        ownerId: 'identity-1',
+        documentSchemas: { note: { type: 'object' } },
+        definitions: { title: { type: 'string' } },
+      },
+    });
+    expect(result.contractId).toBe('published-id');
+    expect(publish.mock.calls[0]![0].dataContract.args).toMatchObject({
+      definitions: { title: { type: 'string' } },
+    });
+  });
+
+  describe('contract updates', () => {
+    function contract(version = 3) {
+      return {
+        ownerId: 'identity-1',
+        version,
+        setSchemas: vi.fn(),
+        toJSON: vi.fn(() => ({ schemaDefs: { title: { type: 'string' } } })),
+      };
+    }
+    const run = (current: ReturnType<typeof contract>, options: object) => {
+      const update = vi.fn().mockResolvedValue(undefined);
+      const execution = executeContractUpdate({
+        sdk: {
+          version: vi.fn().mockResolvedValue(9),
+          contracts: { fetch: vi.fn().mockResolvedValue(current), update },
+        } as never,
+        signer: createMockSigner(),
+        options: { contractId: 'contract-1', documentSchemas: { note: {} }, ...options },
+      });
+      return { execution, update };
+    };
+
+    it('increments the version and keeps on-chain definitions by default', async () => {
+      const current = contract();
+      const { execution, update } = run(current, { baseVersion: 3 });
+      await expect(execution).resolves.toEqual({
+        kind: 'contractUpdate',
+        contractId: 'contract-1',
+        newVersion: 4,
+      });
+      expect(current.setSchemas).toHaveBeenCalledWith(
+        { note: {} },
+        { title: { type: 'string' } },
+        true,
+        9,
+      );
+      expect(update.mock.calls[0]![0].dataContract.version).toBe(4);
+    });
+
+    it.each([
+      ['replaces', { defs: {} }, { defs: {} }],
+      ['removes', null, null],
+    ])('%s definitions when the form says so', async (_, definitions, expected) => {
+      const current = contract();
+      await run(current, { definitions }).execution;
+      expect(current.setSchemas).toHaveBeenCalledWith({ note: {} }, expected, true, 9);
+    });
+
+    it('refuses to publish edits made against an older version', async () => {
+      const { execution, update } = run(contract(5), { baseVersion: 3 });
+      await expect(execution).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(execution).rejects.toThrow(/version 3 → 5/);
+      expect(update).not.toHaveBeenCalled();
+    });
+  });
+
+  it.each([
+    [false, 'Registered alice.dash on DPNS.'],
+    [true, 'Submitted a contested registration for alice.dash. Masternodes vote on the winner.'],
+  ])('registers DPNS names for the signer and links the domain document (contested: %s)', async (contested, message) => {
+    const registerName = vi.fn().mockResolvedValue({
+      preorderDocumentId: 'preorder-1',
+      domainDocumentId: 'domain-1',
+      fullDomainName: 'alice.dash',
+    });
+    const identity = { id: 'identity-1' };
+    const result = await executeDpnsRegister({
+      sdk: {
+        identities: { fetch: vi.fn().mockResolvedValue(identity) },
+        dpns: { registerName },
+      } as never,
+      signer: createMockSigner(),
+      options: { label: 'alice', contested },
+    });
+    expect(registerName).toHaveBeenCalledWith(expect.objectContaining({ label: 'alice', identity }));
+    expect(result).toEqual({
+      kind: 'identity',
+      identityId: 'identity-1',
+      message,
+      contractId: 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec',
+      documentType: 'domain',
+      documentId: 'domain-1',
+    });
+  });
+
+  it.each([
+    [undefined, ['CRITICAL', 'HIGH']],
+    [1n, ['CRITICAL']],
+    [3n, ['CRITICAL', 'HIGH', 'MEDIUM']],
+  ])(
+    'signs documents with the levels their type requires (signatureSecurityLevelRequirement %s)',
+    async (requirement, levels) => {
+      const prepareSdk = vi.fn().mockRejectedValue(new Error('stop'));
+      await executeDocumentDelete({
+        sdk: {
+          contracts: noteContracts(
+            requirement === undefined ? {} : { signatureSecurityLevelRequirement: requirement },
+          ),
+        } as never,
+        signer: createMockSigner({ prepareSdk }),
+        options: { contractId: 'contract-1', documentType: 'note', documentId: 'doc-1' },
+      }).catch(() => undefined);
+      expect(prepareSdk).toHaveBeenCalledWith({
+        purpose: 'AUTHENTICATION',
+        allowedSecurityLevels: levels,
+        target: { contractId: 'contract-1', documentType: 'note' },
+      });
+    },
+  );
+
+  it('does not sign for a document type the contract does not define', async () => {
+    const prepareSdk = vi.fn();
+    await expect(
+      executeDocumentCreate({
+        sdk: { contracts: noteContracts() } as never,
+        signer: createMockSigner({ prepareSdk }),
+        options: { contractId: 'contract-1', documentType: 'missing', properties: {} },
+      }),
+    ).rejects.toBeInstanceOf(OperationNotSubmittedError);
+    expect(prepareSdk).not.toHaveBeenCalled();
+  });
+
+  it('passes typed identifiers for document transfer recipients and buyers', async () => {
+    const transfer = vi.fn().mockResolvedValue(undefined);
+    const purchase = vi.fn().mockResolvedValue(undefined);
+    const sdk = {
+      contracts: noteContracts(),
+      documents: { get: vi.fn().mockResolvedValue({ id: 'doc-1' }), transfer, purchase },
+    } as never;
+    const target = { contractId: 'contract-1', documentType: 'note', documentId: 'doc-1' };
+    await executeDocumentTransfer({
+      sdk,
+      signer: createMockSigner(),
+      options: { ...target, recipientId: 'recipient-1' },
+    });
+    expect(transfer.mock.calls[0]![0].recipientId).toEqual({ base58: 'recipient-1' });
+    await executeDocumentPurchase({
+      sdk,
+      signer: createMockSigner(),
+      options: { ...target, priceCredits: 5n },
+    });
+    expect(purchase.mock.calls[0]![0].buyerId).toEqual({ base58: 'identity-1' });
+  });
+
+  it('keeps the recipient in an unknown transfer receipt', async () => {
+    const error = await executeDocumentTransfer({
+      sdk: {
+        contracts: noteContracts(),
+        documents: {
+          get: vi.fn().mockResolvedValue({}),
+          transfer: vi.fn().mockRejectedValue(new Error('timeout')),
+        },
+      } as never,
+      signer: createMockSigner(),
+      options: { contractId: 'c', documentType: 'note', documentId: 'd', recipientId: 'r' },
+    }).catch((e: unknown) => e);
+    expect((error as BroadcastOutcomeUnknownError).entities).toMatchObject({ recipientId: 'r' });
   });
 });

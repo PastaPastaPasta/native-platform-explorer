@@ -26,10 +26,19 @@ choosing a signing key. Fetch the identity again when listing keys and preparing
 material so disabled or changed keys cannot be selected from an old snapshot.
 
 Select only keys that satisfy the operation's purpose, exact permitted security
-levels, and optional explicit ID. Ordinary authentication writes exclude MASTER;
-contract updates require CRITICAL, while identity key updates require MASTER.
-Credit transfers and withdrawals require CRITICAL TRANSFER keys. A missing match
-produces an actionable error rather than a fallback to an unrelated key.
+levels, contract bounds, and optional explicit ID. `resolveSigningCriteria`
+narrows each operation's declared requirement for its inputs, and both executors
+and the review step use it. Contract registration and DPNS registration accept
+CRITICAL or HIGH; contract updates require CRITICAL, while identity key updates
+require MASTER. Document operations accept CRITICAL through the document type's
+`signatureSecurityLevelRequirement` (default HIGH), or only MASTER when the type
+requires it. A contract-bound key qualifies only for its contract (and document
+type), never for operations without that target. Credit transfers require
+CRITICAL TRANSFER keys; withdrawals to an address require CRITICAL TRANSFER keys,
+and withdrawals to a masternode payout address require the CRITICAL OWNER key.
+Capability previews ignore contract bounds because the target is not known yet.
+A missing match produces an actionable error rather than a fallback to an
+unrelated key.
 
 `prepareSdk` returns the selected public key and SDK identity signer, with an
 idempotent release function for their owned WASM allocations. Private byte arrays
@@ -48,7 +57,12 @@ unmount, or a changed SDK/network/trust context. A completed import must also
 match its captured session ID and still-active abort signal before it can become
 the signer, including before React commits a network change. Replacing a signer
 destroys the previous one. Adapter-owned private byte arrays are cleared on
-disconnect, reload/unload, or ten minutes continuously hidden. Signing material
+disconnect, reload/unload, ten minutes without pointer, keyboard, wheel, or touch
+input (visible or hidden; throttled background timers are rechecked when the tab
+becomes visible), or navigation away from `/wallet` and `/broadcast`. Automatic
+clears keep the public reconnect hint; explicit disconnects remove it. Owner-gated
+shortcuts on identity, contract, and document pages match that hint, since the
+live signer is cleared there; the broadcast console still requires a live signer. Signing material
 already returned to an executor owns a separate WASM copy and is released when
 that operation settles; disconnect does not cancel an in-flight operation in this
 PR. JavaScript cannot guarantee erasure of every secret copy. Session storage

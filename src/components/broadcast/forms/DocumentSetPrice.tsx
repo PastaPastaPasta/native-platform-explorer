@@ -5,6 +5,7 @@ import { useSearchParams } from 'next/navigation';
 import { Box, Input, Text, VStack } from '@chakra-ui/react';
 import { DocumentRefFields } from './DocumentRefFields';
 import type { OperationFormProps } from '../OperationShell';
+import { parseDecimalBigInt } from './amount';
 import { isBase58Identifier } from '@util/identifier';
 
 export interface DocumentSetPriceOptions {
@@ -24,12 +25,7 @@ export function DocumentSetPriceForm({
   const [priceStr, setPriceStr] = useState('0');
 
   useEffect(() => {
-    let price: bigint | null = null;
-    try {
-      price = BigInt(priceStr.trim());
-    } catch {
-      price = null;
-    }
+    const price = parseDecimalBigInt(priceStr);
     if (
       !isBase58Identifier(contractId.trim()) ||
       !isBase58Identifier(documentId.trim()) ||

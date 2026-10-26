@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   FormControl,
@@ -14,12 +14,12 @@ import {
   TabPanels,
   Tabs,
   Text,
-  Textarea,
   VStack,
 } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { ErrorCard } from '@ui/ErrorCard';
+import { SecretInput } from '@ui/SecretInput';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { WriteModeDisabled } from '@components/broadcast/WriteModeDisabled';
 import { SignerStatusCard } from '@components/broadcast/SignerStatusCard';
@@ -37,7 +37,8 @@ function SafetyBanner() {
     <InfoBlock>
       <Text fontSize="sm" color="gray.250">
         The explorer never persists your keys. Imported keys stay in this tab&apos;s memory.
-        Disconnect, inactivity (&gt; 10 minutes hidden), or reload clears the local signer.
+        Disconnecting, 10 minutes without mouse, keyboard, or touch input (visible or hidden),
+        leaving the wallet and broadcast pages, or reloading clears the local signer.
         An operation already in progress can retain signing material until it finishes.
         Mnemonic and WIF fields are cleared after each connection attempt. JavaScript cannot
         guarantee that every copy of a secret is erased from memory.
@@ -75,13 +76,16 @@ function ExtensionPane() {
 }
 
 function MnemonicPane() {
-  const { connect } = useSigner();
+  const { signer, connect } = useSigner();
   const { sdk, network, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [mnemonic, setMnemonic] = useState('');
+  const [identityIndex, setIdentityIndex] = useState('0');
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  useEffect(() => setError(null), [signer]);
+  const validIdentityIndex = /^\d{1,10}$/.test(identityIndex.trim()) && Number(identityIndex) < 2 ** 31;
 
   const onConnect = async () => {
     if (!sdk || status !== 'ready') {
@@ -98,7 +102,7 @@ function MnemonicPane() {
         mnemonic.trim(),
         identityId.trim(),
         getDerivationNetwork(network),
-        0,
+        Number(identityIndex.trim()),
         path.trim() || undefined,
       );
       connect(signer);
@@ -114,8 +118,11 @@ function MnemonicPane() {
     <VStack align="stretch" spacing={3}>
       <Text fontSize="sm" color="gray.250">
         Paste a BIP-39 mnemonic and the identity ID it controls. The seed lives only in this
-        tab&apos;s memory. We use DIP-13 account 0 by default; enter the exact path used by your
-        wallet if it differs. The derived key must match an enabled on-chain key.
+        tab&apos;s memory. We derive the DIP-13 identity keys{' '}
+        <code>m/9&apos;/coin&apos;/5&apos;/0&apos;/0&apos;/identity&apos;/key&apos;</code> for key
+        indexes 0–15 of the identity index below (the bridge&apos;s first identity is 0) and keep
+        only keys that match enabled keys on the identity. Enter a full derivation path instead to
+        import exactly one key.
       </Text>
       <FormControl isRequired>
         <FormLabel fontSize="sm">Identity ID</FormLabel>
@@ -132,15 +139,28 @@ function MnemonicPane() {
       </FormControl>
       <FormControl isRequired>
         <FormLabel fontSize="sm">Mnemonic</FormLabel>
-        <Textarea
+        <SecretInput
+          multiline
           aria-label="Mnemonic"
-          autoComplete="off"
-          spellCheck={false}
           isDisabled={busy}
           size="sm"
           placeholder="twelve or twenty-four words …"
           value={mnemonic}
           onChange={(e) => setMnemonic(e.target.value)}
+          fontFamily="mono"
+          bg="gray.800"
+          borderColor="gray.700"
+        />
+      </FormControl>
+      <FormControl isInvalid={!validIdentityIndex}>
+        <FormLabel fontSize="sm">Identity index</FormLabel>
+        <Input
+          aria-label="Identity index"
+          size="sm"
+          inputMode="numeric"
+          value={identityIndex}
+          onChange={(e) => setIdentityIndex(e.target.value)}
+          isDisabled={busy || path.trim().length > 0}
           fontFamily="mono"
           bg="gray.800"
           borderColor="gray.700"
@@ -152,7 +172,7 @@ function MnemonicPane() {
           aria-label="Derivation path"
           value={path}
           onChange={(e) => setPath(e.target.value)}
-          placeholder="Default: DIP-13 account 0"
+          placeholder="Default: DIP-13 identity keys for the index above"
           isDisabled={busy}
           fontFamily="mono"
         />
@@ -167,6 +187,7 @@ function MnemonicPane() {
             !sdk ||
             status !== 'ready' ||
             !isBase58Identifier(identityId.trim()) ||
+            (!validIdentityIndex && !path.trim()) ||
             mnemonic.trim().split(/\s+/).length < 12
           }
         >
@@ -179,12 +200,13 @@ function MnemonicPane() {
 }
 
 function WifPane() {
-  const { connect } = useSigner();
+  const { signer, connect } = useSigner();
   const { sdk, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [wif, setWif] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  useEffect(() => setError(null), [signer]);
 
   const onConnect = async () => {
     if (!sdk || status !== 'ready') {
@@ -227,10 +249,8 @@ function WifPane() {
       </FormControl>
       <FormControl isRequired>
         <FormLabel fontSize="sm">WIF private key</FormLabel>
-        <Input
+        <SecretInput
           aria-label="WIF private key"
-          autoComplete="off"
-          spellCheck={false}
           isDisabled={busy}
           size="sm"
           placeholder="WIF"
@@ -239,7 +259,6 @@ function WifPane() {
           fontFamily="mono"
           bg="gray.800"
           borderColor="gray.700"
-          type="password"
         />
       </FormControl>
       <HStack>

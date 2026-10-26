@@ -28,13 +28,14 @@ function buildHref(op: string, params?: Record<string, string>): string {
 }
 
 /** Renders contextual "Create document" / "Edit document" / "Top up" buttons
- *  that deep-link into the broadcast console. Hides ownsTo-gated actions when
- *  no signer is connected or the signer doesn't own the target. */
+ *  that deep-link into the broadcast console. Hides ownsTo-gated actions unless
+ *  the target belongs to the connected identity. Signers are cleared outside
+ *  /wallet and /broadcast, so the public reconnect hint stands in for them on
+ *  read pages; the console still requires a live signer to sign. */
 export function WriteActions({ links, title, size = 'sm' }: WriteActionsProps) {
-  const { signer } = useSigner();
-  const visible = links.filter(
-    (l) => !l.ownsTo || (signer && signer.identityId === l.ownsTo),
-  );
+  const { signer, stash } = useSigner();
+  const identityId = signer?.identityId ?? stash?.identityId;
+  const visible = links.filter((l) => !l.ownsTo || identityId === l.ownsTo);
   if (visible.length === 0) return null;
 
   return (

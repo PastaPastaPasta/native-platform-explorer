@@ -28,6 +28,8 @@ export function OperationReceipt({
   const link = (path: string, params: Record<string, string>) =>
     `${basePath}${path}?${new URLSearchParams({ ...params, network }).toString()}`;
   const details = result && typeof result === 'object' ? (result as Record<string, unknown>) : null;
+  const stateTransitionHash =
+    typeof details?.stateTransitionHash === 'string' ? details.stateTransitionHash : undefined;
   const documentTypes =
     details?.kind === 'contractRegister' && Array.isArray(details.documentTypes)
       ? details.documentTypes.filter((type): type is string => typeof type === 'string')
@@ -47,7 +49,27 @@ export function OperationReceipt({
         Started: {submittedAt}
       </Text>
       {result !== undefined ? <CodeBlock value={result} /> : null}
+      {stateTransitionHash ? (
+        <Text fontSize="sm" color="gray.250" wordBreak="break-all">
+          State transition: {stateTransitionHash}
+        </Text>
+      ) : (
+        <Text fontSize="xs" color="gray.400">
+          The SDK does not return the state-transition hash for this operation. Use the links below
+          to check the affected entities.
+        </Text>
+      )}
       <HStack spacing={2} flexWrap="wrap">
+        {stateTransitionHash ? (
+          <Button
+            as="a"
+            href={link('/state-transition/', { hash: stateTransitionHash })}
+            size="sm"
+            variant="outline"
+          >
+            Open state transition
+          </Button>
+        ) : null}
         <Button
           as="a"
           href={link('/identity/', { id: entities.identityId ?? identityId })}

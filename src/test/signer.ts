@@ -6,8 +6,8 @@ export function createSigningMaterial(
 ): SdkSigningMaterial {
   return {
     identityId: 'identity-1',
-    keyId: 0,
-    identityKey: { keyId: 0 } as SdkSigningMaterial['identityKey'],
+    keyId: overrides.keyId ?? 0,
+    identityKey: { keyId: overrides.keyId ?? 0 } as SdkSigningMaterial['identityKey'],
     identitySigner: { free: vi.fn() } as unknown as SdkSigningMaterial['identitySigner'],
     ...overrides,
   };

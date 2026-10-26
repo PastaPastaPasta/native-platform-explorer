@@ -1,7 +1,7 @@
 'use client';
 
 import type { OperationDescriptor } from './OperationShell';
-import { operationRequirement } from './capabilities';
+import { operationRequirement, resolveSigningCriteria } from './capabilities';
 import { ContractRegisterForm, type ContractRegisterOptions } from './forms/ContractRegister';
 import { ContractUpdateForm, type ContractUpdateOptions } from './forms/ContractUpdate';
 import { DocumentCreateForm, type DocumentCreateOptions } from './forms/DocumentCreate';
@@ -18,9 +18,13 @@ import {
   IdentityCreditWithdrawalForm,
   type IdentityCreditWithdrawalOptions,
 } from './forms/IdentityCreditWithdrawal';
-import { IdentityUpdateKeysForm, type IdentityUpdateKeysOptions } from './forms/IdentityUpdateKeys';
+import {
+  IdentityUpdateKeysForm,
+  redactIdentityUpdateKeys,
+  type IdentityUpdateKeysOptions,
+} from './forms/IdentityUpdateKeys';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
-import { DpnsRegisterForm, type DpnsRegisterOptions } from './forms/DpnsRegister';
+import { DpnsRegisterForm, DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
 import { VotingCastVoteForm, type VotingCastVoteOptions } from './forms/VotingCastVote';
 import { StateTransitionBroadcastForm, type RawBroadcastOptions } from './forms/RawBroadcast';
 import {
@@ -74,6 +78,7 @@ function makeEntry<O, R>(
       ...descriptor,
       operationId: id,
       capability: operationRequirement(id),
+      signingCriteria: (sdk, options) => resolveSigningCriteria(id, sdk, options),
     } as OperationDescriptor<unknown, unknown>,
   };
 }
@@ -100,6 +105,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Publish a new data contract. The schemas you define here will determine ' +
         'what documents can be created on this contract later.',
+      secrets: 'none',
       FormComponent: ContractRegisterForm,
       summarise: (o) =>
         `Register a contract with ${Object.keys(o.documentSchemas ?? {}).length} ` +
@@ -111,13 +117,18 @@ export const OPERATIONS: OperationEntry[] = [
     'contract',
     'contract.update',
     'Update a data contract',
-    'Change schemas, groups, or tokens on a contract you own.',
+    'Edit the document schemas and definitions of a contract you own.',
     {
       title: 'Update a data contract',
       description:
-        'Mutates an existing contract. The new contract version is computed ' + 'automatically.',
+        'Replaces the document schemas and schema definitions of a contract you own and ' +
+        'publishes it as the next version. Groups, tokens, and config are not changed.',
+      secrets: 'none',
       FormComponent: ContractUpdateForm,
-      summarise: (o) => `Update contract ${o.contractId}.`,
+      summarise: (o) =>
+        o.baseVersion === undefined
+          ? `Update contract ${o.contractId}.`
+          : `Update contract ${o.contractId} from version ${o.baseVersion} to ${o.baseVersion + 1}.`,
       execute: executeContractUpdate,
     },
   ),
@@ -134,6 +145,7 @@ export const OPERATIONS: OperationEntry[] = [
       title: 'Create a document',
       description:
         'Pick a contract and a document type, fill in the fields, sign, and ' + 'broadcast.',
+      secrets: 'none',
       FormComponent: DocumentCreateForm,
       summarise: (o) => `Create a "${o.documentType}" document on contract ${o.contractId}.`,
       execute: executeDocumentCreate,
@@ -149,6 +161,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Loads the current document and lets you change its fields. The revision ' +
         'is bumped automatically.',
+      secrets: 'none',
       FormComponent: DocumentReplaceForm,
       summarise: (o) => `Replace document ${o.documentId} on contract ${o.contractId}.`,
       execute: executeDocumentReplace,
@@ -163,6 +176,7 @@ export const OPERATIONS: OperationEntry[] = [
       title: 'Delete a document',
       description: 'Removes a document. This is permanent.',
       destructive: true,
+      secrets: 'none',
       FormComponent: DocumentDeleteForm,
       summarise: (o) => `Delete document ${o.documentId} on contract ${o.contractId}.`,
       execute: executeDocumentDelete,
@@ -178,6 +192,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Changes the owner of a document to another identity. The recipient ' +
         'becomes responsible for the document going forward.',
+      secrets: 'none',
       FormComponent: DocumentTransferForm,
       summarise: (o) => `Transfer document ${o.documentId} to ${o.recipientId}.`,
       execute: executeDocumentTransfer,
@@ -193,6 +208,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Marks a document as for-sale at a given credit price. Set the price to 0 ' +
         'to remove the listing.',
+      secrets: 'none',
       FormComponent: DocumentSetPriceForm,
       summarise: (o) => `Set price on document ${o.documentId} to ${o.priceCredits} credits.`,
       execute: executeDocumentSetPrice,
@@ -208,6 +224,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Buys a document that has been listed for sale. The credits leave your ' +
         'identity and ownership transfers to you.',
+      secrets: 'none',
       FormComponent: DocumentPurchaseForm,
       summarise: (o) => `Purchase document ${o.documentId} for ${o.priceCredits} credits.`,
       execute: executeDocumentPurchase,
@@ -228,6 +245,7 @@ export const OPERATIONS: OperationEntry[] = [
         'Top-up requires an asset-lock proof built from a Dash Core transaction. ' +
         'For now we hand off to the bridge — return to the explorer when the ' +
         'top-up completes, then refresh the identity page to check the balance.',
+      secrets: 'none',
       FormComponent: IdentityTopUpForm,
       summarise: (o) => `Top up ${o.identityId} by ${o.amountDash} DASH (via bridge).`,
       execute: executeIdentityTopUp,
@@ -243,6 +261,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Sends credits from your identity to another. The recipient must already ' +
         'exist on Platform.',
+      secrets: 'none',
       FormComponent: IdentityCreditTransferForm,
       summarise: (o) => `Transfer ${o.amountCredits} credits to ${o.recipientId}.`,
       execute: executeIdentityCreditTransfer,
@@ -256,10 +275,13 @@ export const OPERATIONS: OperationEntry[] = [
     {
       title: 'Withdraw credits',
       description:
-        'Withdraws credits to a Dash Core address. The withdrawal is queued ' +
-        'on-chain and settles as a Core transaction.',
+        'Withdraws credits to a Dash Core address, or a masternode owner identity to its ' +
+        'payout address. The withdrawal is queued on Platform and settles as a Core transaction.',
+      secrets: 'none',
       FormComponent: IdentityCreditWithdrawalForm,
-      summarise: (o) => `Withdraw ${o.amountCredits} credits to ${o.toAddress}.`,
+      summarise: (o) =>
+        `Withdraw ${o.amountCredits} credits to ${o.toAddress ?? 'the masternode payout address'} ` +
+        `at ${o.coreFeePerByte} duff(s)/byte.`,
       execute: executeIdentityCreditWithdrawal,
     },
   ),
@@ -276,11 +298,12 @@ export const OPERATIONS: OperationEntry[] = [
       destructive: true,
       FormComponent: IdentityUpdateKeysForm,
       summarise: (o) => {
-        const adds = (o.addPublicKeysJson?.length ?? 0) > 0 ? 'add keys' : '';
-        const disables =
-          (o.disableKeyIds?.length ?? 0) > 0 ? `disable ${o.disableKeyIds!.length} key(s)` : '';
+        const adds = o.addKeys?.length ? `add ${o.addKeys.length} key(s)` : '';
+        const disables = o.disableKeyIds?.length ? `disable ${o.disableKeyIds.length} key(s)` : '';
         return [adds, disables].filter(Boolean).join(', ') || 'no-op';
       },
+      // The new keys' private keys sign their proofs of possession.
+      secrets: { reviewData: redactIdentityUpdateKeys },
       execute: executeIdentityUpdateKeys,
     },
   ),
@@ -296,11 +319,15 @@ export const OPERATIONS: OperationEntry[] = [
     {
       title: 'Register a DPNS name',
       description:
-        'Reserves a DPNS label for your identity. Names are first-come, ' +
-        'first-served and some are contested (others can challenge popular names).',
+        'Registers a .dash name for the connected identity (a preorder followed by the ' +
+        'domain document). Short names made of letters, 0, 1, and hyphens are contested and ' +
+        'are decided by a masternode vote.',
+      secrets: 'none',
       FormComponent: DpnsRegisterForm,
       summarise: (o) =>
-        `Register ${o.label}.${o.network === 'mainnet' ? 'dash' : 'tdash'} for identity ${o.identityId}.`,
+        o.contested
+          ? `Open a contested registration for ${o.label}.${DPNS_TLD} (0.2 DASH contest fee plus normal fees; masternodes vote on the winner).`
+          : `Register ${o.label}.${DPNS_TLD} for the connected identity.`,
       execute: executeDpnsRegister,
     },
   ),
@@ -318,6 +345,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Casts a masternode vote on a contested resource (e.g. a contested DPNS ' +
         'name). Only operating masternodes have a voting key.',
+      secrets: 'none',
       FormComponent: VotingCastVoteForm,
       summarise: (o) => `Vote ${o.choice}${o.targetIdentityId ? ` → ${o.targetIdentityId}` : ''}.`,
       execute: executeVotingCastVote,
@@ -337,6 +365,7 @@ export const OPERATIONS: OperationEntry[] = [
       description:
         'Paste a hex-encoded state transition. Use only if you have a hex blob ' +
         'from another tool — most users want the named operations above instead.',
+      secrets: 'none',
       FormComponent: StateTransitionBroadcastForm,
       summarise: (o) => `Broadcast ${o.stHex.length / 2} bytes of raw state transition.`,
       execute: async () => previewOnly('stateTransitions.broadcastStateTransition'),
@@ -368,6 +397,12 @@ export const GROUPS: { id: OperationGroup; label: string; blurb: string }[] = [
     blurb: 'Low-level tools — raw broadcast, etc.',
   },
 ];
+
+/** Picker marker for operations that cannot be signed here, or null when they can. */
+export function operationStatusLabel(entry: OperationEntry): 'Bridge' | 'Unavailable' | null {
+  const status = entry.descriptor.capability?.status;
+  return status === 'external-bridge' ? 'Bridge' : status === 'unsupported' ? 'Unavailable' : null;
+}
 
 export function findOperationById(id: string | null | undefined): OperationEntry | undefined {
   if (!id) return undefined;

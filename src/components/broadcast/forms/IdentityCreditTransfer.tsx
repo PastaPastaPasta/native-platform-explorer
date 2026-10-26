@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Box, Input, Text, VStack } from '@chakra-ui/react';
 import type { OperationFormProps } from '../OperationShell';
+import { parseDecimalBigInt } from './amount';
 import { isBase58Identifier } from '@util/identifier';
 
 export interface IdentityCreditTransferOptions {
@@ -17,12 +18,7 @@ export function IdentityCreditTransferForm({
   const [amountStr, setAmountStr] = useState('');
 
   useEffect(() => {
-    let amount: bigint | null = null;
-    try {
-      amount = BigInt(amountStr.trim());
-    } catch {
-      amount = null;
-    }
+    const amount = parseDecimalBigInt(amountStr);
     if (
       !isBase58Identifier(recipientId.trim()) ||
       amount === null ||

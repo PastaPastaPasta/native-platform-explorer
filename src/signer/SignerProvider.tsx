@@ -10,6 +10,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
+import { usePathname } from 'next/navigation';
 import type { ExplorerSigner, SignerKind } from './types';
 import { useSdk } from '@sdk/hooks';
 
@@ -73,7 +74,16 @@ function removeStash() {
   }
 }
 
+/** Clear local signers after this long without user input, visible or hidden. */
 const IDLE_TIMEOUT_MS = 10 * 60_000;
+const ACTIVITY_EVENTS = ['pointerdown', 'pointermove', 'keydown', 'wheel', 'touchstart'] as const;
+
+/** Routes that may hold a signer; navigating anywhere else clears it. */
+const WRITE_ROUTES = ['/wallet', '/broadcast'];
+export function isWriteRoute(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, '') || '/';
+  return WRITE_ROUTES.some((route) => path === route || path.startsWith(`${route}/`));
+}
 
 export function SignerProvider({ children }: { children: ReactNode }) {
   const { sdk, network, trusted, status, sessionId, sessionSignal } = useSdk();
@@ -88,26 +98,27 @@ export function SignerProvider({ children }: { children: ReactNode }) {
   // server and client to avoid a hydration mismatch; the useEffect below pulls
   // the real stash from sessionStorage after mount.
   const [stash, setStash] = useState<SignerStash | null>(null);
-  const idleTimer = useRef<number | null>(null);
+  const pathname = usePathname();
 
   useEffect(() => {
     const s = readStash();
     if (s) setStash(s);
   }, []);
 
-  const disconnect = useCallback(() => {
+  // Automatic clears (idle, leaving write routes, unload) keep the public
+  // reconnect hint; an explicit disconnect or a session change removes it.
+  const clearSigner = useCallback((keepHint: boolean) => {
     generationRef.current += 1;
     setConnectionGeneration(generationRef.current);
     signerRef.current?.destroy();
     signerRef.current = null;
     setSigner(null);
-    removeStash();
-    setStash(null);
-    if (idleTimer.current !== null) {
-      window.clearTimeout(idleTimer.current);
-      idleTimer.current = null;
+    if (!keepHint) {
+      removeStash();
+      setStash(null);
     }
   }, []);
+  const disconnect = useCallback(() => clearSigner(false), [clearSigner]);
 
   const clearStashOnly = useCallback(() => {
     removeStash();
@@ -145,36 +156,52 @@ export function SignerProvider({ children }: { children: ReactNode }) {
     [sdk, network, trusted, sessionId, sessionSignal, connectionGeneration],
   );
 
-  // Idle-out: if the tab has been hidden for > IDLE_TIMEOUT_MS, disconnect.
+  // Idle-out: clear after IDLE_TIMEOUT_MS without user input. Hidden tabs get
+  // no input, and throttled timers are rechecked when the tab becomes visible.
   useEffect(() => {
     if (!signer) return;
-    const onVisibilityChange = () => {
-      if (document.hidden) {
-        if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
-        idleTimer.current = window.setTimeout(disconnect, IDLE_TIMEOUT_MS);
-      } else {
-        if (idleTimer.current !== null) {
-          window.clearTimeout(idleTimer.current);
-          idleTimer.current = null;
-        }
+    let lastActivity = Date.now();
+    let timer: number | undefined;
+    const check = () => {
+      const idle = Date.now() - lastActivity;
+      if (idle >= IDLE_TIMEOUT_MS) clearSigner(true);
+      else {
+        window.clearTimeout(timer);
+        timer = window.setTimeout(check, IDLE_TIMEOUT_MS - idle);
       }
     };
-    onVisibilityChange();
+    const onActivity = () => {
+      lastActivity = Date.now();
+    };
+    const onVisibilityChange = () => {
+      if (!document.hidden) check();
+    };
+    check();
+    ACTIVITY_EVENTS.forEach((event) =>
+      window.addEventListener(event, onActivity, { capture: true, passive: true }),
+    );
     document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
+      window.clearTimeout(timer);
+      ACTIVITY_EVENTS.forEach((event) =>
+        window.removeEventListener(event, onActivity, { capture: true }),
+      );
       document.removeEventListener('visibilitychange', onVisibilityChange);
-      if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
-      idleTimer.current = null;
     };
-  }, [signer, disconnect]);
+  }, [signer, clearSigner]);
+
+  // Leaving /wallet and /broadcast clears the signer (PRD §10.2).
+  useEffect(() => {
+    if (pathname !== null && !isWriteRoute(pathname) && signerRef.current) clearSigner(true);
+  }, [pathname, signer, clearSigner]);
 
   // Wipe on unload.
   useEffect(() => {
     if (!signer) return;
-    const onBeforeUnload = () => disconnect();
+    const onBeforeUnload = () => clearSigner(true);
     window.addEventListener('beforeunload', onBeforeUnload);
     return () => window.removeEventListener('beforeunload', onBeforeUnload);
-  }, [signer, disconnect]);
+  }, [signer, clearSigner]);
 
   // Keys are bound to the exact SDK instance, including reconnects to the same network.
   const sessionRef = useRef({ sdk, network, trusted });
@@ -196,7 +223,6 @@ export function SignerProvider({ children }: { children: ReactNode }) {
       mountedRef.current = false;
       signerRef.current?.destroy();
       signerRef.current = null;
-      if (idleTimer.current !== null) window.clearTimeout(idleTimer.current);
     };
   }, []);
 

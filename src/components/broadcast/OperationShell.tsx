@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import NextLink from 'next/link';
 import {
   Badge,
@@ -32,19 +40,39 @@ import {
   BroadcastOutcomeUnknownError,
   OperationNotSubmittedError,
   receiptEntities,
+  type ReceiptEntities,
 } from './outcomes';
 import { useSigner } from '@/signer/SignerProvider';
 import { invalidateNetworkQueries, useSdk } from '@sdk/hooks';
 import { normalizeError } from '@sdk/errors';
 import { getDerivationNetwork, type Network } from '@sdk/networks';
 import type { EvoSDK } from '@dashevo/evo-sdk';
-import type { ExplorerSigner, SignerKeyDescriptor } from '@/signer/types';
+import type {
+  ExplorerSigner,
+  KeySelectionCriteria,
+  SignerKeyDescriptor,
+} from '@/signer/types';
+import { selectSigningKey } from '@/signer/keys';
+import type { ExecuteArgs } from './executors';
 
 export interface OperationFormProps<TOptions> {
   signer: ExplorerSigner;
   network: 'mainnet' | 'testnet';
   onOptionsChange: (options: TOptions | null) => void;
 }
+
+/**
+ * Private key material in an operation's inputs. Every operation declares it,
+ * as `'none'` or with a review view that leaves the secrets out.
+ */
+export type SecretInputs<TOptions> =
+  | 'none'
+  | {
+      /** What the review step shows instead of the inputs. It must omit every secret. */
+      reviewData: (options: TOptions) => unknown;
+      /** Byte arrays holding secrets, zeroed once the operation settles. */
+      secretBytes?: (options: TOptions) => Uint8Array[];
+    };
 
 export interface OperationDescriptor<TOptions, TResult> {
   operationId?: string;
@@ -54,13 +82,11 @@ export interface OperationDescriptor<TOptions, TResult> {
   destructive?: boolean;
   FormComponent: React.ComponentType<OperationFormProps<TOptions>>;
   summarise: (options: TOptions) => string;
-  execute: (args: {
-    sdk: EvoSDK;
-    signer: ExplorerSigner;
-    options: TOptions;
-    /** Recheck the approved session immediately before entering a write call. */
-    assertCurrent?: () => void;
-  }) => Promise<TResult>;
+  /** The shell never shows these inputs, and keeps only receipt identifiers once it settles. */
+  secrets: SecretInputs<TOptions>;
+  /** Key requirements for these inputs; the review step shows the key they select. */
+  signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
+  execute: (args: ExecuteArgs<TOptions>) => Promise<TResult>;
 }
 
 // Tag every primitive so bigint credits cannot collide with a string or JSON
@@ -81,11 +107,41 @@ function fingerprint(value: unknown): string {
   return JSON.stringify(encode(value));
 }
 
+/** Zero the declared secret bytes of inputs nothing uses any more (strings cannot be wiped). */
+function wipeSecretBytes<TOptions>(
+  secrets: SecretInputs<TOptions>,
+  inputs: (TOptions | null)[],
+): void {
+  if (secrets === 'none' || !secrets.secretBytes) return;
+  for (const input of inputs) {
+    if (input === null) continue;
+    try {
+      secrets.secretBytes(input).forEach((bytes) => bytes.fill(0));
+    } catch {
+      /* best-effort: the inputs are already out of React state */
+    }
+  }
+}
+
+function describeKey(key: SignerKeyDescriptor): string {
+  const bounds = key.contractBounds
+    ? ` · bound to contract ${key.contractBounds.contractId}${
+        key.contractBounds.documentType ? ` (${key.contractBounds.documentType})` : ''
+      }`
+    : '';
+  return `#${key.id} · ${String(key.purpose ?? 'unknown purpose')} · ${String(
+    key.securityLevel ?? 'unknown level',
+  )}${bounds}`;
+}
+
 interface Review<TOptions, TResult> {
   descriptor: OperationDescriptor<TOptions, TResult>;
   contextBinding: object;
   options: TOptions;
   fingerprint: string;
+  summary: string;
+  /** What the review step shows; never the inputs of an operation with secrets. */
+  view: unknown;
   sdk: EvoSDK;
   signer: ExplorerSigner;
   identityId: string;
@@ -93,6 +149,12 @@ interface Review<TOptions, TResult> {
   trusted: boolean;
   sessionSignal: AbortSignal | null;
 }
+
+/** What the shell keeps for the receipt: never the inputs themselves. */
+type Submission<TOptions, TResult> = Pick<
+  Review<TOptions, TResult>,
+  'descriptor' | 'identityId' | 'network' | 'trusted'
+> & { submittedAt: string; entities: ReceiptEntities };
 
 export function OperationShell<TOptions, TResult>({
   descriptor,
@@ -104,9 +166,7 @@ export function OperationShell<TOptions, TResult>({
   const queryClient = useQueryClient();
   const [options, setOptions] = useState<TOptions | null>(null);
   const [review, setReview] = useState<Review<TOptions, TResult> | null>(null);
-  const [submission, setSubmission] = useState<
-    (Review<TOptions, TResult> & { submittedAt: string }) | null
-  >(null);
+  const [submission, setSubmission] = useState<Submission<TOptions, TResult> | null>(null);
   const [activeStep, setActiveStep] = useState(0);
   const [formRevision, setFormRevision] = useState(0);
   const [destructiveAck, setDestructiveAck] = useState(false);
@@ -117,10 +177,19 @@ export function OperationShell<TOptions, TResult>({
   const [result, setResult] = useState<TResult | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [keyRefresh, setKeyRefresh] = useState(0);
+  const [purges, setPurges] = useState(0);
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
   const [keyState, setKeyState] = useState<{
     binding: object;
     keys: SignerKeyDescriptor[];
     error?: string;
+  } | null>(null);
+  const [reviewKey, setReviewKey] = useState<{
+    review: Review<TOptions, TResult>;
+    key?: SignerKeyDescriptor;
+    error?: string;
+    /** The key the user approved: the first one shown at review, or one they confirmed. */
+    confirmed?: string;
   } | null>(null);
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -218,8 +287,62 @@ export function OperationShell<TOptions, TResult>({
     setKeyRefresh((value) => value + 1);
   };
 
+  // Show the key that will sign; executors resolve the same criteria again. A
+  // key refresh during review can select another key: that needs confirming.
+  const currentKeys = keyState?.binding === contextBinding ? keyState.keys : null;
+  useEffect(() => {
+    const signingCriteria = review?.descriptor.signingCriteria;
+    if (!review || !signingCriteria || !currentKeys) return;
+    let cancelled = false;
+    const confirmed = (previous: typeof reviewKey) =>
+      previous?.review === review ? previous.confirmed : undefined;
+    void signingCriteria(review.sdk, review.options)
+      .then((criteria) => selectSigningKey(currentKeys, criteria))
+      .then(
+        (key) => {
+          if (!cancelled)
+            setReviewKey((previous) => ({
+              review,
+              key,
+              confirmed: confirmed(previous) ?? describeKey(key),
+            }));
+        },
+        (error: unknown) => {
+          if (!cancelled)
+            setReviewKey((previous) => ({
+              review,
+              error: normalizeError(error).message,
+              confirmed: confirmed(previous),
+            }));
+        },
+      );
+    return () => {
+      cancelled = true;
+    };
+  }, [review, currentKeys]);
+  const reviewSigningKey = reviewKey?.review === review ? reviewKey : null;
+  const signingKeyChanged =
+    !!reviewSigningKey?.key && describeKey(reviewSigningKey.key) !== reviewSigningKey.confirmed;
+  const signingKeyReady =
+    !review?.descriptor.signingCriteria || (!!reviewSigningKey?.key && !signingKeyChanged);
+
+  // Drop the inputs once they can no longer be submitted; the receipt never held them.
+  const purgeSecrets = useCallback(() => {
+    setOptions(null);
+    setReview(null);
+    setReviewKey(null);
+    setPurges((count) => count + 1);
+  }, []);
+  // React keeps the previous render in the alternate fiber. Render once more
+  // after a purge or reset so that copy no longer holds the dropped inputs. A
+  // layout effect re-renders synchronously, before anything else can run.
+  useLayoutEffect(() => {
+    if (purges) rerender();
+  }, [purges]);
+
   const reset = useCallback(() => {
     setReview(null);
+    setReviewKey(null);
     setSubmission(null);
     setOptions(null);
     setDestructiveAck(false);
@@ -229,19 +352,23 @@ export function OperationShell<TOptions, TResult>({
     setResult(null);
     setActiveStep(0);
     setFormRevision((revision) => revision + 1);
+    setPurges((count) => count + 1);
   }, []);
 
   // Input edits invalidate review; context changes reset even a partially
-  // built form. Keep a submitted receipt until its SDK call resolves.
+  // built form. Keep a submitted receipt until its SDK call resolves, but
+  // drop its secrets when the context (e.g. the cleared signer) changes.
   const previousContext = useRef(contextBinding);
   useEffect(() => {
     const changed = previousContext.current !== contextBinding;
     previousContext.current = contextBinding;
-    if (!submission && (changed || (review && !reviewIsCurrent))) {
+    if (submission) {
+      if (changed) purgeSecrets();
+    } else if (changed || (review && !reviewIsCurrent)) {
       reset();
       setNotice('Transaction context changed. Build and review the operation again.');
     }
-  }, [contextBinding, review, reviewIsCurrent, submission, reset]);
+  }, [contextBinding, review, reviewIsCurrent, submission, reset, purgeSecrets]);
 
   const onReview = () => {
     if (
@@ -253,11 +380,25 @@ export function OperationShell<TOptions, TResult>({
       options === null
     )
       return;
+    const reviewed = structuredClone(options);
+    let summary: string;
+    let view: unknown;
+    try {
+      summary = descriptor.summarise(reviewed);
+      view = structuredClone(
+        descriptor.secrets === 'none' ? reviewed : descriptor.secrets.reviewData(reviewed),
+      );
+    } catch {
+      setNotice('Could not prepare the review of these inputs. Check them and try again.');
+      return;
+    }
     setReview({
       descriptor,
       contextBinding,
-      options: structuredClone(options),
+      options: reviewed,
       fingerprint: optionsFingerprint,
+      summary,
+      view,
       sdk,
       signer,
       identityId: signer.identityId,
@@ -275,14 +416,24 @@ export function OperationShell<TOptions, TResult>({
   const canProceed =
     reviewIsCurrent &&
     capabilityAvailable &&
+    signingKeyReady &&
     (!descriptor.destructive || destructiveAck) &&
     mainnetConfirmed &&
     !busy;
   const onExecute = async () => {
     if (!review || !canProceed || !isCurrent(review) || inFlight.current) return;
-    const submitted = { ...review, submittedAt: new Date().toISOString() };
+    // Only this closure holds the inputs while the SDK call runs.
+    const submitted = review;
+    const sourceOptions = options;
     inFlight.current = true;
-    setSubmission(submitted);
+    setSubmission({
+      descriptor: submitted.descriptor,
+      identityId: submitted.identityId,
+      network: submitted.network,
+      trusted: submitted.trusted,
+      submittedAt: new Date().toISOString(),
+      entities: receiptEntities(submitted.options, submitted.identityId),
+    });
     setActiveStep(2);
     setBusy(true);
     setError(null);
@@ -291,6 +442,7 @@ export function OperationShell<TOptions, TResult>({
         sdk: submitted.sdk,
         signer: submitted.signer,
         options: submitted.options,
+        signingKeyId: reviewSigningKey?.key?.id,
         assertCurrent: () => {
           if (!isCurrent(submitted))
             throw new OperationNotSubmittedError(
@@ -308,7 +460,11 @@ export function OperationShell<TOptions, TResult>({
       if (mounted.current) setError(normalizeError(e));
     } finally {
       inFlight.current = false;
-      if (mounted.current) setBusy(false);
+      if (mounted.current) {
+        setBusy(false);
+        purgeSecrets();
+      }
+      wipeSecretBytes(submitted.descriptor.secrets, [submitted.options, sourceOptions]);
     }
   };
 
@@ -362,7 +518,7 @@ export function OperationShell<TOptions, TResult>({
   const origin = submission ?? review;
   const entities = submission
     ? {
-        ...receiptEntities(submission.options, submission.identityId),
+        ...submission.entities,
         ...receiptEntities(result, submission.identityId),
         ...(error instanceof BroadcastOutcomeUnknownError ? error.entities : {}),
       }
@@ -462,12 +618,54 @@ export function OperationShell<TOptions, TResult>({
             <Heading size="sm" color="gray.100">
               Review
             </Heading>
-            <Text color="gray.250">{review.descriptor.summarise(review.options)}</Text>
+            <Text color="gray.250">{review.summary}</Text>
             <Text fontSize="sm" color="gray.250">
               Identity: {review.identityId} · Network: {review.network} ·{' '}
               {review.trusted ? 'trusted quorum source' : 'proof verification'}
             </Text>
-            <CodeBlock value={review.options} />
+            <CodeBlock value={review.view} />
+            {review.descriptor.signingCriteria ? (
+              <Text
+                fontSize="sm"
+                role="status"
+                color={reviewSigningKey?.error ? 'warning' : 'gray.250'}
+              >
+                {reviewSigningKey?.key
+                  ? `Signing key: ${describeKey(reviewSigningKey.key)}`
+                  : reviewSigningKey?.error
+                    ? `No key can sign this operation: ${reviewSigningKey.error}`
+                    : 'Selecting the signing key…'}
+              </Text>
+            ) : null}
+            {signingKeyChanged && reviewSigningKey?.key ? (
+              <VStack align="stretch" spacing={2}>
+                <Text role="alert" color="warning" fontSize="sm" fontWeight={600}>
+                  The signing key changed while you were reviewing. It was{' '}
+                  {reviewSigningKey.confirmed}. Check the new key before you sign.
+                </Text>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  alignSelf="flex-start"
+                  onClick={() => {
+                    // Confirm only the key on screen, not one a pending refresh selected.
+                    const shown = describeKey(reviewSigningKey.key!);
+                    setReviewKey((current) =>
+                      current?.key && describeKey(current.key) === shown
+                        ? { ...current, confirmed: shown }
+                        : current,
+                    );
+                  }}
+                >
+                  Use key #{reviewSigningKey.key.id}
+                </Button>
+              </VStack>
+            ) : null}
+            <Text fontSize="sm" color="gray.250">
+              Fees: Platform deducts processing fees from the identity&apos;s credit balance when
+              the transition executes. The SDK does not provide an estimate in advance, so the exact
+              fee is only known afterwards.
+            </Text>
             {descriptor.destructive ? (
               <InfoBlock>
                 <VStack align="stretch" spacing={2}>

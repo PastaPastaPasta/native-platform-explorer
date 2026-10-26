@@ -28,6 +28,21 @@ export class BroadcastOutcomeUnknownError extends Error {
   }
 }
 
+/**
+ * WASM error kinds the pinned SDK (4.0.0-rc.2) raises only while reading a
+ * write method's options, before any request: `InvalidArgument` is a local
+ * kind never mapped from network errors, and `NotImplemented` marks unwired
+ * APIs. Every other failure inside a write call stays "outcome unknown".
+ */
+const PRE_SUBMISSION_SDK_ERRORS = new Set(['InvalidArgument', 'NotImplemented']);
+
+export function isPreSubmissionSdkError(error: unknown): boolean {
+  // WasmSdkError / WasmDppError are plain wasm-bindgen objects, not Errors.
+  if (!error || typeof error !== 'object' || error instanceof Error) return false;
+  const name = (error as { name?: unknown }).name;
+  return typeof name === 'string' && PRE_SUBMISSION_SDK_ERRORS.has(name);
+}
+
 export async function submitOperation<T>(
   submit: () => Promise<T>,
   entities: ReceiptEntities,
@@ -37,6 +52,7 @@ export async function submitOperation<T>(
   try {
     return await submit();
   } catch (error) {
+    if (isPreSubmissionSdkError(error)) throw new OperationNotSubmittedError(error);
     throw new BroadcastOutcomeUnknownError(error, entities);
   }
 }
@@ -46,7 +62,8 @@ export function receiptEntities(value: unknown, identityId: string): ReceiptEnti
   const string = (key: string) =>
     typeof record[key] === 'string' ? (record[key] as string) : undefined;
   const entities = {
-    identityId: string('identityId') ?? identityId,
+    // Always the signer: form inputs must not redirect receipt links.
+    identityId,
     recipientId: string('recipientId'),
     contractId: string('contractId'),
     documentType: string('documentType'),

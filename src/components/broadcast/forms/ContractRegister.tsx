@@ -14,6 +14,7 @@ import {
 } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import type { OperationFormProps } from '../OperationShell';
+import { ContractDefinitionsField, parseDefinitionsText } from './ContractDefinitionsField';
 
 export interface ContractRegisterOptions {
   ownerId: string;
@@ -76,6 +77,11 @@ export function ContractRegisterForm({
 }: OperationFormProps<ContractRegisterOptions>) {
   const ownerId = signer.identityId;
   const [schemasText, setSchemasText] = useState(() => JSON.stringify(SAMPLE_SCHEMA, null, 2));
+  const [definitionsText, setDefinitionsText] = useState('');
+  const { definitions, error: definitionsError } = useMemo(
+    () => parseDefinitionsText(definitionsText),
+    [definitionsText],
+  );
 
   const { parsed, parseError } = useMemo(() => {
     try {
@@ -91,19 +97,16 @@ export function ContractRegisterForm({
   }, [schemasText]);
 
   useEffect(() => {
-    if (!parsed) {
-      onOptionsChange(null);
-      return;
-    }
-    if (!ownerId.trim()) {
+    if (!parsed || definitionsError || !ownerId.trim()) {
       onOptionsChange(null);
       return;
     }
     onOptionsChange({
       ownerId: ownerId.trim(),
       documentSchemas: parsed,
+      ...(definitions ? { definitions } : {}),
     });
-  }, [parsed, ownerId, onOptionsChange]);
+  }, [parsed, definitions, definitionsError, ownerId, onOptionsChange]);
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -176,6 +179,14 @@ export function ContractRegisterForm({
           </Text>
         )}
       </Box>
+
+      <ContractDefinitionsField
+        id="contract-register-definitions"
+        value={definitionsText}
+        error={definitionsError}
+        onChange={setDefinitionsText}
+        hint="Optional reusable property schemas. Leave blank for none."
+      />
 
       <InfoBlock>
         <Heading size="xs" color="gray.100" mb={2}>

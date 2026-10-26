@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { Box, Button, HStack, Text, Textarea, VStack } from '@chakra-ui/react';
 import { useSdkQuery } from '@sdk/hooks';
@@ -8,17 +8,36 @@ import { normaliseContract } from '@util/contract';
 import { ContractPicker, rememberContract } from '../ContractPicker';
 import type { OperationFormProps } from '../OperationShell';
 import { isBase58Identifier } from '@util/identifier';
+import { ContractDefinitionsField, parseDefinitionsText } from './ContractDefinitionsField';
 
 export interface ContractUpdateOptions {
   contractId: string;
+  /** On-chain version the edits were made against; the update publishes baseVersion + 1. */
+  baseVersion?: number;
   documentSchemas: Record<string, unknown>;
-  definitions?: Record<string, unknown>;
+  /** Replacement `$defs`. Undefined keeps the on-chain definitions; null removes them. */
+  definitions?: Record<string, unknown> | null;
+}
+
+function onChainText(contract: unknown) {
+  const norm = normaliseContract(contract);
+  const defs = norm.plain?.schemaDefs;
+  return {
+    schemas: JSON.stringify(norm.documentSchemas ?? {}, null, 2),
+    definitions:
+      defs && typeof defs === 'object' && Object.keys(defs).length > 0
+        ? JSON.stringify(defs, null, 2)
+        : '',
+    version: norm.version === undefined ? undefined : Number(norm.version),
+  };
 }
 
 export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<ContractUpdateOptions>) {
   const params = useSearchParams();
   const [contractId, setContractId] = useState(params.get('contract') ?? '');
   const [schemasText, setSchemasText] = useState('');
+  const [definitionsText, setDefinitionsText] = useState('');
+  const [baseVersion, setBaseVersion] = useState<number | undefined>(undefined);
   const [loaded, setLoaded] = useState(false);
 
   const validContract = isBase58Identifier(contractId.trim());
@@ -34,13 +53,19 @@ export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<Contr
     { enabled: validContract },
   );
 
+  const resetToOnChain = useCallback((contract: unknown) => {
+    const text = onChainText(contract);
+    setSchemasText(text.schemas);
+    setDefinitionsText(text.definitions);
+    setBaseVersion(text.version);
+  }, []);
+
   useEffect(() => {
     if (contractQuery.data && !loaded) {
-      const norm = normaliseContract(contractQuery.data);
-      setSchemasText(JSON.stringify(norm.documentSchemas ?? {}, null, 2));
+      resetToOnChain(contractQuery.data);
       setLoaded(true);
     }
-  }, [contractQuery.data, loaded]);
+  }, [contractQuery.data, loaded, resetToOnChain]);
 
   const { parsed, parseError } = useMemo(() => {
     if (!schemasText.trim()) return { parsed: null, parseError: null };
@@ -54,14 +79,32 @@ export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<Contr
       return { parsed: null, parseError: e instanceof Error ? e.message : String(e) };
     }
   }, [schemasText]);
+  const { definitions, error: definitionsError } = useMemo(
+    () => parseDefinitionsText(definitionsText),
+    [definitionsText],
+  );
 
   useEffect(() => {
-    if (!validContract || !parsed) {
+    if (!validContract || !loaded || !parsed || definitionsError) {
       onOptionsChange(null);
       return;
     }
-    onOptionsChange({ contractId: contractId.trim(), documentSchemas: parsed });
-  }, [validContract, parsed, contractId, onOptionsChange]);
+    onOptionsChange({
+      contractId: contractId.trim(),
+      baseVersion,
+      documentSchemas: parsed,
+      definitions,
+    });
+  }, [
+    validContract,
+    loaded,
+    parsed,
+    definitions,
+    definitionsError,
+    baseVersion,
+    contractId,
+    onOptionsChange,
+  ]);
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -76,55 +119,72 @@ export function ContractUpdateForm({ onOptionsChange }: OperationFormProps<Contr
             if (id.trim() === contractId.trim()) return;
             setLoaded(false);
             setSchemasText('');
+            setDefinitionsText('');
+            setBaseVersion(undefined);
           }}
         />
       </Box>
 
       {contractQuery.data && loaded ? (
-        <Box>
-          <HStack justify="space-between" mb={1}>
-            <Text
-              as="label"
-              htmlFor="contract-update-schemas"
-              fontSize="sm"
-              color="gray.100"
-              fontWeight={500}
-            >
-              Document schemas
+        <>
+          <Box>
+            <HStack justify="space-between" mb={1}>
+              <Text
+                as="label"
+                htmlFor="contract-update-schemas"
+                fontSize="sm"
+                color="gray.100"
+                fontWeight={500}
+              >
+                Document schemas
+              </Text>
+              <Button
+                size="xs"
+                variant="ghost"
+                onClick={() => {
+                  // Refetch: the contract may have changed since the form loaded it.
+                  void contractQuery.refetch().then((result) => {
+                    if (result.data) resetToOnChain(result.data);
+                  });
+                }}
+              >
+                Reset to on-chain
+              </Button>
+            </HStack>
+            <Textarea
+              id="contract-update-schemas"
+              rows={18}
+              fontFamily="mono"
+              fontSize="xs"
+              bg="gray.800"
+              borderColor={parseError ? 'danger' : 'gray.700'}
+              value={schemasText}
+              onChange={(e) => setSchemasText(e.target.value)}
+            />
+            {parseError ? (
+              <Text fontSize="xs" color="danger" mt={1}>
+                {parseError}
+              </Text>
+            ) : null}
+            <Text fontSize="xs" color="gray.400" mt={1}>
+              Schema changes are append-only for required fields and bounded by the contract&apos;s
+              mutability config.
             </Text>
-            <Button
-              size="xs"
-              variant="ghost"
-              onClick={() => {
-                if (contractQuery.data) {
-                  const norm = normaliseContract(contractQuery.data);
-                  setSchemasText(JSON.stringify(norm.documentSchemas ?? {}, null, 2));
-                }
-              }}
-            >
-              Reset to on-chain
-            </Button>
-          </HStack>
-          <Textarea
-            id="contract-update-schemas"
-            rows={18}
-            fontFamily="mono"
-            fontSize="xs"
-            bg="gray.800"
-            borderColor={parseError ? 'danger' : 'gray.700'}
-            value={schemasText}
-            onChange={(e) => setSchemasText(e.target.value)}
+          </Box>
+          <ContractDefinitionsField
+            id="contract-update-definitions"
+            value={definitionsText}
+            error={definitionsError}
+            onChange={setDefinitionsText}
+            hint="Loaded from the on-chain contract and published with the schemas. Clearing this removes the existing definitions."
           />
-          {parseError ? (
-            <Text fontSize="xs" color="danger" mt={1}>
-              {parseError}
-            </Text>
-          ) : null}
-          <Text fontSize="xs" color="gray.400" mt={1}>
-            Schema changes are append-only for required fields and bounded by the contract&apos;s
-            mutability config.
+          <Text fontSize="xs" color="gray.400">
+            {baseVersion !== undefined
+              ? `Publishes version ${baseVersion + 1} (on-chain version ${baseVersion}). `
+              : ''}
+            Groups, tokens, and contract config are kept unchanged.
           </Text>
-        </Box>
+        </>
       ) : contractQuery.isLoading ? (
         <Text fontSize="xs" color="gray.400">
           Loading contract…

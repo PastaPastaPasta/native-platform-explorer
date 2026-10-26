@@ -37,12 +37,16 @@ test('invalid WIF and mnemonic attempts show errors and clear credential fields'
   await page.getByRole('tab', { name: 'WIF', exact: true }).click();
   await page.getByRole('textbox', { name: 'Identity ID', exact: true }).fill(identityId);
   const wifInput = page.getByLabel('WIF private key', { exact: true });
+  // Masked text, not a password field the browser would offer to save.
+  await expect(wifInput).toHaveAttribute('type', 'text');
+  await expect(wifInput).toHaveCSS('-webkit-text-security', 'disc');
   await wifInput.fill('invalid-test-WIF');
   const connectWif = page.getByRole('button', { name: 'Connect WIF', exact: true });
   await expect(connectWif).toBeEnabled({ timeout: 20_000 });
   await connectWif.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
-  await expect(page.getByText(/Invalid WIF: key base58 error/)).toBeVisible();
+  await expect(page.getByText('That is not a valid WIF private key.', { exact: true })).toBeVisible();
+  await expect(page.getByRole('tabpanel')).not.toContainText('invalid-test-WIF');
   await expect(page.getByRole('tabpanel')).not.toContainText('[object Object]');
   await expect(wifInput).toHaveValue('');
   await expect(connectWif).toBeDisabled();
@@ -50,6 +54,7 @@ test('invalid WIF and mnemonic attempts show errors and clear credential fields'
   await page.getByRole('tab', { name: 'Mnemonic', exact: true }).click();
   await page.getByRole('textbox', { name: 'Identity ID', exact: true }).fill(identityId);
   const mnemonicInput = page.getByRole('textbox', { name: 'Mnemonic', exact: true });
+  await expect(mnemonicInput).toHaveCSS('-webkit-text-security', 'disc');
   await mnemonicInput.fill(Array(12).fill('invalid-test-word').join(' '));
   const connectMnemonic = page.getByRole('button', { name: 'Connect mnemonic', exact: true });
   await expect(connectMnemonic).toBeEnabled();
@@ -82,7 +87,9 @@ test('bridge backup previews can be discarded, mismatched networks are blocked, 
   await expect(useIdentity).toBeEnabled();
   await useIdentity.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
-  await expect(page.getByText(/Invalid WIF: key base58 error/)).toBeVisible();
+  await expect(
+    page.getByText('identityKeys[0] does not contain a valid WIF private key.', { exact: true }),
+  ).toBeVisible();
   await expect(input).toHaveValue('');
   await expect(useIdentity).toHaveCount(0);
 });
@@ -103,7 +110,9 @@ test('bridge file import supports keyboard activation and clears the selected fi
   await expect(useIdentity).toBeEnabled({ timeout: 20_000 });
   await useIdentity.click();
   await expect(page.getByRole('heading', { name: 'Something went wrong', exact: true })).toBeVisible();
-  await expect(page.getByText(/Invalid WIF: key base58 error/)).toBeVisible();
+  await expect(
+    page.getByText('identityKeys[0] does not contain a valid WIF private key.', { exact: true }),
+  ).toBeVisible();
   await expect(page.getByLabel('Bridge backup file', { exact: true })).toHaveValue('');
   await expect(useIdentity).toHaveCount(0);
 });

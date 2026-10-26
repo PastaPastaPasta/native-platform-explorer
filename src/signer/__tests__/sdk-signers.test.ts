@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import {
+  ContractBounds,
   DataContract,
   DataContractCreateTransition,
   DataContractUpdateTransition,
@@ -13,9 +14,10 @@ import {
 } from '@dashevo/evo-sdk';
 import type { EvoSDK, IdentityPublicKeyOptions } from '@dashevo/evo-sdk';
 import { createBackupSigner } from '../backup';
-import { createMnemonicSigner } from '../mnemonic';
+import { createMnemonicSigner, identityKeyPath } from '../mnemonic';
 import { createWifSigner } from '../wif';
 import { createLocalSigner } from '../local';
+import { SigningKeyUnavailableError, type KeySelectionCriteria } from '../types';
 import { operationRequirement } from '@components/broadcast/capabilities';
 
 // These public fixtures are deterministic test keys. Only the network read is
@@ -34,6 +36,16 @@ beforeAll(async () => {
   data = Uint8Array.from(pair.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
   pair.free();
 });
+
+/** Public key bytes the test mnemonic derives at a path. */
+async function publicData(path: string) {
+  const derived = await wallet.deriveKeyFromSeedWithPath({ mnemonic: PHRASE, path, network: 'testnet' });
+  try {
+    return Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
+  } finally {
+    derived.free();
+  }
+}
 
 function fixture(initial: Partial<IdentityPublicKeyOptions> = {}) {
   let options: IdentityPublicKeyOptions[] = [
@@ -118,7 +130,8 @@ describe('SDK-compatible signers', () => {
     );
     derived.free();
     const { sdk } = fixture({ data: mnemonicData });
-    const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet', 0, "m/9'/1'/13'/0'");
+    // The identity index is irrelevant (and may be blank/invalid) with an explicit path.
+    const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet', NaN, "m/9'/1'/13'/0'");
     const material = await signer.prepareSdk!({ purpose: 'AUTHENTICATION' });
     expect(material.identitySigner.keyCount).toBe(1);
     material.release!();
@@ -128,22 +141,38 @@ describe('SDK-compatible signers', () => {
     );
   });
 
-  it('uses the SDK DIP-13 default path instead of assuming a synchronous string API', async () => {
-    const info = await wallet.derivationPathDip13Testnet(0);
-    const path = info.path;
-    info.free();
-    const derived = await wallet.deriveKeyFromSeedWithPath({
-      mnemonic: PHRASE,
-      path,
-      network: 'testnet',
-    });
-    const keyData = Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) =>
-      parseInt(byte, 16),
-    );
-    derived.free();
-    const { sdk } = fixture({ data: keyData });
+  it('derives DIP-13 identity keys for the identity index and keeps every matching key', async () => {
+    expect(identityKeyPath('testnet', 0, 0)).toBe("m/9'/1'/5'/0'/0'/0'/0'");
+    expect(identityKeyPath('mainnet', 3, 7)).toBe("m/9'/5'/5'/0'/0'/3'/7'");
+    const { sdk, changeKeys } = fixture();
+    changeKeys([
+      { keyId: 0, purpose: 0, securityLevel: 0, keyType: 0, data: await publicData(identityKeyPath('testnet', 0, 0)) },
+      { keyId: 2, purpose: 0, securityLevel: 2, keyType: 0, data: await publicData(identityKeyPath('testnet', 0, 2)) },
+      { keyId: 3, purpose: 0, securityLevel: 2, keyType: 0, data: await publicData(identityKeyPath('testnet', 1, 3)) },
+    ]);
+
     const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet');
-    expect((await signer.availableKeys())[0]?.id).toBe(4);
+    expect((await signer.availableKeys()).map((key) => key.id)).toEqual([0, 2]);
+    const master = await signer.prepareSdk!(operationRequirement('identity.updateKeys').criteria);
+    expect(master.keyId).toBe(0);
+    master.release!();
+    const high = await signer.prepareSdk!({ purpose: 'AUTHENTICATION', allowedSecurityLevels: ['HIGH'] });
+    expect(high.keyId).toBe(2);
+    high.release!();
+    signer.destroy();
+
+    const second = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet', 1);
+    expect((await second.availableKeys()).map((key) => key.id)).toEqual([3]);
+    second.destroy();
+  });
+
+  it('wipes imported secrets that do not control an on-chain key', async () => {
+    const { sdk } = fixture();
+    const matching = (await import('../local')).decodeWif(wif);
+    const unused = { bytes: new Uint8Array(32).fill(7), network: 'testnet' as const };
+    const signer = await createLocalSigner(sdk, 'mnemonic', ID, [await matching, unused]);
+    expect(unused.bytes.every((byte) => byte === 0)).toBe(true);
+    expect((await signer.availableKeys()).map((key) => key.id)).toEqual([4]);
     signer.destroy();
   });
 
@@ -213,6 +242,37 @@ describe('SDK-compatible signers', () => {
     );
     signer.destroy();
     await expect(createWifSigner(sdk, wif, ID)).rejects.toThrow(/do not match/);
+  });
+
+  it('never swaps a pinned key disabled on-chain for another eligible key', async () => {
+    const high = async (keyId: number, disabledAt?: number) => ({
+      keyId,
+      purpose: 0,
+      securityLevel: 2,
+      keyType: 0,
+      data: await publicData(identityKeyPath('testnet', 0, keyId)),
+      ...(disabledAt === undefined ? {} : { disabledAt }),
+    });
+    const { sdk, changeKeys } = fixture();
+    changeKeys([await high(1), await high(2)]);
+    const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet');
+    const reviewed: KeySelectionCriteria = {
+      purpose: 'AUTHENTICATION',
+      allowedSecurityLevels: ['HIGH'],
+    };
+    const pinned = await signer.prepareSdk!({ ...reviewed, keyId: 2 });
+    expect(pinned.identityKey.keyId).toBe(2);
+    pinned.release!();
+
+    // Key #2 is disabled after review; key #1 still meets the criteria.
+    changeKeys([await high(1), await high(2, 1)]);
+    const attempt = signer.prepareSdk!({ ...reviewed, keyId: 2 });
+    await expect(attempt).rejects.toBeInstanceOf(SigningKeyUnavailableError);
+    await expect(attempt).rejects.toThrow(/\(key 2\)/);
+    const unpinned = await signer.prepareSdk!(reviewed);
+    expect(unpinned.identityKey.keyId).toBe(1);
+    unpinned.release!();
+    signer.destroy();
   });
 
   it('wipes owned byte arrays on failed import and disconnect', async () => {
@@ -363,5 +423,40 @@ describe('SDK-compatible signers', () => {
       wrappers.forEach(({ wrapper }) => wrapper.free());
       signer.destroy();
     }
+  });
+
+  it('reports invalid WIFs without quoting them', async () => {
+    const { sdk } = fixture();
+    const secret = 'abandon-secret-material-123';
+    const error = (await createWifSigner(sdk, secret, ID).catch((e: unknown) => e)) as Error;
+    expect(error.message).toBe('That is not a valid WIF private key.');
+    const backupError = (await createBackupSigner(sdk, {
+      identityId: ID,
+      keys: [{ id: 4, purpose: 'AUTHENTICATION', securityLevel: 'HIGH', privateKeyWif: secret }],
+    }).catch((e: unknown) => e)) as Error;
+    expect(backupError.message).toBe('identityKeys[0] does not contain a valid WIF private key.');
+    expect(backupError.message).not.toContain(secret);
+  });
+
+  it('reports on-chain contract bounds so keys stay inside them', async () => {
+    const contractId = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
+    const { sdk } = fixture({
+      contractBounds: ContractBounds.SingleContractDocumentType(contractId, 'domain'),
+    });
+    const signer = await createWifSigner(sdk, wif, ID);
+    expect((await signer.availableKeys())[0]?.contractBounds).toEqual({
+      contractId,
+      documentType: 'domain',
+    });
+    await expect(
+      signer.prepareSdk!({ purpose: 'AUTHENTICATION', target: { contractId: ID } }),
+    ).rejects.toThrow(/No enabled matching on-chain key/);
+    const material = await signer.prepareSdk!({
+      purpose: 'AUTHENTICATION',
+      target: { contractId, documentType: 'domain' },
+    });
+    expect(material.keyId).toBe(4);
+    material.release!();
+    signer.destroy();
   });
 });

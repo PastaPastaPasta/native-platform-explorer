@@ -1,5 +1,5 @@
 import type { KeySelectionCriteria, SignerKeyDescriptor } from './types';
-import { SignerUnavailableError } from './types';
+import { SigningKeyUnavailableError } from './types';
 
 const PURPOSES = [
   'AUTHENTICATION',
@@ -16,13 +16,42 @@ function enumName(value: string | number | undefined, names: string[]): string |
   return typeof value === 'number' ? names[value] : value?.toUpperCase();
 }
 
+function purposes(criteria: KeySelectionCriteria): string[] {
+  const purpose = criteria.purpose ?? [];
+  return (Array.isArray(purpose) ? purpose : [purpose]).map((name) => name.toUpperCase());
+}
+
+/** Human-readable purpose list for error messages, e.g. "TRANSFER or OWNER". */
+export function describePurpose(criteria?: KeySelectionCriteria): string | undefined {
+  return criteria?.purpose ? purposes(criteria).join(' or ') : undefined;
+}
+
+function withinBounds(key: SignerKeyDescriptor, criteria?: KeySelectionCriteria): boolean {
+  const bounds = key.contractBounds;
+  if (!bounds) return true;
+  const target = criteria?.target;
+  return (
+    target?.contractId === bounds.contractId &&
+    (bounds.documentType === undefined || bounds.documentType === target.documentType)
+  );
+}
+
+/**
+ * `ignoreContractBounds` is only for capability previews, where the target
+ * contract is not known yet; signing always enforces bounds.
+ */
 export function keyMeetsCriteria(
   key: SignerKeyDescriptor,
   criteria?: KeySelectionCriteria,
+  { ignoreContractBounds = false }: { ignoreContractBounds?: boolean } = {},
 ): boolean {
   if (key.disabledAt !== undefined) return false;
+  if (!ignoreContractBounds && !withinBounds(key, criteria)) return false;
   if (criteria?.keyId !== undefined && key.id !== criteria.keyId) return false;
-  if (criteria?.purpose && enumName(key.purpose, PURPOSES) !== criteria.purpose.toUpperCase())
+  if (
+    criteria?.purpose &&
+    !purposes(criteria).includes(enumName(key.purpose, PURPOSES) ?? '')
+  )
     return false;
   if (
     criteria?.allowedSecurityLevels &&
@@ -52,11 +81,12 @@ export function selectSigningKey<T extends SignerKeyDescriptor>(
   });
   const selected = eligible[0];
   if (!selected) {
-    throw new SignerUnavailableError(
-      `No enabled matching on-chain key satisfies ${criteria?.purpose ?? 'the requested purpose'}` +
+    throw new SigningKeyUnavailableError(
+      `No enabled matching on-chain key satisfies ${describePurpose(criteria) ?? 'the requested purpose'}` +
         `${criteria?.minSecurityLevel ? ` at ${criteria.minSecurityLevel} security or stronger` : ''}` +
         `${criteria?.allowedSecurityLevels ? ` (allowed levels: ${criteria.allowedSecurityLevels.join(', ')})` : ''}` +
-        `${criteria?.keyId !== undefined ? ` (key ${criteria.keyId})` : ''}. Connect a signer with an eligible key.`,
+        `${criteria?.keyId !== undefined ? ` (key ${criteria.keyId})` : ''}` +
+        `${criteria?.target ? ` that may be used for contract ${criteria.target.contractId}` : ''}. Connect a signer with an eligible key.`,
     );
   }
   return selected;

@@ -122,8 +122,11 @@ export async function createBackupSigner(
 ): Promise<ExplorerSigner> {
   const imported: ImportedPrivateKey[] = [];
   try {
-    for (const key of parsed.keys) {
-      imported.push({ ...(await decodeWif(key.privateKeyWif)), keyId: key.id });
+    for (const [index, key] of parsed.keys.entries()) {
+      const decoded = await decodeWif(key.privateKeyWif).catch(() => {
+        throw new Error(`identityKeys[${index}] does not contain a valid WIF private key.`);
+      });
+      imported.push({ ...decoded, keyId: key.id });
     }
     return await createLocalSigner(sdk, 'backup', parsed.identityId, imported);
   } catch (error) {

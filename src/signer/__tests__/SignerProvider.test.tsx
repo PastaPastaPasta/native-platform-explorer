@@ -6,11 +6,13 @@ import { useSdk } from '@sdk/hooks';
 import { installStorageMock } from '@/test/storage';
 import { createMockSigner } from '@/test/signer';
 import { createSdkContextValue } from '@/test/sdk';
-import { SignerProvider, useSigner } from '../SignerProvider';
+import { isWriteRoute, SignerProvider, useSigner } from '../SignerProvider';
 
 vi.mock('@sdk/hooks', () => ({
   useSdk: vi.fn(),
 }));
+const route = vi.hoisted(() => ({ pathname: '/wallet/' as string | null }));
+vi.mock('next/navigation', () => ({ usePathname: () => route.pathname }));
 
 const useSdkMock = vi.mocked(useSdk);
 let firstDestroy: ReturnType<typeof vi.fn>;
@@ -39,6 +41,7 @@ function Harness() {
 
 describe('SignerProvider', () => {
   beforeEach(() => {
+    route.pathname = '/wallet/';
     firstDestroy = vi.fn();
     secondDestroy = vi.fn();
     installStorageMock('sessionStorage');
@@ -140,7 +143,26 @@ describe('SignerProvider', () => {
     expect(screen.getByTestId('signer')).toHaveTextContent('none');
   });
 
-  it('disconnects after ten minutes hidden and cancels the timer when visible', () => {
+  it('clears after ten minutes without input, even while the tab stays visible', () => {
+    vi.useFakeTimers();
+    render(
+      <SignerProvider>
+        <Harness />
+      </SignerProvider>,
+    );
+    fireEvent.click(screen.getByText('connect first'));
+    act(() => vi.advanceTimersByTime(9 * 60_000));
+    fireEvent.keyDown(document.body, { key: 'a' });
+    act(() => vi.advanceTimersByTime(9 * 60_000));
+    expect(firstDestroy).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(60_000));
+    expect(firstDestroy).toHaveBeenCalledOnce();
+    expect(screen.getByTestId('signer')).toHaveTextContent('none');
+    // An automatic clear keeps the public reconnect hint.
+    expect(screen.getByTestId('stash')).toHaveTextContent('wif:identity-a');
+  });
+
+  it('counts hidden time as idle and rechecks when the tab becomes visible', () => {
     vi.useFakeTimers();
     render(
       <SignerProvider>
@@ -150,17 +172,50 @@ describe('SignerProvider', () => {
     fireEvent.click(screen.getByText('connect first'));
     Object.defineProperty(document, 'hidden', { configurable: true, value: true });
     fireEvent(document, new Event('visibilitychange'));
-    act(() => vi.advanceTimersByTime(9 * 60_000));
+    // Simulate a throttled background timer: the clock moves, the timer has not fired.
+    vi.setSystemTime(Date.now() + 11 * 60_000);
     expect(firstDestroy).not.toHaveBeenCalled();
     Object.defineProperty(document, 'hidden', { configurable: true, value: false });
-    fireEvent(document, new Event('visibilitychange'));
-    act(() => vi.advanceTimersByTime(2 * 60_000));
+    act(() => {
+      fireEvent(document, new Event('visibilitychange'));
+    });
+    expect(firstDestroy).toHaveBeenCalledOnce();
+  });
+
+  it('clears the signer when leaving the wallet and broadcast pages', () => {
+    const view = render(
+      <SignerProvider>
+        <Harness />
+      </SignerProvider>,
+    );
+    fireEvent.click(screen.getByText('connect first'));
+    route.pathname = '/broadcast/';
+    view.rerender(
+      <SignerProvider>
+        <Harness />
+      </SignerProvider>,
+    );
     expect(firstDestroy).not.toHaveBeenCalled();
-    Object.defineProperty(document, 'hidden', { configurable: true, value: true });
-    fireEvent(document, new Event('visibilitychange'));
-    act(() => vi.advanceTimersByTime(10 * 60_000));
+    route.pathname = '/identity/';
+    view.rerender(
+      <SignerProvider>
+        <Harness />
+      </SignerProvider>,
+    );
     expect(firstDestroy).toHaveBeenCalledOnce();
     expect(screen.getByTestId('signer')).toHaveTextContent('none');
+    expect(screen.getByTestId('stash')).toHaveTextContent('wif:identity-a');
+  });
+
+  it.each([
+    ['/wallet', true],
+    ['/wallet/', true],
+    ['/broadcast/', true],
+    ['/broadcasting/', false],
+    ['/', false],
+    ['/identity/', false],
+  ])('treats %s as a write route: %s', (pathname, expected) => {
+    expect(isWriteRoute(pathname)).toBe(expected);
   });
 
   it('hydrates backup stashes and wipes live secrets on unload', () => {

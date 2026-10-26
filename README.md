@@ -65,7 +65,10 @@ Custom and disabled bridge URLs are covered by the utility unit tests.
 
 Opt-in. The explorer does not persist mnemonic, WIF, or backup secrets.
 Local adapters keep secrets in tab memory and wipe owned byte arrays on
-disconnect, after ten continuous minutes with the tab hidden, or on unload.
+disconnect, after ten minutes without user input (whether the tab is visible
+or hidden), when navigating away from `/wallet` and `/broadcast`, or on unload.
+Automatic clears keep only the signer kind and public identity ID as a
+reconnect hint.
 An in-flight operation retains its SDK signing objects until it settles.
 JavaScript strings and SDK internal copies cannot be reliably zeroed.
 Extension support is detection-only until the
