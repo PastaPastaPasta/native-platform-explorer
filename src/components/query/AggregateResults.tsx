@@ -199,8 +199,14 @@ export function AggregateResults({
 
   // Server entries stop at the limit. Compound rows each merge up to one entry
   // per IN value, so they may be truncated before the row count reaches it.
-  const truncated = grouped && !!groupBound && rows.length * groupBound.entriesPerGroup >= groupBound.limit;
+  // Testnet answers some grouped shapes with a single total row; a page limit says nothing about it.
+  const singleTotal = rows.length === 1 && rows[0]!.key === '';
+  const truncated =
+    grouped && !singleTotal && !!groupBound && rows.length * groupBound.entriesPerGroup >= groupBound.limit;
   const merged = !!groupBound && groupBound.entriesPerGroup > 1;
+  const mergedEntries = mergedFields.length
+    ? `(${mergedFields.join(', ')}, ${groupField}) pairs`
+    : `entries (one per IN value for each ${groupField} value)`;
   const lastLiteral = truncated && !merged && rangeGroupField === groupField && rows.length
     ? decodeGroupKey(rows[rows.length - 1]!.key, groupByPrimarySchema).literal
     : undefined;
@@ -234,7 +240,7 @@ export function AggregateResults({
               <Code fontSize="2xs">{mergedFields.join(', ')}</Code> value for separate rows.
             </Text>
           )}
-          {rows.length === 1 && rows[0]!.key === '' && (
+          {singleTotal && (
             <Text role="note" fontSize="xs" color="orange.300">
               This GROUP BY came back as one total instead of a row per{' '}
               <Code fontSize="2xs">{groupField}</Code> value, as testnet does for two ranges, or IN with a range,
@@ -244,7 +250,7 @@ export function AggregateResults({
           {truncated && (
             <Text role="status" fontSize="xs" color="orange.300">
               {merged
-                ? `Platform returns at most ${groupBound!.limit} (${mergedFields.join(', ')}, ${groupField}) pairs before the SDK merges them, so these ${rows.length} groups may be incomplete. `
+                ? `Platform returns at most ${groupBound!.limit} ${mergedEntries} before the SDK merges them, so these ${rows.length} groups may be incomplete. `
                 : `Showing the first ${rows.length} groups: the limit of ${groupBound!.limit} was reached, so more groups may exist. `}
               Aggregates have no page cursor.{' '}
               {lastLiteral ? (

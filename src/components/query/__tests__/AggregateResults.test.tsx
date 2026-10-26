@@ -98,4 +98,39 @@ describe('AggregateResults', () => {
     expect(screen.getByRole('note')).toHaveTextContent('This GROUP BY came back as one total instead of a row per class value');
     expect(screen.getByText('(all)')).toBeInTheDocument();
   });
+
+  it('does not call a single total row truncated, even when the IN list fills the limit', () => {
+    renderWithProviders(
+      <AggregateResults
+        {...base}
+        groupBy={['semester']}
+        groupBySchemas={[{ type: 'integer' }]}
+        groupBound={{ limit: 5, entriesPerGroup: 7 }}
+        rangeGroupField="semester"
+        data={new Map([['', 42n]])}
+      />,
+    );
+    expect(screen.getByRole('note')).toHaveTextContent('came back as one total');
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('names merged entries when an IN filter multiplies a single-field range GROUP BY', () => {
+    // COUNT(*) WHERE class IN (7 values) AND semester > 20240 GROUP BY semester LIMIT 5.
+    const data = new Map([[intKey(20251), 4n]]);
+    renderWithProviders(
+      <AggregateResults
+        {...base}
+        groupBy={['semester']}
+        groupBySchemas={[{ type: 'integer' }]}
+        groupBound={{ limit: 5, entriesPerGroup: 7 }}
+        rangeGroupField="semester"
+        data={data}
+      />,
+    );
+    const status = screen.getByRole('status');
+    expect(status).toHaveTextContent(
+      'Platform returns at most 5 entries (one per IN value for each semester value) before the SDK merges them',
+    );
+    expect(status).not.toHaveTextContent('(,');
+  });
 });
