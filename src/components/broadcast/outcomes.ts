@@ -46,7 +46,8 @@ export function receiptEntities(value: unknown, identityId: string): ReceiptEnti
   const string = (key: string) =>
     typeof record[key] === 'string' ? (record[key] as string) : undefined;
   const entities = {
-    identityId: string('identityId') ?? identityId,
+    // Always the signer: form inputs must not redirect receipt links.
+    identityId,
     recipientId: string('recipientId'),
     contractId: string('contractId'),
     documentType: string('documentType'),

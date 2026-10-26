@@ -400,4 +400,33 @@ describe('broadcast executors', () => {
       expect(update).not.toHaveBeenCalled();
     });
   });
+
+  it.each([
+    [false, 'Registered alice.dash on DPNS.'],
+    [true, 'Submitted a contested registration for alice.dash. Masternodes vote on the winner.'],
+  ])('registers DPNS names for the signer and links the domain document (contested: %s)', async (contested, message) => {
+    const registerName = vi.fn().mockResolvedValue({
+      preorderDocumentId: 'preorder-1',
+      domainDocumentId: 'domain-1',
+      fullDomainName: 'alice.dash',
+    });
+    const identity = { id: 'identity-1' };
+    const result = await executeDpnsRegister({
+      sdk: {
+        identities: { fetch: vi.fn().mockResolvedValue(identity) },
+        dpns: { registerName },
+      } as never,
+      signer: createMockSigner(),
+      options: { label: 'alice', contested },
+    });
+    expect(registerName).toHaveBeenCalledWith(expect.objectContaining({ label: 'alice', identity }));
+    expect(result).toEqual({
+      kind: 'identity',
+      identityId: 'identity-1',
+      message,
+      contractId: 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec',
+      documentType: 'domain',
+      documentId: 'domain-1',
+    });
+  });
 });

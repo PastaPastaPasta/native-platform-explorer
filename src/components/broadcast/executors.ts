@@ -30,7 +30,8 @@ import type { IdentityCreditTransferOptions } from './forms/IdentityCreditTransf
 import type { IdentityCreditWithdrawalOptions } from './forms/IdentityCreditWithdrawal';
 import type { IdentityUpdateKeysOptions, NewIdentityKey } from './forms/IdentityUpdateKeys';
 import type { IdentityTopUpOptions } from './forms/IdentityTopUp';
-import type { DpnsRegisterOptions } from './forms/DpnsRegister';
+import { DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
+import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import type { VotingCastVoteOptions } from './forms/VotingCastVote';
 
 export interface ContractRegisterResult {
@@ -61,9 +62,15 @@ export interface IdentityResult {
   identityId: string;
   message: string;
   newBalance?: string;
+  /** Document created by the operation (e.g. the DPNS domain), for receipt links. */
+  contractId?: string;
+  documentType?: string;
+  documentId?: string;
 }
 
 // ─── helpers ─────────────────────────────────────────────────────────────
+
+const DPNS_CONTRACT_ID = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns')!.testnetId;
 
 // wasm-bindgen objects are not GC'd by the JS heap — their Rust allocations
 // only release on explicit `free()`. Every executor now goes through this
@@ -745,7 +752,7 @@ export async function executeDpnsRegister(args: {
   const criteria = operationRequirement('dpns.registerName').criteria;
   return withSigningMaterial(signer, criteria, async (material, submit) => {
     const identity = await fetchExistingIdentity(sdk, material.identityId);
-    await submit(
+    const registered = await submit(
       () =>
         sdk.dpns.registerName({
           label: options.label,
@@ -753,13 +760,19 @@ export async function executeDpnsRegister(args: {
           identityKey: material.identityKey,
           signer: material.identitySigner,
         }),
-      { identityId: material.identityId },
+      { identityId: material.identityId, contractId: DPNS_CONTRACT_ID, documentType: 'domain' },
       args.assertCurrent,
     );
+    const name = registered.fullDomainName || `${options.label}.${DPNS_TLD}`;
     return {
       kind: 'identity' as const,
       identityId: material.identityId,
-      message: `Registered ${options.label} on DPNS.`,
+      message: options.contested
+        ? `Submitted a contested registration for ${name}. Masternodes vote on the winner.`
+        : `Registered ${name} on DPNS.`,
+      contractId: DPNS_CONTRACT_ID,
+      documentType: 'domain',
+      documentId: String(registered.domainDocumentId),
     };
   });
 }

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   BroadcastOutcomeUnknownError,
   OperationNotSubmittedError,
+  receiptEntities,
   submitOperation,
 } from '../outcomes';
 
@@ -43,5 +44,12 @@ describe('transaction outcome messages', () => {
     expect(error).toBeInstanceOf(BroadcastOutcomeUnknownError);
     expect((error as Error).message).toContain(cause.message);
     expect((error as Error).cause).toBe(cause);
+  });
+
+  it('always links receipts to the signer identity, not an identity typed into a form', () => {
+    expect(receiptEntities({ identityId: 'typed-identity', recipientId: 'r' }, 'signer')).toEqual({
+      identityId: 'signer',
+      recipientId: 'r',
+    });
   });
 });

@@ -24,7 +24,7 @@ import {
   type IdentityUpdateKeysOptions,
 } from './forms/IdentityUpdateKeys';
 import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
-import { DpnsRegisterForm, type DpnsRegisterOptions } from './forms/DpnsRegister';
+import { DpnsRegisterForm, DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
 import { VotingCastVoteForm, type VotingCastVoteOptions } from './forms/VotingCastVote';
 import { StateTransitionBroadcastForm, type RawBroadcastOptions } from './forms/RawBroadcast';
 import {
@@ -304,11 +304,14 @@ export const OPERATIONS: OperationEntry[] = [
     {
       title: 'Register a DPNS name',
       description:
-        'Reserves a DPNS label for your identity. Names are first-come, ' +
-        'first-served and some are contested (others can challenge popular names).',
+        'Registers a .dash name for the connected identity (a preorder followed by the ' +
+        'domain document). Short names made of letters, 0, 1, and hyphens are contested and ' +
+        'are decided by a masternode vote.',
       FormComponent: DpnsRegisterForm,
       summarise: (o) =>
-        `Register ${o.label}.${o.network === 'mainnet' ? 'dash' : 'tdash'} for identity ${o.identityId}.`,
+        o.contested
+          ? `Open a contested registration for ${o.label}.${DPNS_TLD} (0.2 DASH contest fee plus normal fees; masternodes vote on the winner).`
+          : `Register ${o.label}.${DPNS_TLD} for the connected identity.`,
       execute: executeDpnsRegister,
     },
   ),
