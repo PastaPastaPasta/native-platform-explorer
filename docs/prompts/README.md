@@ -1,5 +1,7 @@
 # Stage prompts
 
+> **Historical.** These are the original build prompts and describe the plan at the time (Next 14, evo-sdk 3.x, untrusted mode, preview-only writes). The current spec is [`../PRD.md`](../PRD.md).
+
 Six sequential prompts that build the project from empty to PRD-complete. Each prompt is self-contained and written to be pasted into a coding agent.
 
 ## How to use
@@ -11,7 +13,7 @@ Six sequential prompts that build the project from empty to PRD-complete. Each p
    - Paste the contents of the stage prompt as the initial task.
    - Let the agent work; review the resulting commit(s).
    - When the agent reports the stage is complete, verify against the "Acceptance criteria" section, then move on.
-4. After Stage 6, the project matches the PRD.
+4. After Stage 6, the project matched the original PRD of the time (not the current one).
 
 ## Stages
 

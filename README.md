@@ -1,58 +1,97 @@
 # native-platform-explorer
 
-A client-only Dash Platform block explorer, powered exclusively by `@dashevo/evo-sdk`. No backend, no indexer, no database — the browser speaks directly to DAPI, verifies proofs locally, and renders live Platform state.
+A client-only Dash Platform explorer, powered only by `@dashevo/evo-sdk`
+(5.0.0-rc.8). No backend, no indexer, no database: the browser talks directly to
+DAPI, verifies proofs locally, and renders live Platform state. Production:
+<https://explorer.dashhq.org>.
 
-Designed as a sibling of [`pshenmic/platform-explorer`](https://github.com/pshenmic/platform-explorer), with a dark theme, the `#008DE4` brand, and glassmorphic cards. Its shipped typography uses Fraunces, Geist, and JetBrains Mono.
+It started as a sibling of [`pshenmic/platform-explorer`](https://github.com/pshenmic/platform-explorer)
+and has its own "Field Manual" design: light and dark modes, Fraunces, Geist and
+JetBrains Mono.
 
 ## Status
 
-The explorer includes entity details, schema-aware SQL and aggregate queries,
-proof inspection, governance views, and opt-in write tools. Write operations
-use the SDK's identity-signing bridge; availability depends on the connected
-signer's eligible keys and the SDK's operation support. Unsupported funding,
-raw-broadcast and extension paths are labeled in the interface.
+Shipped on `main`:
 
-- Full product requirements: [`docs/PRD.md`](docs/PRD.md)
-- Per-stage progress + commit SHAs: [`docs/progress.md`](docs/progress.md)
-- Implementation plan, broken into 6 sequential stages: [`docs/prompts/`](docs/prompts/)
+- Entity pages for identities, contracts, documents, tokens, Platform
+  addresses, DPNS names, epochs, evonodes, groups, contested resources and vote
+  polls, plus network status, quorums, protocol votes, credits and the shielded
+  pool.
+- Search by ID, name, name prefix, address, public-key hash, transition hash or
+  epoch; saved items; share links that carry the network.
+- A SQL query workspace with COUNT/SUM/AVG and GROUP BY, index checks for the
+  network's protocol version, a Query Inspector with proof-tree views, and
+  deserializer tools.
+- An opt-in write mode covering contracts, documents, tokens (including group
+  proposals), identities, Platform addresses, DPNS, masternode votes and
+  raw-transition broadcast. See [Write mode](#write-mode).
+
+Not shipped: untrusted mode (removed), custom DAPI endpoints for
+mainnet/testnet (use a quorum-service override), extension signing (detection
+only), translations, and a service worker / CSP / SRI (in progress on the
+`chore/hardening` branch).
+
+- Product spec (current): [`docs/PRD.md`](docs/PRD.md)
+- Per-PR history with merge commits: [`docs/progress.md`](docs/progress.md)
+- Original stage prompts (historical): [`docs/prompts/`](docs/prompts/)
 
 ## Development
 
+Node `^22.13.0 || >=24` and pnpm 9.15.9 (pinned in `package.json`).
+
 ```
-pnpm install
-pnpm dev       # Next.js dev server on http://localhost:3000
-pnpm build     # static export to out/
+pnpm install --frozen-lockfile
+pnpm dev                      # Next.js dev server (webpack) on http://localhost:3000
 pnpm lint
 pnpm typecheck
-pnpm test      # vitest
-pnpm e2e       # playwright
-pnpm generate:sdk-reference  # update the page-to-SDK-call mapping after source changes
+pnpm test                     # vitest (CI runs pnpm test:coverage)
+NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build   # checks the SDK reference, then exports to out/
+pnpm check:bundles            # initial-JavaScript budgets (512 KiB gzip per checked route)
+pnpm exec playwright install chromium   # once, before the first e2e run
+pnpm e2e                      # Playwright (Chromium) against the export
+pnpm generate:sdk-reference   # update the page-to-SDK-call mapping after source changes
 ```
 
-Environment variables live in `.env.local.example` — copy to `.env.local`
-and edit. The most important one is `NEXT_PUBLIC_DISABLE_WRITE_MODE=true`
-for kiosk / read-only deployments: it hides `/wallet` and `/broadcast`
-while keeping the rest of the explorer identical.
+### Environment variables
+
+Copy `.env.local.example` to `.env.local` and edit. All are public and read at
+build time.
+
+| Variable | Purpose | Default |
+|---|---|---|
+| `NEXT_PUBLIC_DEFAULT_NETWORK` | Initial network: `mainnet`, `testnet` or a devnet name | `testnet` |
+| `NEXT_PUBLIC_QUORUM_URL_MAINNET` | Quorum service for mainnet (`https://`, or `http://` for localhost) | SDK default, `https://quorums.mainnet.networks.dash.org` |
+| `NEXT_PUBLIC_QUORUM_URL_TESTNET` | Quorum service for testnet | SDK default, `https://quorums.testnet.networks.dash.org` |
+| `NEXT_PUBLIC_DISABLE_WRITE_MODE` | `true` disables `/wallet` and `/broadcast` (they show a notice) for read-only deployments | `false` |
+| `NEXT_PUBLIC_RATE_PROVIDER` | DASH/USD rate: `coinbase`, `kucoin` (needs a CORS proxy) or `none` | `coinbase` |
+| `NEXT_PUBLIC_WELL_KNOWN_URL` | Extra well-known registry JSON loaded at runtime | unset |
+| `NEXT_PUBLIC_BRIDGE_URL` | Bridge for identity create/top-up shortcuts; empty disables them | `https://bridge.dashhq.org` |
+| `NEXT_PUBLIC_BASE_PATH` | Path prefix for project-site hosting, e.g. `/native-platform-explorer` | empty (root) |
+
+`NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported
+(see below).
 
 ## Connection and proofs
 
 Every session is trusted: the SDK fetches quorum public keys and the DAPI
 masternode list from a quorum service when it connects, then verifies
-proof-capable responses in the browser. There is no untrusted mode. With the
-pinned `@dashevo/evo-sdk` (4.0.0-rc.2, and still 5.0.0-rc.8), an untrusted
-SDK fails every proof-capable query ("Non-trusted mode is not supported in
-WASM"), and `proofs: false` aborted the WASM module in rc.2 and is refused
-("unproved queries are not supported for this query") in 5.0, so
+proof-capable responses in the browser. There is no untrusted mode: with
+`@dashevo/evo-sdk` (4.0.0-rc.2 then, 5.0.0-rc.8 now) an untrusted SDK fails
+every proof-capable query ("Non-trusted mode is not supported in WASM"), and
+`proofs: false` aborted the WASM module in rc.2 and is refused
+("unproved queries are not supported for this query") in 5.0. So
 `NEXT_PUBLIC_TRUSTED_MODE` was removed and a saved `npe:trusted` preference
 is discarded.
 
 Settings → Connection (stored in the browser) controls the startup timeout,
 the SDK's DAPI connect timeout, request timeout, retries, `banFailedAddress`
 and log level, and can point Mainnet or Testnet at another quorum service.
+"Clear SDK cache" removes the contracts and protocol version the SDK persists
+in localStorage for the network, then reconnects.
 Operators can set build defaults with `NEXT_PUBLIC_QUORUM_URL_MAINNET` and
 `NEXT_PUBLIC_QUORUM_URL_TESTNET`; like the settings form, they must use
 `https://` (`http://` only for localhost), and other values are ignored with a
-console warning. Explicit DAPI addresses (the PRD's
+console warning. Explicit DAPI addresses (the original PRD's
 `NEXT_PUBLIC_DAPI_ADDRESSES_*`) are not offered for these networks: sessions
 use the quorum service's masternode list, so pointing at another quorum
 service is how to use different endpoints. A custom devnet's saved DAPI
@@ -68,44 +107,70 @@ Custom and disabled bridge URLs are covered by the utility unit tests.
 
 ## Write mode
 
-Opt-in. The explorer does not persist mnemonic, WIF, or backup secrets.
-Local adapters keep secrets in tab memory and wipe owned byte arrays on
-disconnect, after ten minutes without user input (whether the tab is visible
-or hidden), when navigating away from `/wallet` and `/broadcast`, or on unload.
-Automatic clears keep only the signer kind and public identity ID as a
-reconnect hint.
-An in-flight operation retains its SDK signing objects until it settles.
-JavaScript strings and SDK internal copies cannot be reliably zeroed.
-Extension support is detection-only until the
-`dash-platform-extension` public API stabilises. See [`/about`](src/app/about/page.tsx)
-for the full proof + privacy explainer.
+Opt-in. `NEXT_PUBLIC_DISABLE_WRITE_MODE=true` turns it off: `/wallet` and
+`/broadcast` then show a write-mode-disabled notice.
+`/broadcast` lists the operations; each one goes Build → Review → Sign +
+broadcast → Result.
 
-Operations that do not use the connected identity take their keys in the
-form and keep them only for that operation: Platform address keys (send between
-addresses, top up an identity, withdraw to a Core address, create an identity
-from address credits), the one-time asset-lock key (create or top up an
-identity, or fund an address, from an asset-lock proof made by a Core wallet),
-and a masternode voting key with its ProTxHash (masternode votes, also linked
-from each open contest). The explorer does not build asset-lock transactions.
-A new identity's keys are derived from a mnemonic on the DIP-13 identity paths
-(so connecting that mnemonic on `/wallet` finds them) or entered as WIFs. The
-review shows each new key's hash to compare with the wallet; keys that no
-longer match it, or that another identity already uses, are refused before
-anything is signed.
-Address amounts are exact integer credits checked against the protocol's
-minimums; the SDK fetches each input address's nonce. Advanced → Broadcast a
-signed state transition decodes hex or base64 locally, shows its type, owner,
-signing key ID and hash, and broadcasts the same bytes; DAPI's "already in
-mempool/chain" is reported as already submitted, not as a failure.
+**Operations**
+
+| Group | Operations |
+|---|---|
+| Contracts | register, update |
+| Documents | create, replace, delete, transfer, set price, purchase |
+| Tokens | mint, burn, transfer, freeze, unfreeze, destroy frozen, pause/resume, set price (single or tiered), direct purchase, claim, config update; group propose and co-sign |
+| Identity & credits | create and top up from an asset lock, credit transfer, withdrawal, add or disable keys |
+| Platform addresses | send between addresses, fund from your identity, top up an identity, withdraw to Core, fund from an asset lock, create an identity |
+| DPNS | register a name (contested names explained) |
+| Voting | masternode vote on a contested resource |
+| Advanced | broadcast a state transition signed elsewhere |
+
+**Signers.** `/wallet` connects an identity with a bridge backup JSON, a
+mnemonic (DIP-13 identity keys `m/9'/coin'/5'/0'/0'/identityIndex'/keyIndex'`,
+key indexes 0–15) or a single WIF. Imported keys must match enabled on-chain
+keys, and each operation signs only with a key of the purpose and security
+level Platform requires. Extension support is detection-only until the
+`dash-platform-extension` public API stabilises. Operations that don't use the
+connected identity take their keys in the form and keep them only for that
+operation: Platform address keys, the one-time asset-lock key, a masternode
+voting key with its ProTxHash, or none for an already-signed transition.
+
+**Safety model.**
+- Nothing secret is persisted. Local signers keep keys in tab memory and wipe
+  owned byte arrays on disconnect, after ten minutes without user input
+  (visible or hidden tab), when leaving `/wallet` and `/broadcast`, and on
+  unload. Automatic clears keep only the signer kind and public identity ID as
+  a reconnect hint. JavaScript strings and SDK-internal copies cannot be
+  reliably zeroed.
+- Secret fields are masked text fields, so browsers don't offer to save them,
+  and Review never shows them.
+- Review freezes the inputs and shows the key that will sign; signing uses only
+  that key. Mainnet requires typing `MAINNET`; destructive operations need an
+  extra acknowledgement.
+- Writes are refused when the SDK session's protocol version differs from the
+  network's.
+- Errors before submission are "not submitted". Anything after submission
+  starts is "outcome unknown", with no Retry: check the affected identity or
+  address first, because a retry may spend twice.
+
+**Tested.** Run end to end on testnet through the served export, with proved
+read-back: every Platform-address operation, asset-lock identity create and
+top-up, raw broadcast (#47), and the token operations including group
+propose/co-sign (#48). A document create was checked from Node with the same
+inputs (#45). Not yet broadcast live: contract register/update, document
+replace/delete/transfer/set price/purchase, identity credit transfer,
+withdrawal and key updates, DPNS registration, masternode votes (no voting key
+was available), and pre-programmed or once-per-identity token claims. These are
+covered by unit and real-WASM tests. No write has been tested on mainnet.
 
 Without a Core wallet, create or top up an identity through the bridge at
 `https://bridge.dashhq.org` (Mainnet and Testnet): choose Create New Identity,
 or Manage Identity → Top Up Identity and enter the identity there; the
 shortcut passes the selected network only. Import the bridge's backup JSON
 to connect an identity here. Other networks require a separate bridge setup.
-Operators can override the HTTPS base URL with `NEXT_PUBLIC_BRIDGE_URL` at
-build time, or set it empty to disable the shortcuts. After an external top-up,
-refresh the identity page to check the balance.
+The explorer does not build asset-lock transactions. After an external top-up,
+refresh the identity page to check the balance. See [`/about`](src/app/about/page.tsx)
+for the proof and privacy explainer.
 
 ## SDK reference
 
@@ -119,7 +184,8 @@ queries. `pnpm build` rejects a stale mapping; update it with
 
 ## Deploy
 
-The build output is a plain `out/` directory. CI resolves the current GitHub Pages configuration (including custom
+GitHub Pages is the only deploy target (Vercel and IPFS from the original PRD
+were not pursued). The build output is a plain `out/` directory. CI resolves the current GitHub Pages configuration (including custom
 domains) and builds once at that deployment prefix, runs lint, type checking, unit coverage and Chromium
 browser checks, then preserves `validated-pages`. Deployment downloads that
 exact successful CI artifact for the current `main` commit. Failed or
@@ -139,9 +205,11 @@ cp src/styles/fonts/Fraunces-OFL.txt src/styles/fonts/JetBrainsMono-OFL.txt out/
 NEXT_PUBLIC_BASE_PATH=/native-platform-explorer pnpm e2e
 ```
 
-## Build plan
+## Build plan (original)
 
-The implementation is split into 6 stages. Each is designed to be shippable on its own, so the project has a usable state after every stage.
+This is the original six-stage plan the project was built from. It is kept for
+history; later work is recorded in [`docs/progress.md`](docs/progress.md) and
+the current spec is [`docs/PRD.md`](docs/PRD.md).
 
 | Stage | Delivers | Prompt |
 |---|---|---|
@@ -149,10 +217,8 @@ The implementation is split into 6 stages. Each is designed to be shippable on i
 | 2 | Single-entity detail pages + real search | [`stage-2-detail-pages.md`](docs/prompts/stage-2-detail-pages.md) |
 | 3 | Browse surfaces + live home dashboard | [`stage-3-browse-home.md`](docs/prompts/stage-3-browse-home.md) |
 | 4 | Governance, groups, protocol, network pages | [`stage-4-governance.md`](docs/prompts/stage-4-governance.md) |
-| 5 | Proof verification UX — the differentiator | [`stage-5-proofs.md`](docs/prompts/stage-5-proofs.md) |
+| 5 | Proof verification UX | [`stage-5-proofs.md`](docs/prompts/stage-5-proofs.md) |
 | 6 | Opt-in write mode — wallet adapters + broadcast console | [`stage-6-write-mode.md`](docs/prompts/stage-6-write-mode.md) |
-
-Each prompt is self-contained and intended to be handed to a coding agent. Run them sequentially; at the end of stage 6 the project matches the PRD.
 
 ## License
 

@@ -72,7 +72,9 @@ and browser types, 257 unit tests with coverage, and production builds at root
 and `/native-platform-explorer` passed. All 19 Chromium cases passed at each
 deployment path against the packaged export, including local fonts and licenses.
 Actual SDK initialization and invalid-credential handling passed without browser
-SDK-success fixtures or transaction broadcasts. Later product integrations must
+SDK-success fixtures or transaction broadcasts. (At the time this used an
+untrusted SDK; since #40 the browser tests start a trusted SDK from recorded
+quorum-service fixtures.) Later product integrations must
 repeat these checks against their combined source.
 
 The final integration includes the query workspace, exploration tools, epoch

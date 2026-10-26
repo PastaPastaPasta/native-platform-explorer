@@ -9,13 +9,14 @@ display hint, not proof that an imported private key controls an identity key.
 
 The explorer supports local bridge backups, one mnemonic derivation path, and
 single WIF imports. Extension signing and raw-preimage signing are unavailable.
-Top-ups require the external bridge; raw-transition and masternode-vote
-broadcasting require their originating tools. Operation requirements are declared
+(Since #47, asset-lock top-ups and identity creation, masternode votes and
+raw-transition broadcast are available as form-signed operations: their keys
+are entered in the form rather than taken from a connected signer. The bridge
+remains the path for users without a Core wallet.) Operation requirements are declared
 centrally in `capabilities.ts` and enforced when implemented executors prepare
 signing material. Entries also carry that metadata for the next transaction PR.
-The current `OperationShell` does not consume capability metadata; UI capability
-gates and binding transaction approval to inputs, signer, identity and SDK session
-belong to that next PR. Existing contract and document result links are preserved.
+(That PR, #27, made `OperationShell` consume capability metadata and bind
+approval to inputs, signer, identity and SDK session.) Existing contract and document result links are preserved.
 
 ## Key validation and selection
 
@@ -33,7 +34,9 @@ CRITICAL or HIGH; contract updates require CRITICAL, while identity key updates
 require MASTER. Document operations accept CRITICAL through the document type's
 `signatureSecurityLevelRequirement` (default HIGH), or only MASTER when the type
 requires it. A contract-bound key qualifies only for its contract (and document
-type), never for operations without that target. Credit transfers require
+type), never for operations without that target. Token operations require CRITICAL
+AUTHENTICATION keys, or CRITICAL TRANSFER keys for a single transfer or claim
+(#48). Credit transfers require
 CRITICAL TRANSFER keys; withdrawals to an address require CRITICAL TRANSFER keys,
 and withdrawals to a masternode payout address require the CRITICAL OWNER key.
 Capability previews ignore contract bounds because the target is not known yet.

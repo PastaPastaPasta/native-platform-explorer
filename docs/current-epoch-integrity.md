@@ -16,7 +16,7 @@ implicit method to accept the historical record as current. This is a Low
 severity explorer data-integrity issue; it does not forge signatures or alter
 the chain.
 
-`src/sdk/current-epoch.ts` avoids that unsigned hint. In trusted mode it reads
+`src/sdk/current-epoch.ts` avoids that unsigned hint. It reads
 explicit epoch zero with native proof verification, obtains its persisted start
 time, and derives the expected current index from the response's signed
 `metadata.timeMs`. It then verifies an explicit ascending query at that index
@@ -48,8 +48,8 @@ The trusted-off branch attempts ordinary explicit queries and would use the
 local clock after a successful genesis read, retaining an unverified status.
 Actual Mainnet controls with this pinned WASM SDK fail on that initial read:
 the ordinary API still requests a proof, then cannot verify it without trusted
-quorum context. No successful trusted-off epoch result was observed. Enable
-trusted mode to provide the context required by the pinned SDK. Proof errors
+quorum context. No successful trusted-off epoch result was observed. This is why
+every session is now trusted. Proof errors
 propagate without disabling verification, attaching context under an
 unverified label, or falling back to an implicit current query.
 

@@ -1,1049 +1,1102 @@
 # Native Platform Explorer — Product Requirements Document (PRD)
 
-> A client-only Dash Platform (Evolution) block explorer, powered exclusively by `@dashevo/evo-sdk`.
-> Styled and structured as a sibling of `pshenmic/platform-explorer` v2.3.0.
+> A client-only Dash Platform (Evolution) explorer, powered only by `@dashevo/evo-sdk`.
+> No backend, no indexer. Production: <https://explorer.dashhq.org>.
+
+This document describes the product as it ships on `main`. Where a behaviour
+was decided against or deferred, it says so. Per-PR history is in
+[`progress.md`](progress.md); design notes for individual areas are in
+[`design/`](design/).
+
+## Revision history
+
+| Date | Change |
+|---|---|
+| 2026-04 | Original PRD, written before implementation. It targeted Next 14 / React 18, evo-sdk 3.x, Montserrat/Open Sans/Roboto Mono, a dark-only theme copied from `platform-explorer`, `[param]` route segments, `react-markdown`, an optional untrusted mode, `NEXT_PUBLIC_DAPI_ADDRESSES_*`, an extension-first signer, and Vercel/IPFS deploys. The full text is in git history (`git log -- docs/PRD.md`). |
+| 2026-10-26 | Rewritten to match what shipped through PR #48. Main differences from the original: Next.js 16 / React 19 and evo-sdk 5.0.0-rc.8; Fraunces/Geist/JetBrains Mono with light and dark modes; static-export query-parameter routes (`/identity?id=`); trusted-only sessions (untrusted mode removed); a quorum-service override instead of custom DAPI endpoints for mainnet/testnet; devnets; the SQL query workspace, Query Inspector, `/tools`, `/saved`, `/sdk-reference` and `/network/shielded`; the full write surface (contracts, documents, tokens, identities, Platform addresses, DPNS, masternode votes, raw broadcast); the well-known registry with network scope and remote loading; connection settings; GitHub Pages as the only deploy target; the original 12-facade list replaced by the generated page→SDK-call mapping. |
 
 ---
 
-## 0. Executive Summary
+## 1. Summary
 
-**Native Platform Explorer** is a **zero-backend, zero-indexer, browser-native** block explorer for Dash Platform. Every piece of data it shows is fetched **live** by the `@dashevo/evo-sdk` (a TypeScript wrapper around the Rust/WASM Dash Platform SDK) running directly in the user's browser. There is no API server, no database, no scheduled indexer, and no custom infrastructure beyond static file hosting.
+Native Platform Explorer is a static web app. Every value it shows comes from
+`@dashevo/evo-sdk` (a TypeScript wrapper around the Rust/WASM Dash Platform
+SDK) running in the user's browser, which talks to DAPI on Platform's
+masternodes and verifies GroveDB proofs locally.
 
-Compared to the reference `platform-explorer`, the scope is necessarily **reduced** — the SDK does not support global enumeration of identities, contracts, tokens, or documents. In exchange, the explorer gains:
+**No backend, no indexer.** There is no API server, no database and no
+scheduled job. If a feature needs one, the feature is dropped. The only
+non-DAPI requests the browser makes are listed in §14.10.
 
-- **Trust-minimised data** via the SDK's trusted-mode proof verification (GroveDB Merkle proofs verified in-browser against prefetched quorum keys).
-- **Zero operational cost** — ship as a static site; infinite horizontal scale.
-- **Always-current data** — no indexing lag, no stale views, no "syncing" state.
-- **Optional write mode** — because the SDK can broadcast state transitions, every facade's write methods can be surfaced as optional, wallet-gated UI.
+Because the SDK cannot enumerate all identities, contracts, tokens, blocks or
+transactions, the explorer is search-first and smaller in scope than the
+indexer-backed [`platform-explorer`](https://github.com/pshenmic/platform-explorer).
+In exchange it offers:
 
-The explorer is designed to feel like a **native sibling** of `platform-explorer`: same dark-mode brand (`#008DE4`), same Montserrat/Open Sans/Roboto Mono typography, same card/tab/identifier conventions, same top-bar + network-selector + global-search layout.
+- **Proof-verified data.** Every session is trusted: the SDK verifies
+  proof-capable responses against quorum public keys from a quorum service.
+- **No operating cost.** A static `out/` directory served from GitHub Pages.
+- **Live data.** No indexing lag.
+- **Opt-in write mode.** The SDK's write methods are exposed behind a review
+  and signing flow, with keys held only in the tab.
 
-**Package name (proposed):** `native-platform-explorer`
-**Target platforms:** Desktop + mobile web. No native apps.
-**License:** MIT (matching `evo-sdk`).
+**Target platforms:** desktop and mobile web. **License:** MIT.
 
 ---
 
-## 1. Goals & Non-Goals
+## 2. Goals and non-goals
 
-### 1.1 Goals
+### 2.1 Goals
 
-1. Provide a fully-featured, SDK-only exploration UI for Dash Platform's on-chain state.
-2. Match the look and feel of `platform-explorer` so the two products feel like a family.
-3. Expose every read facade the SDK offers — if the SDK can query it, we can render it.
-4. Expose every write facade the SDK offers, gated behind an opt-in wallet / signer flow.
-5. Run entirely from static hosting (Vercel / Netlify / GitHub Pages / IPFS compatible).
-6. Verify cryptographic proofs client-side wherever trusted mode is supported, and clearly indicate proof state in the UI.
-7. Deep-linkable: every entity view is a URL that fetches everything it needs from the SDK on mount.
+1. An SDK-only exploration UI for Dash Platform state.
+2. Expose the SDK's read surface wherever it can be rendered usefully.
+3. Expose the SDK's write surface behind an opt-in review/sign flow.
+4. Run from static hosting.
+5. Verify proofs in the browser and show the proof state of each value.
+6. Deep links: every view is a URL that fetches what it needs on load, including
+   tab, filter and paging state.
 
-### 1.2 Non-Goals
+### 2.2 Non-goals
 
-1. **No global enumeration / ranking / trending pages.** The SDK cannot list all identities, contracts, tokens, or cross-contract documents. We do not fake this with custom indexing.
-2. **No historical time-series charts** (tx/hour, tps over time, etc.) — requires an indexer.
-3. **No aggregated statistics** (total tx count, "richest identities", etc.) — likewise.
-4. **No custom backend of any kind.** If a desired feature requires one, we drop the feature.
-5. **No wallet custody.** Keys are either imported from a hardware / browser wallet or supplied transiently for a single transaction; we never persist private keys.
-6. **No email/notification/account system.**
+1. **No global enumeration, ranking or trending pages.** The SDK cannot list
+   all identities, contracts, tokens or cross-contract documents, and the
+   explorer does not index them.
+2. **No historical time-series charts** (tx/hour, TPS). These need an indexer.
+3. **No aggregate statistics** (total transactions, richest identities).
+4. **No custom backend of any kind.**
+5. **No key custody.** Keys are typed or imported per session and never
+   persisted (§13).
+6. **No accounts, email or notifications.**
+7. **No internationalization in v1** (§14.9).
 
-### 1.3 Explicit trade-offs vs. `platform-explorer`
+### 2.3 Trade-offs against `platform-explorer`
 
 | Capability | `platform-explorer` | `native-platform-explorer` |
 |---|---|---|
-| Browse all blocks / all txs | ✓ (indexer list) | ✗ (not a SDK primitive) |
-| Browse all identities / contracts / tokens | ✓ | ✗ |
-| Search by DPNS name | ✓ | ✓ (SDK `dpns.resolveName`) |
-| Search by identity / contract / tx / document ID | ✓ | ✓ |
-| Reverse lookup: identity by public-key-hash | ✓ (inferred) | ✓ (SDK `identities.byPublicKeyHash`) |
-| Document list **within a contract+type** | ✓ | ✓ (SDK `documents.query` WHERE/ORDER/LIMIT) |
-| Contract version history | ✓ | ✓ (SDK `contracts.getHistory`) |
-| Token holders / supply / price | ✓ (static snapshot) | ✓ (live) |
-| Current epoch + validator proposed-blocks | ✓ | ✓ |
+| Browse all blocks / transactions | ✓ (indexer) | ✗ |
+| Browse all identities / contracts / tokens | ✓ | ✗ (search, well-known registry, saved items) |
+| Search by DPNS name or prefix | ✓ | ✓ |
+| Search by identity / contract / token / transition / address / public-key hash | ✓ | ✓ |
+| Documents within a contract + type | ✓ | ✓ (`documents.query`, filters, cursors) |
+| SQL-style queries and COUNT/SUM/AVG | ✗ | ✓ (`/query`) |
+| Contract version history | ✓ | ✓ for contracts with `keepsHistory` (10 newest) |
+| Token holders | ✓ (indexed) | Seeded list only (§8.6) |
+| Epoch and evonode proposer data | ✓ | ✓ |
+| Shielded pool state | ✗ | ✓ |
 | Time-series charts | ✓ | ✗ |
-| Tx count / gas trends | ✓ | ✗ |
-| Broadcast state transition | ✓ (API endpoint) | ✓ (SDK direct, wallet-signed) |
-| Proof verification in UI | ✗ | ✓ |
+| Broadcast state transitions | ✓ (API) | ✓ (SDK, signed in the browser) |
+| Proof verification in the UI | ✗ | ✓ |
 
 ---
 
-## 2. Target Users
+## 3. Target users
 
-1. **Developers** building on Dash Platform — verify their contracts, identities, and documents during integration.
-2. **Token issuers & holders** — inspect token supply, current price, own balance, and distribution state.
-3. **DPNS users** — check whether a name is available, contested, or resolve a handle to an identity.
-4. **Masternode operators** — view proposed blocks, current epoch state, protocol upgrade vote status.
-5. **Governance participants** — inspect contested resources, vote polls, and their own identity's vote history.
-6. **The curious** — follow a DPNS name, identity, or contract ID and drill into related entities.
-
-The app assumes **zero prior knowledge of Platform internals**; tooltips and contextual help explain credits, nonces, proofs, and contested-resource semantics as they are encountered.
+1. Developers building on Platform: contracts, documents, queries, proofs.
+2. Token issuers and holders: supply, rules, prices, balances, token writes.
+3. DPNS users: availability, contests, resolution, registration.
+4. Masternode operators: proposed blocks, protocol votes, contested-resource votes.
+5. Governance participants: contested resources, vote polls, groups.
+6. Anyone following an identity, name or contract between related entities.
 
 ---
 
-## 3. System Architecture
+## 4. Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                           BROWSER                               │
-│                                                                 │
-│   ┌────────────────────┐       ┌──────────────────────────┐     │
-│   │  Next.js App       │       │   @dashevo/evo-sdk       │     │
-│   │  (App Router,      │───►   │   (TS wrapper)           │     │
-│   │   static export)   │       │                          │     │
-│   │                    │◄───   │   ┌──────────────────┐   │     │
-│   │  React Query       │       │   │ @dashevo/        │   │     │
-│   │  nuqs (URL state)  │       │   │ wasm-sdk (WASM)  │   │     │
-│   └────────────────────┘       │   └──────────────────┘   │     │
-│                                │        │  │              │     │
-│                                │        │  │  proof verify│     │
-│                                │        │  │  (trusted)   │     │
-│                                └────────┼──┼──────────────┘     │
-└─────────────────────────────────────────┼──┼────────────────────┘
-                                          │  │  HTTPS (gRPC-web)
-                                          ▼  ▼
-                              ┌───────────────────────────┐
-                              │       DAPI (masternodes)  │
-                              │  Platform (Tenderdash /   │
-                              │  Drive / GroveDB)         │
-                              └───────────────────────────┘
+┌───────────────────────────────────────────────────────────────────┐
+│ BROWSER                                                           │
+│  ┌──────────────────────┐      ┌───────────────────────────────┐  │
+│  │ Next.js 16 static    │ ───► │ @dashevo/evo-sdk 5.0.0-rc.8   │  │
+│  │ export (App Router,  │      │  └ @dashevo/wasm-sdk (WASM)   │  │
+│  │ all pages client)    │ ◄─── │     proof verification        │  │
+│  │ React Query · nuqs   │      └──────┬──────────────┬─────────┘  │
+│  └──────────────────────┘             │              │            │
+└───────────────────────────────────────┼──────────────┼────────────┘
+                                        │ gRPC-web     │ HTTPS
+                                        ▼              ▼
+                           ┌─────────────────────┐  ┌──────────────────────────┐
+                           │ DAPI on masternodes │  │ Quorum service           │
+                           │ (Drive / Tenderdash)│  │ quorums.<net>.networks…  │
+                           └─────────────────────┘  │ quorum keys + node list  │
+                                                    └──────────────────────────┘
 ```
 
-**Key properties:**
-
-- **Single-page app**, statically exported (no Node runtime at deploy-time).
-- **SDK lives in the browser** and speaks gRPC-web to DAPI endpoints.
-- **Proofs are verified in-browser** by the WASM SDK against prefetched quorum public keys (trusted mode).
-- **No custom server.** Absolutely everything the user sees is a direct SDK call or derivable from one.
-- **Deep link → SDK call.** Routes are 1:1 with SDK queries; mounting a page fires at most a handful of calls.
-
----
-
-## 4. Tech Stack
-
-Chosen to match `platform-explorer` where reasonable so visual and structural conventions carry over directly.
-
-| Concern | Choice | Notes |
-|---|---|---|
-| Framework | **Next.js 14** (App Router, `output: 'export'`) | Matches reference explorer; static-export compatible |
-| Language | **TypeScript** strict mode | The SDK is TS-first; we get fully typed facades |
-| UI kit | **Chakra UI 2.8** + `@emotion` | Matches reference explorer |
-| Styling | SCSS modules + SASS include path `src/styles` | Same theme primitives as reference explorer |
-| Data fetching | **React Query 5** (`@tanstack/react-query`) | Cache SDK responses, dedupe, retry, suspense |
-| URL state | **nuqs** | Same as reference explorer |
-| Tables | `@tanstack/react-table` 8 | Same as reference |
-| Charts | **D3.js 7** | Same as reference; only used where SDK provides series-like data (e.g. evonode proposed blocks per epoch) |
-| Identifiers / avatars | `minidenticons` | Deterministic visual identity |
-| Markdown (static docs) | `react-markdown` + `remark-gfm` | For the `/about` and `/sdk-reference` pages |
-| Wallet signer | Pluggable interface; first adapters: **Dash Platform Extension** (`/Users/pasta/workspace/dash-platform-extension`), **mnemonic paste** (ephemeral, session-only) | Never persisted |
-| Linting | ESLint + `next/core-web-vitals` + `@typescript-eslint` | |
-| Testing | Vitest + `@testing-library/react` + Playwright (e2e over the live SDK) | |
-| Build | `next build && next export` → static `out/` | Ship to Vercel / Netlify / IPFS / GH Pages |
-
-The app is **ESM-only** because `@dashevo/evo-sdk` is ESM-only.
+- **Static export.** `next.config.mjs` sets `output: 'export'` and
+  `trailingSlash: true`; there is no Node runtime at deploy time.
+- **Trusted sessions only.** On connect, the SDK fetches quorum public keys
+  (and, for mainnet/testnet, the DAPI masternode list) from the quorum service,
+  then verifies proof-capable responses in WASM.
+- **Lazy SDK.** The SDK module is imported at session start, not in route
+  bundles, so the shell, query editor, wallet and broadcast forms are usable
+  while it loads (§15.1).
+- **Deep link → SDK calls.** Each route reads its query parameters and calls the
+  SDK on mount.
 
 ---
 
-## 5. SDK Capabilities & Constraints (the "what's possible" envelope)
+## 5. Tech stack
 
-This section is the **hard floor** for product scope. Every feature in this PRD maps to a specific SDK method; if no SDK method exists, the feature is excluded.
+Versions from `package.json`.
 
-### 5.1 Facades used (12 + wallet namespace)
-
-From `@dashevo/evo-sdk` v3.1.0-dev.1:
-
-`addresses`, `identities`, `documents`, `contracts`, `tokens`, `dpns`, `epoch`, `protocol`, `stateTransitions`, `system`, `group`, `voting`, plus the `wallet` namespace.
-
-Every facade method is either:
-
-- **Query** (`foo()`) — read via DAPI, optionally with `…WithProof()` variant for trusted mode.
-- **Write** (`foo()`) — construct + sign + broadcast state transition; always requires a signer.
-
-### 5.2 What is queryable by-ID (single entity lookups)
-
-All "detail pages" in Section 8 are powered by these:
-
-| Entity | SDK method |
+| Concern | Choice |
 |---|---|
-| Identity | `sdk.identities.fetch(id)` |
-| Identity by public-key-hash (unique) | `sdk.identities.byPublicKeyHash(hash)` |
-| Identity by non-unique pk hash | `sdk.identities.byNonUniquePublicKeyHash(hash, startAfter?)` |
-| Identity balance | `sdk.identities.balance(id)` / `balanceAndRevision(id)` |
-| Identity public keys | `sdk.identities.getKeys({ identityId, purpose?, securityLevel? })` |
-| Identity nonce / contract nonce | `sdk.identities.nonce(id)` / `contractNonce(id, contractId)` |
-| Data contract | `sdk.contracts.fetch(id)` / `getMany([ids])` |
-| Contract version history | `sdk.contracts.getHistory({ dataContractId, startBlockHeight?, endBlockHeight? })` |
-| Single document | `sdk.documents.get(contractId, type, documentId)` |
-| Document query (within contract+type) | `sdk.documents.query({ dataContractId, documentTypeName, where?, orderBy?, limit?, offset?, startAfter? })` |
-| Token total supply | `sdk.tokens.totalSupply(tokenId)` |
-| Token status (frozen/paused) | `sdk.tokens.statuses([tokenIds])` |
-| Token holders (per-token, across identities) | `sdk.tokens.balances([identityIds], tokenId)` |
-| Identity's token balances | `sdk.tokens.identityBalances(identityId, [tokenIds])` |
-| Token price / direct-purchase price | `sdk.tokens.priceByContract(contractId, position)` / `directPurchasePrices([tokenIds])` |
-| Token contract info (aggregated) | `sdk.tokens.contractInfo(contractId)` |
-| Perpetual distribution last claim | `sdk.tokens.perpetualDistributionLastClaim(identityId, tokenId)` |
-| DPNS → identity | `sdk.dpns.resolveName(name)` |
-| Identity → DPNS (primary) | `sdk.dpns.username(identityId)` |
-| DPNS full username record | `sdk.dpns.getUsernameByName(name)` |
-| DPNS usernames by identity / pattern | `sdk.dpns.usernames(query)` |
-| DPNS availability / validity / contested | `sdk.dpns.isNameAvailable / isValidUsername / isContestedUsername` |
-| Platform address balance/nonce | `sdk.addresses.get(addr)` / `getMany([addrs])` |
-| Current epoch | `sdk.epoch.current()` |
-| Epoch range | `sdk.epoch.epochsInfo({ startIndex?, endIndex?, count? })` |
-| Finalized epoch info | `sdk.epoch.finalizedInfos(query)` |
-| Proposed blocks per evonode (epoch) | `sdk.epoch.evonodesProposedBlocksByRange(...)` / `...ByIds(epoch, [proTxHashes])` |
-| System status | `sdk.system.status()` |
-| Current quorums | `sdk.system.currentQuorumsInfo()` |
-| Total credits on Platform | `sdk.system.totalCreditsInPlatform()` |
-| Prefunded specialized balance | `sdk.system.prefundedSpecializedBalance(id)` |
-| Protocol upgrade state | `sdk.protocol.versionUpgradeState()` |
-| Per-masternode upgrade vote | `sdk.protocol.versionUpgradeVoteStatus(startProTxHash?, count)` |
-| Group info / members / actions | `sdk.group.info` / `members` / `actions` / `actionSigners` / `identityGroups` / `groupsDataContracts` |
-| Contested resources (list per contract) | `sdk.group.contestedResources(votePollsByDocumentTypeQuery)` |
-| Contested resource vote state | `sdk.voting.contestedResourceVoteState(query)` |
-| Identity's votes on contested resources | `sdk.voting.contestedResourceIdentityVotes(query)` |
-| Vote polls by end date | `sdk.voting.votePollsByEndDate(query?)` |
+| Framework | Next.js 16.3.8, App Router, `output: 'export'`, built with Webpack (`next build --webpack`) for async WASM and raw-Markdown handling |
+| UI | React 19.3.0, Chakra UI 2.8, Emotion, Framer Motion 11 |
+| Language | TypeScript, strict; ESM-only (`"type": "module"`) |
+| Styling | Chakra theme (`src/styles/theme.ts`, `colors.ts`) plus Sass (`global.scss`, `mixins.scss`) |
+| Data fetching | TanStack Query 5 |
+| URL state | nuqs 2 (one `NuqsAdapter`, in `Providers.tsx`) |
+| Numbers | bignumber.js for credits/DASH formatting; native bigint for amounts in writes |
+| Avatars | `minidenticons`, rendered as `<img>` |
+| Fonts | Fraunces and JetBrains Mono (local, OFL), Geist (`geist` package) |
+| Proof parsing | A vendored GroveDB proof parser compiled to WASM (`src/lib/grovedb-proof-parser`, `public/wasm/`), loaded on demand |
+| Tests | Vitest + Testing Library + happy-dom; Playwright (Chromium) against the exported site |
+| Lint | ESLint 9 flat config with `eslint-config-next` |
+| Package manager | pnpm 9.15.9 (pinned via `packageManager`); Node `^22.13.0 \|\| >=24` |
 
-### 5.3 What is **not** possible (hard limits)
-
-- No list of all identities, all contracts, all tokens, all documents (cross-contract), all addresses, all historical blocks, or all historical transactions.
-- No "recent activity" feed (no tx index).
-- No aggregate stats (no tx/second, no "total docs on Platform", no "top contracts").
-- No reorg detection (not a property of the SDK).
-- No guaranteed user-friendly name for a given contract ID — contracts don't carry names on-chain unless present in the schema; we do best-effort through a **curated well-known contracts registry** (a JSON file bundled in the app).
-
-### 5.4 Trusted vs. untrusted mode
-
-The app defaults to **trusted mode** (`sdk.testnetTrusted()` / `sdk.mainnetTrusted()`): queries return cryptographic proofs that the WASM SDK verifies in-browser against quorum public keys prefetched at `connect()`. Proof state is rendered visibly in the UI (see §9.7).
-
-~~Untrusted mode is exposed via an advanced toggle~~ — removed: the pinned WASM SDK cannot run proof-bearing queries without a trusted context, so every session is trusted (see `docs/design/query-session-lifecycle.md`).
+`d3` and `@tanstack/react-table` are still listed in `package.json` but are not
+imported by `src/`; tables and the proposer bars are plain Chakra components.
+`react-markdown` was never added: `/about` is a TSX page.
 
 ---
 
-## 6. Information Architecture & Routes
+## 6. SDK envelope
 
-All routes are under Next.js App Router (`src/app/`). Dynamic segments in `[brackets]`. Every page is client-rendered (`"use client"`); we use static export + SDK-at-runtime.
+This section is the floor for product scope: every feature maps to an SDK call.
 
-### 6.1 Top-level navigation (matches `platform-explorer` navbar layout)
+### 6.1 Version and facades
 
-```
-Home · Search · Identities · Contracts · Documents · Tokens · DPNS · Epoch · Governance · Network · About
-```
+The app pins `@dashevo/evo-sdk` **5.0.0-rc.8** (and its `@dashevo/wasm-sdk`
+5.0.0-rc.8), which matches testnet's Drive 5.0.0-rc.8 (protocol 14) and still
+serves mainnet (protocol 13). The bundled build version is shown in the footer,
+Settings → Build info and `/about`.
 
-"Governance" groups: Contested Resources, Vote Polls, Protocol Upgrade, Groups.
-"Network" groups: Status, Quorums, Evonodes (current-epoch proposed blocks).
+Facades the app calls: `addresses`, `contracts`, `documents`, `dpns`, `epoch`,
+`group`, `identities`, `protocol`, `shielded`, `stateTransitions`, `system`,
+`tokens`, `voting`, plus `sdk.version()`, the `wallet` utilities and WASM
+classes such as `AssetLockProof`, `StateTransition`, `PrivateKey` and
+`Identifier`. The authoritative per-page list is generated from source into
+`src/data/sdk-reference.json` and rendered at `/sdk-reference` (§17).
 
-### 6.2 Route map
+New 5.0 facades that the app does not use yet: `contractGroups`,
+`encryptedFor`, `moderationCharters`, contract moderation and fee pots,
+`documents.{chained,composite,ranked,having}`,
+`identities.updateKeyLimits` / `keysRemainingBudgets`.
 
-| Route | Page | Primary SDK call(s) |
+### 6.2 Trusted sessions only
+
+Every session is trusted. Untrusted mode was removed in #40: with the WASM SDK,
+an untrusted `EvoSDK` fails every proof-capable query ("Non-trusted mode is not
+supported in WASM"), and `proofs: false` aborted the WASM module in 4.0.0-rc.2
+and is refused with a Config error in 5.0. `NEXT_PUBLIC_TRUSTED_MODE` and the
+Settings toggle are gone, and a stored `npe:trusted` is deleted on load. Query
+keys still carry a `trusted` segment (always `true`).
+
+Sessions are built with `new EvoSDK(buildSdkOptions(...))`. For mainnet and
+testnet the SDK takes its DAPI node list from the quorum service. Custom DAPI
+endpoints are **not supported** on those networks: the documented equivalent is
+a quorum-service URL override (Settings → Connection, or
+`NEXT_PUBLIC_QUORUM_URL_MAINNET` / `_TESTNET`). Since evo-sdk 5.0, explicit
+addresses take precedence over the service's list, so a custom devnet's saved
+DAPI addresses are the endpoints it uses; quorum keys still come from its
+quorum service.
+
+### 6.3 What is not possible
+
+- No list of all identities, contracts, tokens, cross-contract documents,
+  addresses, blocks or transactions.
+- No activity feed (no transaction index).
+- No aggregate network statistics beyond total credits.
+- No proof for `system.status`, `system.currentQuorumsInfo`,
+  `stateTransitions.waitForStateTransitionResult`, `dpns.resolveName`,
+  `dpns.isNameAvailable` or the local DPNS label checks. Quorum type and threshold are inferred by the SDK from member
+  counts, and the UI labels them as inferred.
+- No names for arbitrary contract IDs beyond the schema and the well-known
+  registry (§14.4).
+- `system.pathElements` is a batched point read (`KeysInPath`), not a subtree
+  scan, so it cannot enumerate either
+  ([research note](research/2026-04-22-path-query-and-token-lookup.md)).
+
+### 6.4 SDK quirks the app works around
+
+| Quirk | Handling |
+|---|---|
+| `sdk.version()` is the Platform protocol version the session speaks, auto-detected: on mainnet/testnet it starts at the network floor (13), rises after the first proved response, persists in localStorage and never steps down; devnets start at 14 and are not persisted. | /network/status warns when the network is newer than `EvoSDK.getLatestVersionNumber()` (14) or older than the session. Writes are blocked when session and network versions differ, using `metadata.protocolVersion` from a proved `totalCreditsInPlatform` read (#45). |
+| The SDK caches up to 100 contracts per network in localStorage (`dash-sdk.contracts.<network>`). A type added later makes reads fail with "document type not found". | Document reads go through `withContractRefresh`: one `contracts.fetch` and one retry. Settings → Connection has "Clear SDK cache". |
+| `PlatformAddressInput` / `Output` / `FeeStrategyStep` instances fail to deserialize in rc.8 ("missing field `address`"). | Address writes pass plain objects (#47). |
+| A group config-update proposal that landed on chain can raise `DriveProofError: Expected document in group action result`. | The executor confirms by a proved read of the group's actions: complete pages, proved after the pre-signing read, exactly one new matching action by the signer. Otherwise "outcome unknown" (#48). |
+| `TokenPriceInfo` exposes only the first and last tier of a tiered schedule (`basePrice`, `currentPrice`). | Prices are labelled by tier and shown per whole token (#43). |
+| Document history and contract history return at most 10 entries per request; contract history has no offset. | Document history pages by `startAtMs`. A full contract history says older versions can't be shown. History is only queried for types/contracts that keep it, because the proof fails otherwise. |
+| Shielded `encryptedNotes` starts must be multiples of 8192 (Drive needs multiples of 2048, the SDK verifier 4 × 2048). | Notes load on request, one 8192-note window at a time. |
+| Evonode block counts by id/range return empty maps for past epochs. | The current epoch walks every page; past epochs use the finalized record's `blockProposers`. |
+| `system.currentQuorumsInfo` is unproved and hard-codes `isVerified: true`. | The Verified column is not shown; type and threshold are marked inferred. |
+| Token configuration, `ResourceVote` and `GroupAction` JSON changed shape in 5.0 (internally tagged enums, `$kind`). | `enumVariant` and the readers accept both rc.2 and 5.0 shapes; unreadable rules show "unknown", not "on". |
+| Error kinds were renumbered in 5.0 (`ExecutionNotProved` inserted at 6). | `src/sdk/errors.ts` keys its map by enum name, and a test checks it against the installed enum. |
+| A gRPC NOT_FOUND from one node is an unproven answer. | Classified as retryable transport, not absence. Only structured SDK kinds (EpochNotFound, TotalCreditsNotFound, IdentityNonceNotFound) become `null`. |
+| The SDK cannot abort an in-flight request, and `wasm.free()` on a busy instance crashes the request. | Cancellation is logical (results from retired sessions are discarded); retired sessions are dropped from the cache and freed by the FinalizationRegistry; only never-published instances are freed explicitly. |
+
+---
+
+## 7. Routes
+
+All pages are client components under `src/app/`. Because the app is a static
+export, entities are addressed with **query parameters, not `[param]`
+segments**: `/identity/?id=…`, `/contract/document/?id=…&type=…&docId=…`. Every
+link also carries `?network=` for the selected network. Detail routes opened
+without their parameters show a short form and a link to their parent page.
+
+### 7.1 Navigation
+
+The sidebar (and mobile drawer) groups:
+
+- **Browse:** Dashboard `/`, Search `/search/`, Saved items `/saved/`
+- **Entities:** Identity, Contract, Tokens, DPNS (`/dpns/search/`), Evonodes
+- **Network:** Status, Quorums, Epoch, Epoch history, Protocol, Credits, Shielded pool
+- **Governance:** Contested, Polls, Groups
+- **Write:** Broadcast, Wallet
+- **Tools:** Query, Tools, SDK ref, Settings, About
+
+Only the most specific matching item is marked current. The header holds the
+global search (with a format hint after 200 ms), the network selector, a
+share-link button and the theme toggle. A meter bar shows the block, epoch,
+proof state, quorum count and network health (Platform progress compared with
+the Core height from Insight). The footer shows the app and
+SDK versions and the Query Inspector button.
+
+### 7.2 Route map
+
+| Route | Page |
+|---|---|
+| `/` | Dashboard (§9) |
+| `/search/?q=` | Search results (§8) |
+| `/saved/` | Saved identities, contracts and tokens (local, per network) |
+| `/identity/?id=` | Identity (§10.1) |
+| `/identity/lookup/?pkh=` | Identity by public-key hash |
+| `/contract/?id=` | Data contract (§10.3) |
+| `/contract/documents/?id=&type=` | Documents browser for one type |
+| `/contract/document/?id=&type=&docId=` | Single document |
+| `/contract/token/?id=&position=` | Token by contract + position |
+| `/token/?id=` | Token by token ID (no ID: list of well-known tokens) |
+| `/token/holders/?id=` | Seeded holder balances |
+| `/address/?addr=` | Platform address (bech32m) |
+| `/dpns/?name=` | DPNS name |
+| `/dpns/search/?q=&after=` | DPNS prefix search |
+| `/epoch/` | Current epoch |
+| `/epoch/detail/?index=` | One epoch |
+| `/epoch/history/?from=&to=` | Epoch range (≤ 200) |
+| `/evonode/?proTxHash=` | Evonode (hex or base58) |
+| `/network/status/` | Platform and Core status, quorums, protocol notice |
+| `/network/quorums/` | Current quorums |
+| `/network/protocol/` | Protocol version and vote tally |
+| `/network/credits/` | Total credits, prefunded specialized balance lookup |
+| `/network/shielded/` | Shielded pool |
+| `/governance/contested/` | Contested resources for a contract / type / index |
+| `/governance/contested/detail/?contract=&docType=&indexName=&indexValues=` | One contested resource, contenders and voters |
+| `/governance/polls/?window=&page=` | Vote polls by end date |
+| `/groups/?contractId=` | Groups in a contract |
+| `/groups/detail/?contractId=&position=` | One group: members, actions, signers |
+| `/state-transition/?hash=` | State-transition result by hash |
+| `/query/` | SQL query workspace (§11.1) |
+| `/tools/?tool=` | Deserializers and path-elements tool (§11.3) |
+| `/sdk-reference/` | Generated page→SDK-call mapping |
+| `/broadcast/?op=` | Write console (§13) |
+| `/wallet/` | Signer setup (§13.2) |
+| `/settings/` | Network, connection, devnets, proofs, inspector, diagnostics, registry, build info |
+| `/about/` | Proof model, enumeration limits, write mode, privacy |
+
+Pages set a tab title such as `alice.dash — Native Platform Explorer`. Entity
+pages keep their selected tab in `?tab=`.
+
+---
+
+## 8. Search
+
+`classifyQuery` (`src/util/search.ts`) collects every plausible reading of the
+input, and `/search` tries them together:
+
+| Input | Candidates |
+|---|---|
+| Integer below 1,000,000 | Epoch (`/epoch/detail`) |
+| Base58 32-byte identifier | Identity (`identities.fetch`), contract (`contracts.fetch`), token (`tokens.totalSupply`) |
+| 64-char hex | State-transition hash, evonode proTxHash (format-only links) |
+| bech32m `dash1…` / `tdash1…` | Platform address (`addresses.get`) |
+| 40-char hex public-key hash | `identities.byPublicKeyHash`, then `byNonUniquePublicKeyHash` |
+| DPNS-shaped name | `dpns.getUsernameByName`; for a label of 2+ characters, up to 10 prefix matches via `documents.query` on the DPNS `domain` type |
+
+Invalid input, not found and unavailable are separate states. Only completed
+lookups can report "not found"; failed ones keep a Retry. Format-only
+destinations (epoch, transaction hash) are labelled as lookups, without
+claiming the entity exists. Prefix results whose homograph-safe label doesn't
+match the prefix are hidden, with a count.
+
+---
+
+## 9. Dashboard (`/`)
+
+A snapshot of live, verifiable state. No historical charts.
+
+1. **Intro**: title, short explanation, proof legend.
+2. **Network cards**: block height (`system.status`), current epoch with a
+   progress bar (end estimated from the network's epoch length), total credits
+   (DASH with USD, exact value in a tooltip), protocol version (from the current
+   epoch record, with "N votes for vX" from the vote walk), active quorums.
+3. **Top proposers**: top 10 for the current epoch, ranked from a full walk of
+   `epoch.evonodesProposedBlocksByRange` with totals over every proposer and a
+   "may be incomplete" flag if the page cap is hit.
+4. **Quick actions**: identity, DPNS name, token, epoch.
+5. **Quorums by size** (type and threshold marked inferred).
+6. **Vote polls ending soon** (`voting.votePollsByEndDate`).
+7. **Well-known contracts** for the network, with document-type count and owner
+   loaded through one `contracts.getMany` when idle or hovered (per-ID fallback
+   if the batch fails).
+
+---
+
+## 10. Entity pages
+
+Most SDK reads go through a hook that calls the `…WithProof` variant where one
+exists, so the card's proof chip and the Query Inspector have the proof.
+Paginated walks (proposers, protocol votes, epoch-range batches),
+`contracts.getMany` previews and the seeded holder balances call the plain
+method, which the trusted SDK still verifies internally, but no proof bytes are
+captured (§12.4).
+
+### 10.1 Identity — `/identity/?id=`
+
+Header: identicon, DPNS name, balance (credits, DASH, USD), revision, nonce,
+save/share, a Top up shortcut, and transfer, withdraw, update keys and register
+name shortcuts when the connected (or remembered) signer is this identity.
+
+Tabs: **Keys** (`identities.getKeys`), **DPNS** (names from `dpns.usernames`,
+marked registered; a "contested name" pill from the local
+`dpns.isContestedUsername` label rule), **Tokens** (well-known tokens for the
+network plus entered IDs: `tokens.identityBalances`, frozen flag from
+`identityTokenInfos`), **Groups** (`group.identityGroups`), **Votes**
+(`voting.contestedResourceIdentityVotes`, linked to contest pages),
+**Advanced** (contract nonce and `identities.contractKeys` for an entered
+contract; keys bound to a single document type are not returned by that query).
+
+### 10.2 Reverse lookup — `/identity/lookup/?pkh=`
+
+`identities.byPublicKeyHash`, then `byNonUniquePublicKeyHash` if the unique
+lookup succeeds empty. An invalid hash in the URL is flagged.
+
+### 10.3 Data contract — `/contract/?id=`
+
+Header: name from the registry, owner, version, counts. Tabs:
+
+1. **Schema**: tree of document types (properties, required, indices) beside
+   the JSON; selecting a node narrows the JSON.
+2. **Document types**: links to the documents browser.
+3. **Tokens**: per-position total supply, status (one `tokens.statuses` call),
+   price (one `tokens.directPurchasePrices` call).
+4. **Groups**: position, members and power, required power
+   (`group.groupsDataContracts`), linking to `/groups/detail`.
+5. **History**: `contracts.getHistory` timeline with JSON diffs, only when
+   `config.keepsHistory` is set (newest 10 versions).
+6. **Internal**: format and config versions, flags, bound-key requirements,
+   keywords, description, raw JSON.
+
+A "Create a document" shortcut is always shown; "Update contract" only to the
+owner.
+
+### 10.4 Documents browser — `/contract/documents/?id=&type=`
+
+`documents.query` with filter rows per indexed field (`==`, `<`, `<=`, `>`,
+`>=`, `in`, `startsWith`, booleans as a select), one ORDER BY over indexed
+fields, page size, and a `startAfter` cursor stack. Filters, order, size and
+cursors live in the URL. The query is checked against the type's indices
+using the network's protocol version (§11.1); findings are warnings and the
+query still runs. Changing filters or order clears the cursors.
+
+### 10.5 Single document — `/contract/document/?id=&type=&docId=`
+
+`documents.get`. Tabs: **Data**, **Metadata**, **Revision history**
+(`documents.history`, 10 per page, diffed across pages; only for types that keep
+history). Owners get edit / transfer / set price / delete shortcuts; a purchase
+shortcut is always shown.
+
+### 10.6 Token — `/token/?id=` and `/contract/token/?id=&position=`
+
+`tokens.contractInfo(tokenId)` resolves the contract and position from the
+token ID alone. Tabs:
+
+1. **Overview**: supply (total, base, max, scaled by decimals), perpetual
+   distribution, pre-programmed schedule, new-tokens destination, emergency
+   and main-group control, the change-control table, trade mode, kept history.
+2. **Definition**: owning contract, localizations, description.
+3. **Status**: trading status (no status record means active) and the
+   direct-purchase price by tier.
+4. **Holders**: points to `/token/holders`. Platform has no holder index, so
+   holders are a **seeded list**: pasted identity IDs or DPNS names, plus
+   identities viewed in this browser if the user opted in
+   (`tokens.balances([ids], tokenId)`).
+5. **Balance lookup**: balance, frozen flag and last perpetual claim for an
+   entered identity (`?holder=`).
+
+An **Actions** row offers the token writes the connected or remembered
+identity could plausibly perform under the token's rules (§13.3).
+
+### 10.7 Platform address — `/address/?addr=`
+
+`addresses.get`: balance and nonce. The input is checked as bech32m for the
+selected network.
+
+### 10.8 DPNS — `/dpns/?name=` and `/dpns/search/?q=`
+
+`/dpns`: `dpns.resolveName`, `dpns.getUsernameByName`, `isNameAvailable`,
+`isValidUsername`, `isContestedUsername`; links to the contest when one exists.
+
+`/dpns/search`: `documents.query` on DPNS `domain`
+(`normalizedParentDomainName == dash`, `normalizedLabel startsWith <folded prefix>`,
+ascending, `startAfter` cursor in `?after=`). A name that only matches after
+homograph folding says so ("matches as `a1rj0rdan8`"). With no prefix, a
+directory of names is shown instead.
+
+### 10.9 Epochs — `/epoch`, `/epoch/detail`, `/epoch/history`
+
+- **Current** (`/epoch`): the current epoch is derived from signed response
+  time with two proved reads
+  ([current-epoch-integrity.md](current-epoch-integrity.md)); leaderboard
+  ranked from the full proposer walk, with competition rank (1, 2, 2, 4);
+  estimated end.
+- **Detail**: `epochsInfo` and `finalizedInfos` for one index, queried
+  independently ([finalized-epoch-details.md](finalized-epoch-details.md));
+  finalized `blockProposers` take precedence over live counts; prev/next links.
+- **History**: up to 200 epochs, fetched in sequential batches of 10
+  ([design/epoch-sdk-queries.md](design/epoch-sdk-queries.md)).
+
+### 10.10 Evonode — `/evonode/?proTxHash=`
+
+Blocks, rank and share in the selected epoch (current plus the previous 24),
+from the full walk for the current epoch and the finalized record for earlier
+ones. Protocol vote from `versionUpgradeVoteStatus(hash, 1)`, accepted only if
+the returned key equals this hash; the vote is the current epoch's.
+
+### 10.11 Network pages
+
+- **Status**: `system.status`, Core height from Insight, quorums table, the
+  protocol-version notice (§6.4).
+- **Quorums**: hash, type\*, members, threshold\* (\* inferred), raw response
+  behind a disclosure.
+- **Protocol**: current version from the current epoch record; every vote
+  walked (`fetchAllProtocolVotes`) and tallied, with a "no vote yet" segment
+  whose denominator is every voter plus every evonode that proposed in the
+  previous finalized or current epoch; next version is the most-voted version
+  above the current one. `protocol.versionUpgradeState` is shown only as a
+  cross-check when it disagrees.
+- **Credits**: `system.totalCreditsInPlatform`, and
+  `system.prefundedSpecializedBalance` for an entered ID.
+- **Shielded pool**: `poolState`, `mostRecentAnchor`, the full `anchors` set
+  (paged locally), a nullifier lookup (hex or base64), and `encryptedNotes` in
+  8192-note windows on request.
+
+### 10.12 Governance and groups
+
+- **Contested** (`group.contestedResources`): a contract with contested
+  indexes (DPNS or another), document type and index, kept in the URL
+  (`?contract&docType&index`). A contract with one contested index is selected
+  automatically.
+- **Contested detail**: `voting.contestedResourceVoteState` tally, and voters per
+  contender from `group.contestedResourceVotersForIdentity` (50 per page).
+  Tallies are weighted (evonodes 4, masternodes 1). Decided contests explain
+  that Platform deletes individual votes. Open contests link to a prefilled
+  vote form.
+- **Polls** (`voting.votePollsByEndDate`): window (`?window=7d` or custom
+  `from`/`to`), 20 per page, sortable by end time.
+- **Groups** (`group.infos`) and **group detail** (`group.info`, `members`,
+  `actions` active/closed, `actionSigners` with power against the required power).
+
+### 10.13 State-transition lookup — `/state-transition/?hash=`
+
+`stateTransitions.waitForStateTransitionResult(hash)`. The SDK blocks until the
+transition executes, so the page shows elapsed seconds and gives up after
+60 s with Retry. A retry races a new timer against the wait already in flight,
+because the SDK cannot abort it. Result: status, error, reported hash, raw
+response.
+
+---
+
+## 11. Developer tools
+
+### 11.1 Query workspace — `/query`
+
+A small SQL subset translated into `documents.query` and
+`documents.count` / `sum` / `average` (via their `…WithProof` variants). It is
+not a general SQL engine. Details: [design/query-workspace.md](design/query-workspace.md).
+
+- `SELECT … FROM <type> WHERE … ORDER BY … LIMIT …`, `COUNT(*)`, `SUM`, `AVG`,
+  `GROUP BY`; `LIKE 'abc%'` maps to `startsWith`; `!=`, `<>` and NOT are
+  rejected with an explanation. Two-sided ranges in aggregates are sent as one
+  `Between*` clause.
+- Index checks follow Drive's rules for the network's protocol version, read
+  from `system.status`: `Index::matches` up to protocol 13 and
+  `matches_contiguous` from protocol 14. Until the version is known, the
+  permissive rules apply. Checks are warnings; Platform is authoritative, and
+  its common rejections get plain explanations.
+- GROUP BY truncation notices follow Drive's modes (IN groups never flagged;
+  range groups stop at LIMIT or 100; the two-range carrier walk at 10).
+- Multiple statements per run, at most two executing at once, each with its own
+  cursors. A full page triggers a one-document probe to decide whether Next is
+  enabled.
+- Saved queries (per network and contract, opt-in, local), share links
+  (SQL, contract, network), JSON/CSV export of the current page, generated SDK
+  examples.
+
+### 11.2 Query Inspector
+
+A drawer opened from the footer or with ⌘/Ctrl+Shift+P. It records each SDK query with its
+parameters, network, retrieval time, response height and protocol version when
+returned, quorum-key source, proof bytes when captured, and the parsed proof
+tree. The proof view handles both GroveDB proof layouts, PushInverted ops,
+count/sum tree nodes, and marks malformed trees. Retention is bounded (200
+entries, 8 MiB). Evidence can be exported as JSON; the file is unsigned and
+records the observed SDK outcome only. Recording can be turned off in Settings.
+
+### 11.3 Tools — `/tools`
+
+Deserializers for a state transition, data contract, document, identity and
+GroveDB proof (local WASM, no network except fetching a contract for document
+decoding), and a `system.pathElements` reader.
+
+### 11.4 SDK reference — `/sdk-reference`
+
+The page→SDK-call mapping generated from TypeScript symbols by
+`scripts/generate-sdk-reference.mjs` into `src/data/sdk-reference.json`. It
+lists calls reachable through each route's components and hooks, including
+conditional ones; shared connection setup and methods on returned SDK objects
+are out of scope. `pnpm build` fails on a stale mapping
+(`pnpm generate:sdk-reference` updates it).
+
+### 11.5 Saved items — `/saved`
+
+Up to 100 identities, contracts and tokens, keyed by type, ID and network,
+stored only in this browser, filterable by `?scope&kind`. Separate from the
+opt-in viewed-identities log. See [exploration.md](exploration.md).
+
+---
+
+## 12. Design system
+
+The original plan copied `platform-explorer`'s dark theme. The shipped "Field
+Manual" design (PR #15) replaced it.
+
+### 12.1 Colour modes
+
+Light ("Paper") and dark ("Carbon") modes. The initial mode follows the OS
+(`initialColorMode: 'system'`); the header toggle persists an explicit choice.
+Components use semantic tokens (`bg`, `surface`, `raised`, `ink`, `muted`,
+`hairline`, …) so they never branch on mode.
+
+| Token | Value |
+|---|---|
+| Brand | `#3FB8E6` (light `#7DD4F2`, deep `#1A6DA5`) |
+| Verified | `#6FCF97` |
+| Trusted / pending | `#F2C94C` |
+| Failed | `#EB5757` |
+| Warning | `#F2A341` |
+| Carbon bg / surface / ink | `#0A0A0C` / `#131316` / `#E8E6E1` |
+| Paper bg / surface / ink | `#F4F1EA` / `#FFFFFF` / `#14110F` |
+
+No violet or purple accents.
+
+### 12.2 Typography
+
+- **Fraunces** (variable serif): headings and key figures.
+- **Geist**: body and UI.
+- **JetBrains Mono**: identifiers, hashes, amounts, code.
+
+Fraunces and JetBrains Mono are bundled from `src/styles/fonts/` with their
+OFL licences; Geist comes from its npm package. Builds never fetch Google Fonts.
+
+### 12.3 Layout and components
+
+Breakpoints `30em / 48em / 62em / 80em / 96em / 120em`. Identifiers render in
+mono with an identicon, copy button (labelled with what it copies) and wrapping
+for long values. Tables have sortable headers with `aria-sort` where sorting is
+offered. Loading uses skeletons and a sweep.
+
+### 12.4 Proof state
+
+Each proof-capable card carries a proof glyph with one of: verified,
+in flight, no proof variant, unavailable (timeout, transport, missing quorum,
+not found, …), failed (only explicit or unrecognised native proof errors), or
+unknown. Opening it shows the inspector entry. A `ProofFailureBanner` appears on
+failed cards; there is no "view unverified data" action, because there is no
+unverified path. A missing quorum offers **Reconnect** (a new session with a
+fresh quorum list) instead of Retry.
+
+---
+
+## 13. Write mode
+
+Opt-in. The default experience is read-only. With
+`NEXT_PUBLIC_DISABLE_WRITE_MODE=true`, `/broadcast` and `/wallet` show a
+"write mode is disabled" notice instead of their consoles. The sidebar links
+and the owner shortcuts on entity pages are still rendered and lead to that
+notice (§18).
+Design notes: [design/transaction-workflow.md](design/transaction-workflow.md),
+[design/signer-capabilities.md](design/signer-capabilities.md).
+
+### 13.1 Flow
+
+`/broadcast` lists operations by group. Each runs through `OperationShell`:
+
+1. **Build**: typed form; amounts are exact (bigint credits or token base
+   units); forms explain why an operation is unavailable before Review.
+2. **Review**: a summary built from a frozen snapshot of the inputs, the key
+   that will sign (ID, purpose, level, bounds), and how fees are charged (the
+   SDK gives no fee estimate). Secrets are redacted: each operation must declare
+   its secrets (`OperationDescriptor.secrets`), and Review shows only its
+   `reviewData`.
+3. **Sign + broadcast**: mainnet requires a checkbox and typing `MAINNET`;
+   destructive operations require an acknowledgement. The reviewed key is
+   pinned: if it is no longer eligible, the operation fails as not submitted.
+4. **Result**: one of
+   - **Not submitted**: anything before the SDK write call, or an SDK
+     `InvalidArgument` (which, per an audit of every write function in
+     `outcomes.test.ts`, is raised only before submission);
+   - **Succeeded**: receipt with links to affected entities; network-scoped
+     queries are invalidated;
+   - **Outcome unknown**: any other error after submission started, including
+     `ExecutionNotProved`. No Retry is offered; the user is asked to check the
+     affected entities first, because a retry may spend twice.
+
+Before building anything, `withSigningMaterial` runs the protocol-version guard
+(§6.4). Signing material is released when the operation settles.
+
+### 13.2 Signers
+
+The `/wallet` page has four tabs:
+
+| Signer | Notes |
+|---|---|
+| **Bridge backup** | Import the JSON backup from the identity bridge. Keys are matched against enabled on-chain keys; the backup's declared purpose/level is ignored. |
+| **Mnemonic** | Derives DIP-13 identity keys `m/9'/coin'/5'/0'/0'/identityIndex'/keyIndex'` for key indexes 0–15 (the bridge's layout), keeps those that match enabled on-chain keys, wipes the rest. |
+| **WIF** | One private key for an identity, matched against its on-chain keys. |
+| **Extension** | **Detection only.** The Dash Platform Extension's public API is not stable, so signing through it is not implemented; the tab says so. |
+
+Secrets are typed into `SecretInput`, a CSS-masked text field (not a password
+field, so browsers don't offer to save a key), with fallbacks where masking is
+unsupported. Local signers keep keys in tab memory only and clear them on
+disconnect, after ten minutes without input (visible or hidden tab), when
+leaving `/wallet` and `/broadcast`, and on unload. An automatic clear keeps only
+the signer kind and public identity ID in sessionStorage as a reconnect hint.
+JavaScript strings and SDK-internal copies cannot be reliably zeroed; the app
+zeroes byte arrays it owns.
+
+**Form-signed operations** (#47) take their keys in the form instead of from a
+connected signer: Platform address keys, the one-time asset-lock key, a
+masternode voting key, or no key for an already-signed transition. Those keys
+are decoded, checked against the network, loaded into WASM, zeroed and freed
+when the operation settles.
+
+Key selection (`capabilities.ts`, `resolveSigningCriteria`): document operations
+accept keys up to the type's `signatureSecurityLevelRequirement` (default HIGH)
+and refuse MASTER-only types; contract register and DPNS accept CRITICAL or
+HIGH; contract update CRITICAL; identity key updates MASTER; credit transfers
+and identity→address funding CRITICAL TRANSFER; withdrawals CRITICAL TRANSFER,
+or CRITICAL OWNER to a masternode payout address; token operations CRITICAL
+AUTHENTICATION, plus CRITICAL TRANSFER for a single transfer or claim.
+Contract-bound keys qualify only for their contract (and type).
+
+### 13.3 Operations
+
+| Group | Operations | SDK |
 |---|---|---|
-| `/` | Home / Dashboard | `system.status`, `epoch.current`, `system.totalCreditsInPlatform`, `protocol.versionUpgradeState` |
-| `/search?q=...` | Disambiguation for queries that could hit several entities | see §8.1 |
-| `/identity/[id]` | Identity detail (balance, keys, nonces, DPNS, tokens, transfers, groups) | `identities.fetch`, `identities.balanceAndRevision`, `identities.getKeys`, `dpns.username`, `tokens.identityBalances` (for known tokens), `group.identityGroups`, `voting.contestedResourceIdentityVotes` |
-| `/identity/lookup/[pkh]` | Reverse lookup by public-key-hash | `identities.byPublicKeyHash` (fallback `byNonUniquePublicKeyHash`) |
-| `/contract/[id]` | Contract detail (schema, document types, tokens, groups, history) | `contracts.fetch`, `contracts.getHistory`, `tokens.contractInfo`, `group.groupsDataContracts` |
-| `/contract/[id]/documents/[type]` | Paginated document list within a contract+type with filter/sort UI | `documents.query` |
-| `/contract/[id]/documents/[type]/[docId]` | Single document view | `documents.get` |
-| `/contract/[id]/tokens/[position]` | Token detail scoped to its parent contract (via position) | `tokens.calculateId`, `tokens.contractInfo`, `tokens.totalSupply`, `tokens.statuses`, `tokens.priceByContract`, `tokens.directPurchasePrices` |
-| `/token/[id]` | Token detail by token ID directly | same as above but resolved from `tokenId` |
-| `/token/[id]/holders` | Single-token holder query scoped to a list of candidate identities (seeded by inputs) | `tokens.balances([ids], tokenId)` — see §8.5 for the UX pattern |
-| `/address/[addr]` | Platform address (balance, nonce) | `addresses.get` |
-| `/dpns/[name]` | DPNS record & resolution | `dpns.resolveName`, `dpns.getUsernameByName`, `dpns.isNameAvailable`, `dpns.isContestedUsername` |
-| `/dpns/search?q=...` | DPNS pattern search (by prefix/label) | `dpns.usernames` |
-| `/epoch` | Current epoch dashboard | `epoch.current`, `epoch.evonodesProposedBlocksByRange` |
-| `/epoch/[index]` | Historical epoch detail | `epoch.epochsInfo({ startIndex: idx, endIndex: idx })`, `epoch.finalizedInfos`, `epoch.evonodesProposedBlocksByRange` |
-| `/epoch/history` | Paginated epoch browser (by index range) | `epoch.epochsInfo({ startIndex, endIndex })` |
-| `/evonode/[proTxHash]` | Evonode detail — proposed blocks in selected epoch range, protocol vote status | `epoch.evonodesProposedBlocksByIds`, `protocol.versionUpgradeVoteStatus` (paged) |
-| `/network/status` | System status & quorums | `system.status`, `system.currentQuorumsInfo` |
-| `/network/credits` | Total credits + prefunded balances lookup | `system.totalCreditsInPlatform`, `system.prefundedSpecializedBalance(id)` on demand |
-| `/network/protocol` | Protocol version upgrade state + per-masternode vote status (paged) | `protocol.versionUpgradeState`, `protocol.versionUpgradeVoteStatus` |
-| `/governance/contested` | Contested resources within a chosen contract | `group.contestedResources` |
-| `/governance/contested/[contractId]/[docType]/[indexName]/[indexValuesEncoded]` | Single contested-resource detail + vote tally + voters | `voting.contestedResourceVoteState`, `group.contestedResourceVotersForIdentity` |
-| `/governance/polls` | Vote polls by end date | `voting.votePollsByEndDate` |
-| `/groups/[contractId]` | All groups in a contract (by position) | `group.infos` |
-| `/groups/[contractId]/[position]` | Single group + members + actions | `group.info`, `group.members`, `group.actions`, `group.actionSigners` |
-| `/state-transition/[hash]` | State-transition status lookup (for recently broadcast txs) | `stateTransitions.waitForStateTransitionResult` |
-| `/broadcast` | Optional write-mode console (see §10) | every facade's write methods |
-| `/wallet` | Ephemeral signer setup (see §10) | `wallet.*` utilities |
-| `/about` | Static markdown: what/why/how, privacy, proof model | — |
-| `/sdk-reference` | Static: which SDK call powers which page | — |
-| `/settings` | Network, trusted mode, DAPI endpoints, cache size | — |
+| Contracts | register, update (`version + 1`, keeps `$defs` unless edited) | `contracts.publish`, `contracts.update` |
+| Documents | create, replace, delete, transfer, set price, purchase | `documents.*` |
+| Tokens | mint, burn, transfer, freeze, unfreeze, destroy frozen, pause/resume, set price (single or tiered), direct purchase, claim (perpetual, pre-programmed, once-per-identity), config update; group propose and co-sign | `tokens.*` |
+| Identity & credits | create and top up from an asset lock (form-signed), credit transfer, withdrawal, update keys (add with WIFs, disable) | `identities.create`, `topUp`, `creditTransfer`, `creditWithdrawal`, `update` |
+| Platform addresses | send between addresses, fund from identity, top up identity, withdraw, fund from asset lock, create identity | `addresses.*` |
+| DPNS | register name (contested names explained, 0.2 DASH contest fee) | `dpns.registerName` |
+| Voting | masternode vote (voter ID = SHA-256(proTxHash ‖ hash160(voting key))) | `voting.masternodeVote` |
+| Advanced | broadcast a signed transition (hex or base64, decoded and re-encoded locally; "already in mempool/chain" reported as already submitted) | `stateTransitions.broadcastStateTransition`, `waitForResponse` / `waitForAffectedState` |
 
-### 6.3 Global search (`/search?q=...`)
+Token forms mirror Drive's validation at v5.0.0-rc.8 (who the rules authorize,
+group power, paused state, mint destination and max supply, frozen balances,
+price and buyer credits, claim eligibility, config control rules); executors
+reload a proved snapshot and re-run every check immediately before signing,
+then wait for a proof newer than that snapshot to show the change. Config
+updates that give up control are treated as destructive.
 
-Rules (in order):
+Without a Core wallet, identity creation and top-up go through the bridge
+(`NEXT_PUBLIC_BRIDGE_URL`, default `https://bridge.dashhq.org`, mainnet and
+testnet); the shortcut passes the network only. The explorer does not build
+asset-lock transactions.
 
-1. If `q` is numeric and short → try as epoch index (`epoch.epochsInfo`).
-2. If `q` matches base58 Identifier (32-byte, 43–44 chars) → try in parallel:
-   - `identities.fetch(q)`, `contracts.fetch(q)`, `tokens.totalSupply(q)` (as token ID).
-3. If `q` matches a 64-char hex string → try as a state-transition hash (`stateTransitions.waitForStateTransitionResult(q)`) or a masternode `proTxHash` (link to `/evonode/[q]`).
-4. If `q` is a bech32m platform address → `addresses.get(q)`.
-5. If `q` matches a public-key-hash format → `identities.byPublicKeyHash(q)` (fall through to `byNonUniquePublicKeyHash`).
-6. If `q` ends in `.dash` or passes DPNS validity → `dpns.resolveName(q)` / `dpns.getUsernameByName(q)`.
-7. Otherwise → DPNS prefix search (`dpns.usernames({ labelPrefix: q, limit: 20 })`).
+### 13.4 Test status
 
-Multiple matches are presented as a short list of "Possible matches" grouped by entity type.
+Run end to end on testnet through the served export, with proved read-back:
+every Platform-address operation, asset-lock identity create and top-up, and
+raw broadcast (#47); mint, burn, transfer, freeze, unfreeze, destroy frozen,
+pause/resume, single and tiered set price, direct purchase, perpetual claim,
+config updates, and group propose/co-sign of max-supply changes (#48). A
+document create was checked from Node with the inputs the form builds (#45),
+not through the explorer.
 
-Search is accessible from the navbar on every page (`GlobalSearchInput`, debounced 200ms) and mirrors `platform-explorer`'s UX.
+Not yet broadcast live (unit- and real-WASM-tested, and built to Review on
+testnet in #41 where noted):
+
+- contract register and update (update built to Review);
+- document create through the UI, replace, delete, transfer, set price and
+  purchase;
+- identity credit transfer, withdrawal and key updates (key update and
+  withdrawal built to Review);
+- DPNS registration (built to Review);
+- **masternode votes**: no voting key is available;
+- pre-programmed and once-per-identity token claims, and group co-signing of
+  token actions other than config updates;
+- **anything on mainnet**.
 
 ---
 
-## 7. Home / Dashboard (`/`)
+## 14. Cross-cutting concerns
 
-A compact, always-accurate snapshot — **no historical charts** because the SDK cannot serve them. Instead, we showcase what IS live and verifiable.
+### 14.1 SDK sessions
 
-Layout (responsive grid, matching `platform-explorer`'s Intro + cards grid):
+`SdkProvider` owns one session per (network, reconnect) with a unique session ID
+and abort signal. Details: [design/query-session-lifecycle.md](design/query-session-lifecycle.md).
 
-1. **`Intro` section**
-   - Title + tagline: "A proof-verified, client-only Dash Platform explorer."
-   - `GlobalSearchInput` prominently placed (large).
-   - Network selector badge (mainnet / testnet).
-   - Trusted-mode indicator ("Proofs verified in your browser").
+- `connect()` has an explorer deadline (startup timeout, default 20 s).
+  Failures carry a reason (timeout, unreachable, unknown network, failed);
+  queries report it instead of spinning, and a page-level "Cannot reach Dash
+  Platform" notice links to Settings → Connection.
+- Changing network or reconnecting retires the old session: its queries are
+  removed from the cache and their late results discarded. Paginated walks
+  check the session before and after each page.
+- Classification (`classifySdkError`) separates absence, timeout, transport,
+  missing quorum and verification failure. The global retry runs once, only for
+  timeouts, transport and unknown errors.
 
-2. **Network summary cards** (Chakra grid, one SDK call each):
-   - **Block height** — from `system.status`.
-   - **Current epoch** — from `epoch.current` (index, start, end, progress bar via `EpochProgress` component borrowed from reference).
-   - **Total credits** — from `system.totalCreditsInPlatform`, displayed as DASH + USD (via public rate API fetch; see §11.6).
-   - **Protocol version** — from `protocol.versionUpgradeState` (current version, pending version if any, activation height).
-   - **Active quorums** — from `system.currentQuorumsInfo`, count + type breakdown.
+### 14.2 Networks and connection settings
 
-3. **Current-epoch evonodes** ("Top proposers this epoch")
-   - Query `epoch.evonodesProposedBlocksByRange({ epoch: current, limit: 20, orderBy: desc })` → render a compact leaderboard with `Identifier` component + bar chart of block counts.
+Built-in networks: **testnet** (default), **mainnet** and **devnet-paloma**
+(whose quorum service no longer resolved in DNS when last checked in #45). Custom devnets can be added in
+Settings with a name, a quorum-service URL (required unless derivable as
+`quorums.<name>.networks.dash.org`), and optional DAPI addresses, Insight API
+and faucet URLs; they are stored
+locally and selectable with `?network=`.
 
-4. **Vote polls ending soon**
-   - `voting.votePollsByEndDate({ dateRange: next 30 days, limit: 10 })` — snapshot of upcoming governance activity.
+Settings → Connection (localStorage): startup timeout; SDK connect timeout,
+request timeout, retries, `banFailedAddress` and log level; mainnet/testnet
+quorum-service overrides (`https://`, or `http://` for localhost); and
+"Clear SDK cache", which removes the SDK's persisted contracts and protocol
+version for the network and reconnects.
 
-5. **Well-known contracts shortcut grid**
-   - Links to: DPNS, Dashpay, Withdrawals, Masternode Rewards, Feature Flags, Wallet Utils, Keyword Search — each card hydrates a preview via `contracts.fetch(id)` on hover/idle.
+### 14.3 Data fetching and caching
 
-6. **Quick actions panel**
-   - "Look up identity by ID" → jumps to `/identity/[id]`.
-   - "Resolve a DPNS name" → jumps to `/dpns/[name]`.
-   - "Check a token" → jumps to `/token/[id]`.
-   - "Check an epoch" → jumps to `/epoch/[index]`.
+TanStack Query wraps every SDK call. Keys are
+`['npe', network, trusted, sessionId, …]`. Defaults: `staleTime` 30 s and
+`gcTime` 24 h; hooks use 30 s for live data, 5 min for structural data
+(contracts, identity keys) and `Infinity` for deterministic results and
+finalized epochs. Documents fetched by ID refresh after 30 s, and Platform
+status polls every 30 s. Confirmed writes invalidate every query for their
+network. The React Query cache is not persisted. Hovering or focusing a link
+for 150 ms prefetches the destination's primary query (max 4 at once, not on
+touch).
 
-### 7.1 Explicitly absent
+### 14.4 Well-known registry
 
-- No "latest transactions" feed (requires indexer).
-- No "richest identities" list (no global identity enumeration).
-- No TPS / block-time history charts (no historical blocks query).
+`src/constants/well-known.ts` holds network-scoped entries: the system contracts
+(DPNS, Withdrawals, Dashpay, Masternode reward shares, Feature flags, Wallet
+utils, Keyword search, Token history); on mainnet DUSD and SANS, their
+contracts, their owner identity and latte.dash; on testnet tDUSD, tSANS, their
+contracts and atlanta-degen-for-life.dash. They name entities, seed the
+identity Tokens tab and holders form, and populate the token and contract
+landings.
+
+`NEXT_PUBLIC_WELL_KNOWN_URL` adds a remote JSON document at runtime
+(`{ "version": 1, "entries": [...] }`, absolute or relative to the app root;
+strict validation, ≤ 500 entries, ≤ 256 KiB, https entry URLs, no credentials,
+10 s timeout; one bad entry rejects the file). Settings → Well-known registry adds local entries. On a duplicate ID,
+bundled wins over remote, and remote over local.
+
+### 14.5 URL state
+
+nuqs keeps filters, cursors, ranges, tabs and windows in the URL (documents
+browser, DPNS search, epoch history, polls, saved items, contested resources,
+entity tabs). Updates keep `?network=` and the base path; list views (documents, DPNS search,
+epoch history, polls, contested selection) push history entries, while tabs,
+saved-item filters and `?holder` replace the current one. Invalid values fall
+back to defaults, and one bad cursor drops the
+whole cursor stack.
+
+### 14.6 DPNS everywhere
+
+Where an identity ID appears, `dpns.username` is looked up and shown beside it.
+Failures are silent.
+
+### 14.7 DASH/USD rate
+
+Fetched from the browser. Default provider **Coinbase**;
+`NEXT_PUBLIC_RATE_PROVIDER=kucoin` tries KuCoin first (it sends no CORS headers,
+so it only works behind a proxy) and falls back to Coinbase; `none` disables it.
+Cached for 60 s. The UI degrades to credits/DASH when the rate is missing.
+
+### 14.8 Accessibility
+
+Chakra semantics, keyboard-navigable controls, labelled copy buttons and
+identifiers, `aria-sort` on sortable headers, and `prefers-reduced-motion`
+honoured (no loading sweep or skeleton pulse, instant transitions, Framer
+Motion `reducedMotion="user"`).
+
+### 14.9 Internationalization
+
+English only. The planned `t(key)` helper was **deferred**: strings are plain
+literals. DPNS uses its own homograph folding.
+
+### 14.10 Privacy and local storage
+
+No analytics or telemetry. Besides DAPI, the browser contacts:
+
+- the quorum service for the selected network (or its override);
+- the network's Insight API (`insight.dash.org`, `insight.testnet.networks.dash.org`, or a custom devnet's own Insight URL) for the Core height in the health meter and on /network/status;
+- Coinbase (or KuCoin, if selected) for the DASH/USD rate, unless disabled;
+- `NEXT_PUBLIC_WELL_KNOWN_URL`, if configured;
+- the bridge, only when the user follows a bridge link.
+
+The explorer stores in localStorage: the selected network, connection
+settings, custom devnets, colour mode, saved items, saved queries, local
+registry entries, recent contracts in the broadcast picker, the Query Inspector
+and diagnostics preferences, some dismissed notices, and (opt-in) viewed
+identities.
+The SDK itself stores up to 100 fetched contracts and the detected protocol
+version per mainnet/testnet. All of these are public data or preferences.
+sessionStorage holds the signer reconnect hint (kind and public identity ID)
+and the protocol-notice dismissal.
+Private keys and mnemonics are never stored.
+
+### 14.11 Security
+
+- No key custody (§13.2).
+- Owner-gated shortcuts and capability checks are conveniences; the shell
+  re-checks keys and context before every write.
+- **Hardening in progress (I1, `chore/hardening`, not merged):** a service
+  worker / offline shell, a meta Content-Security-Policy, an `integrity.json`
+  with SRI hashes, a `Cargo.lock` for the vendored proof parser, and dependency
+  cleanup. None of these ship today; the site has no CSP and no SRI.
 
 ---
 
-## 8. Entity Pages
+## 15. Non-functional requirements
 
-For each entity, we specify the data shown, the exact SDK calls, tabs, and how the UI degrades gracefully when optional information isn't available.
+### 15.1 Performance
 
-### 8.1 Identity — `/identity/[id]`
+- **Bundle budgets, enforced in CI** (`pnpm check:bundles`): the dashboard,
+  `/identity`, `/query`, `/wallet` and `/broadcast` routes each stay under
+  **512 KiB gzip and 2 MiB raw** of initial JavaScript, measured from the
+  exported HTML. As of #48, `/broadcast` is the largest at about 485 KiB gzip.
+- The SDK (about 9.1 MB gzip in the export with 5.0.0-rc.8) and the proof-parser
+  WASM load on demand, so the shell paints without them.
+- User Timing marks: `npe:app-shell`, `npe:sdk:module-load`,
+  `npe:sdk:construct`, `npe:sdk:connect`. See [performance.md](performance.md).
+- A proof-parsing worker is deferred until profiling shows blocking.
 
-Primary SDK calls (fired in parallel on mount):
+### 15.2 Browser support
 
-- `sdk.identities.fetch(id)` → core identity object (revision, keys, balance)
-- `sdk.identities.balanceAndRevision(id)` → freshen balance even if cached identity is older
-- `sdk.identities.getKeys({ identityId: id })` → full key set (for the Keys tab)
-- `sdk.identities.nonce(id)` → global nonce
-- `sdk.dpns.username(id)` → primary DPNS alias (if any)
-- `sdk.dpns.usernames({ identityId: id })` → all DPNS names (for a list)
-- `sdk.group.identityGroups({ identityId: id })` → group memberships
-- `sdk.voting.contestedResourceIdentityVotes({ identityId: id })` → this identity's votes
+Chrome / Edge / Firefox 111+ and Safari 16.4+ (the Next.js 16 baseline). WASM
+is required. CI tests Chromium only.
 
-Optional (deferred / lazy on tab open):
+### 15.3 Offline and resilience
 
-- `sdk.tokens.identityBalances(id, [wellKnownTokenIds])` → token balances for the curated well-known set
-- `sdk.tokens.identityTokenInfos(id, [...])` → enhanced token info
+- No service worker today (in progress in I1). Offline, the shell fails to load
+  like any static site.
+- When DAPI or the quorum service is unreachable, pages render with a
+  "Cannot reach Dash Platform" notice; Settings, saved items, tools and the
+  query editor still work.
+- `banFailedAddress` and retries are configurable (§14.2).
 
-Header block (`IdentityDigestCard`, matching reference explorer):
-- Identifier with `minidenticon` avatar + copy.
-- Primary DPNS alias (if any) as a prominent badge.
-- Balance (credits + DASH + USD).
-- Revision, nonce.
-- "Verified by proof" badge when running in trusted mode.
+### 15.4 Observability
 
-Tabs:
+A diagnostics drawer (`⌘/` or `Ctrl+/`) shows client log entries; it can be
+turned off in Settings. Nothing is sent to external telemetry. The SDK log
+level is a connection setting.
 
-1. **Public Keys** — table: id, purpose, type, security level, data, disabled flag. Matches reference `PublicKeyCard`.
-2. **DPNS names** — list rendered via `AliasesList`; status resolved from `dpns.isContestedUsername` where relevant.
-3. **Tokens** — balances for well-known tokens; a form to look up a specific token ID and add it to the view.
-4. **Groups** — every group membership with a link to `/groups/[contractId]/[position]`.
-5. **Votes** — list of contested resources this identity has voted on, with choices.
-6. **Advanced** — contract nonces (user enters a contract ID) via `sdk.identities.contractNonce`.
+### 15.5 Versioning
 
-### 8.2 Identity reverse-lookup — `/identity/lookup/[pkh]`
-
-- `sdk.identities.byPublicKeyHash(pkh)` first.
-- If undefined → fallback `sdk.identities.byNonUniquePublicKeyHash(pkh)` (paginated via `startAfter`).
-- Present one or many results, each linking to `/identity/[id]`.
-
-### 8.3 Data contract — `/contract/[id]`
-
-Primary SDK calls:
-
-- `sdk.contracts.fetch(id)` → full `DataContract`
-- `sdk.tokens.contractInfo(id)` → aggregated token info (pools, positions)
-- `sdk.group.groupsDataContracts([id])` → groups defined in the contract
-
-Deferred:
-
-- `sdk.contracts.getHistory({ dataContractId: id })` → lazily on the History tab
-- `sdk.dpns.getUsernameByName(...)` for the owner (if present) and any "contract name" heuristics
-
-Header (`DataContractDigestCard`):
-- Identifier + optional friendly name (from **well-known contracts registry** — see §11.4).
-- Owner identity (linked, resolves DPNS).
-- Version.
-- Token count, document-type count, group count.
-
-Tabs:
-
-1. **Schema** — `CodeBlock` rendering the full JSON Schema, with a left-side tree of document types for navigation.
-2. **Document types** — one clickable chip per type; click navigates to `/contract/[id]/documents/[type]`.
-3. **Tokens** — list of all tokens defined in this contract (positions 0..N) with supply / status / price.
-4. **Groups** — list of defined groups (positions) → link to `/groups/[contractId]/[position]`.
-5. **History** — all versions (via `getHistory`), rendered as a timeline of schema diffs (JSON diff view).
-6. **Internal config** — format version, keywords (if present in schema), description (if present in schema).
-
-### 8.4 Documents list — `/contract/[id]/documents/[type]`
-
-Powered entirely by `sdk.documents.query`. This is the **only SDK "browse" primitive**.
-
-UI:
-
-- `DocumentsFilter`: dynamically generated from the contract's index definitions for that document type.
-  - For each declared index, render the corresponding filter UI: text (`==`, `in`, `startsWith`), range (`<`, `<=`, `>`, `>=`), boolean.
-  - Validate that the user's filter set maps to a valid index (we surface "No compound index on these fields" when it doesn't — matching Platform's query engine constraints).
-- `orderBy` UI scoped to fields with declared ordering.
-- `limit` selector (1–100, default 25 — SDK's server-side cap).
-- Cursor-based pagination via `startAfter` (last doc ID on previous page).
-- Results table: identifier, owner (linked), revision, primary displayed field(s) (heuristic: first 2 scalar properties).
-
-Single doc click → `/contract/[id]/documents/[type]/[docId]`.
-
-### 8.5 Single document — `/contract/[id]/documents/[type]/[docId]`
-
-- `sdk.documents.get(contractId, type, docId)`.
-- Header: doc id + avatar + owner.
-- Body tabs: **Data** (`CodeBlock`) / **Metadata** (created_at, updated_at, transferred_at, price if any, revision).
-- Owner clickable → `/identity/[id]`.
-
-### 8.6 Token — `/token/[id]` and `/contract/[id]/tokens/[position]`
-
-Both canonicalise to the same render.
-
-Primary:
-
-- `sdk.tokens.totalSupply(tokenId)`
-- `sdk.tokens.statuses([tokenId])`
-- `sdk.tokens.directPurchasePrices([tokenId])`
-- `sdk.tokens.contractInfo(parentContractId)` (for distribution rules, localizations, flags)
-
-Header (`TokenDigestCard`, matching reference):
-- Token ID + avatar + localized name (from contract's `conventions.localizations`).
-- Symbol, decimals.
-- Total supply, max supply, base supply.
-- Price (if any).
-- Flags pills: mintable / burnable / freezable / unfreezable / destroyable / emergency-action.
-
-Tabs:
-
-1. **Overview** — all config (distribution rules, emergency actions, pre-programmed distribution, perpetual distribution rule).
-2. **Holders (scoped)** — see §8.5.1.
-3. **My balance** — if a wallet/identity is set in session: `sdk.tokens.identityBalances(myIdentityId, [tokenId])` + `perpetualDistributionLastClaim`.
-
-#### 8.6.1 "Holders" tab — honest design for the no-enumeration constraint
-
-Because the SDK lacks a "list all holders" primitive, we offer:
-
-- **Seed list**: user pastes or types identity IDs (or DPNS names that we resolve) → we call `sdk.tokens.balances(ids, tokenId)` → show each identity's balance.
-- **Saved holders**: any identity IDs the user has viewed on this explorer in this session are remembered (localStorage, opt-in) and can be batch-queried.
-- **Clear messaging**: "Dash Platform does not publish a global holders index. This list is built from identities you've provided or viewed." — with a link to `/about#enumeration`.
-
-This is the honest SDK-only equivalent to `platform-explorer`'s indexed holders list.
-
-### 8.7 Platform address — `/address/[addr]`
-
-- `sdk.addresses.get(addr)` → balance, nonce.
-- Header + two infoline values; no tabs.
-
-### 8.8 DPNS — `/dpns/[name]`
-
-Primary:
-
-- `sdk.dpns.resolveName(name)` → identity ID (or `undefined`).
-- `sdk.dpns.getUsernameByName(name)` → full DPNS document.
-- `sdk.dpns.isNameAvailable(name)`, `isContestedUsername(name)`, `isValidUsername(name)` — for status chips.
-
-Renders:
-
-- Large name + status pills (Registered / Available / Contested / Invalid).
-- If registered: resolves owner identity, shows identity card (clickable).
-- If contested: link to `/governance/contested/...` for the current resource vote state (we compute the resource query from contract `GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec`, type `domain`, index `parentNameAndLabel`, values `["dash", homographSafe(label)]`).
-
-### 8.9 DPNS search — `/dpns/search?q=...`
-
-- `sdk.dpns.usernames({ labelPrefix: q, limit: 20 })` with pagination (`startAfter`).
-- Each row links to `/dpns/[name]`.
-
-### 8.10 Epoch — `/epoch`, `/epoch/[index]`, `/epoch/history`
-
-- **Current** (`/epoch`): `epoch.current` + `epoch.evonodesProposedBlocksByRange({ epoch: current, limit: 100, order: desc })`. Renders leaderboard, start/end timestamps, progress bar, proposed blocks bar chart (D3).
-- **Historical** (`/epoch/[index]`): `epoch.epochsInfo({ startIndex: idx, endIndex: idx })` + `epoch.finalizedInfos({ startIndex: idx, endIndex: idx })` + evonode proposed blocks range for that epoch. Same layout as current.
-- **History browser** (`/epoch/history?from=X&to=Y`): paged table over `epoch.epochsInfo({ startIndex, endIndex })`.
-
-### 8.11 Evonode — `/evonode/[proTxHash]`
-
-- `epoch.evonodesProposedBlocksByIds(epoch, [proTxHash])` — allow epoch selector (defaults to current).
-- Recent upgrade-vote status (scan the paginated `protocol.versionUpgradeVoteStatus` output client-side for this proTxHash).
-- If a DPNS alias exists for the identity derived from this proTxHash, show it.
-
-### 8.12 Network / system — `/network/status` and `/network/quorums`
-
-- `/network/status`: `system.status()` (height, chainId, versions) + `system.currentQuorumsInfo()`.
-- `/network/quorums`: one row per active quorum (hash, type, size, threshold) with copy.
-
-### 8.13 Protocol — `/network/protocol`
-
-- `protocol.versionUpgradeState()` → current/next version + activation state.
-- `protocol.versionUpgradeVoteStatus(startProTxHash, count)` → paginated per-masternode vote tally, visualized as a stacked bar ("accepted / abstained / rejected / unvoted").
-
-### 8.14 Governance
-
-- `/governance/contested`: requires a contract scope. User chooses from well-known contracts (starts with DPNS) or enters a contract ID → `group.contestedResources({ contractId, documentTypeName })`.
-- `/governance/contested/[contractId]/[docType]/[indexName]/[indexValuesEncoded]`:
-  - `voting.contestedResourceVoteState(query)` for tally.
-  - `group.contestedResourceVotersForIdentity(query)` per contender to list voters.
-- `/governance/polls`: `voting.votePollsByEndDate({ startDate?, endDate? })`.
-
-### 8.15 Groups
-
-- `/groups/[contractId]`: `group.infos({ dataContractId })`.
-- `/groups/[contractId]/[position]`: `group.info(...)`, `group.members(...)`, `group.actions(...)`, `group.actionSigners(...)`.
-
-### 8.16 State transition lookup — `/state-transition/[hash]`
-
-For users who just broadcast a tx elsewhere and pasted the hash: `sdk.stateTransitions.waitForStateTransitionResult(hash)` with a spinner + timeout. Displays proof result when available.
-
-### 8.17 Prefunded specialized balance — `/network/credits`
-
-A single input field (identity ID) → `sdk.system.prefundedSpecializedBalance(id)` + `totalCreditsInPlatform()` shown alongside.
+The SDK is pinned to an exact version. An SDK bump is its own PR, with the
+error-kind map test and the pre-submission audit in `outcomes.test.ts` forcing a
+review of runtime behaviour.
 
 ---
 
-## 9. Visual & Design System
+## 16. Build, CI and deployment
 
-Matches `platform-explorer` so the two feel like siblings. Sourced from the reference frontend's theme at `/packages/frontend/src/styles/`.
+### 16.1 Commands
 
-### 9.1 Colors (dark-mode only)
+```sh
+pnpm install --frozen-lockfile
+pnpm dev                       # next dev --webpack
+pnpm lint && pnpm typecheck
+pnpm test                      # vitest (test:coverage in CI)
+NEXT_PUBLIC_BRIDGE_URL=https://bridge.dashhq.org pnpm build   # check:sdk-reference, then next build → out/
+pnpm check:bundles             # route JavaScript budgets
+pnpm exec playwright install chromium   # once, before e2e
+pnpm e2e                       # Playwright against the export
+pnpm generate:sdk-reference    # refresh src/data/sdk-reference.json
+```
 
-| Token | Value | Use |
+### 16.2 CI (`.github/workflows`)
+
+- **`ci.yml`** (pull requests and `main`, runner `ubuntu-24.04`): frozen
+  install, lint, typecheck, `test:coverage`, `test:bundles`,
+  `test:sdk-reference`, build at the Pages deployment prefix,
+  `check:bundles`, Playwright Chromium e2e against that exact export, then
+  uploads it as `validated-pages`. The e2e suite runs offline against recorded
+  quorum-service fixtures; it never broadcasts.
+- **`deploy.yml`**: after a successful CI run on `main` (push or manual dispatch), deploys that
+  exact artifact to GitHub Pages if it is still the head of `main`. No rebuild.
+- **`live-integration.yml`**: daily and on demand, read-only live SDK checks
+  (`scripts/live-integration.mjs`) against testnet or a chosen network.
+
+### 16.3 Deployment targets
+
+**GitHub Pages only**, currently at the custom domain
+<https://explorer.dashhq.org> (root prefix). Project-prefix hosting is supported
+with `NEXT_PUBLIC_BASE_PATH`. Vercel, Netlify and IPFS/Arweave targets from the
+original PRD were **not pursued**.
+
+### 16.4 Environment variables (all public, build time)
+
+| Variable | Purpose | Default |
 |---|---|---|
-| `brand.normal` | `#008DE4` | Primary accent, interactive |
-| `brand.light` | `#2CBBFF` | Highlights, focus rings |
-| `brand.deep` | `#0E75B5` | Active pressed state |
-| `brand.shaded` | `#165278` | Muted accent |
-| `success` | `#1CC400` | Verified proof, SUCCESS status, mintable |
-| `danger` | `#F45858` | Error, frozen, failed broadcast |
-| `warning` | `#FFD205` | Contested, pending, near-epoch-end |
-| `orange` | `#f49a58` | Secondary accent (used for tokens) |
-| `gray-100` | `#e0e3e5` | Primary text |
-| `gray-250` | `#93aab2` | Secondary text |
-| `gray-650` | `#232C30` | Footer / panels |
-| `gray-750` | `#39454C` | Card hover |
-| `gray-800` | `#2e393d` | Card background |
-| `gray-900` | `#181d20` | Page background |
+| `NEXT_PUBLIC_DEFAULT_NETWORK` | Initial network (`mainnet`, `testnet` or a devnet name) | `testnet` |
+| `NEXT_PUBLIC_QUORUM_URL_MAINNET` | Quorum service for mainnet (`https://`, or `http://` for localhost; invalid values ignored with a warning) | `https://quorums.mainnet.networks.dash.org` (SDK default) |
+| `NEXT_PUBLIC_QUORUM_URL_TESTNET` | Same for testnet | `https://quorums.testnet.networks.dash.org` (SDK default) |
+| `NEXT_PUBLIC_DISABLE_WRITE_MODE` | `true` replaces `/broadcast` and `/wallet` with a disabled notice | `false` |
+| `NEXT_PUBLIC_RATE_PROVIDER` | `coinbase`, `kucoin` or `none` | `coinbase` |
+| `NEXT_PUBLIC_WELL_KNOWN_URL` | Remote well-known registry JSON | unset |
+| `NEXT_PUBLIC_BRIDGE_URL` | Bridge base URL (HTTPS, no query or fragment) for identity create/top-up shortcuts; empty disables them | `https://bridge.dashhq.org` |
+| `NEXT_PUBLIC_BASE_PATH` | Deployment path prefix for project Pages sites | empty (root) |
 
-No light mode.
-
-**Important constraint (from user memory):** **No violet/purple accents** — we avoid the "generic AI" palette entirely. The brand blue + success green + warning yellow cover every semantic need.
-
-### 9.2 Typography
-
-- **Montserrat** (700) — page titles, section headings.
-- **Open Sans** (400/600) — body, UI labels.
-- **Roboto Mono** — every identifier, hash, hex value, JSON, amount.
-
-All three loaded via `next/font/google`.
-
-### 9.3 Layout primitives
-
-- Container `max-width: 1310px`, centered.
-- Responsive spacing: `$space-3 / 4 / 5 / 8` corresponding to mobile → desktop → wide breakpoints (`30em / 48em / 62em / 80em / 96em / 120em`).
-- Page gutters adjust at `md` and `xl`.
-
-### 9.4 Block / card primitive (the "glass" style)
-
-Direct reuse of the reference's `Block()` SCSS mixin:
-
-```scss
-backdrop-filter: blur(44px);
-border-radius: 30px;                // var(--chakra-radii-block)
-border: 1px solid rgba(255,255,255,0.1);
-background: rgba(24,31,34,0.2);
-```
-
-With an optional `box-shadow: 2px 2px $brand` for emphasized cards (header digest cards).
-
-### 9.5 Identifier rendering
-
-Reuse the reference's `Identifier` contract:
-
-- Monospace font, `12pt`, `7px 12px` padding, `10px` radius.
-- `minidenticons` avatar 24px with 12px right margin.
-- Copy-to-clipboard button.
-- Highlight modes: `dim`, `highlight`, `highlight-first`, `highlight-last`, `highlight-both` (first/last 5 chars emphasised, middle dimmed).
-- Responsive wrap with `useWindowSize` debounce.
-
-### 9.6 Tabs, tables, lists, pagination
-
-Reuse reference components' patterns:
-
-- `Tabs` with inline count badges (active = `rgba(0,141,228,0.2)` background, inactive = `rgba(147,170,178,0.2)`).
-- `Table` with mono cells, hover, sortable headers.
-- `Pagination` (react-paginate) + `PageSizeSelector`.
-- `LoadingList` skeletons for list data.
-
-### 9.7 Proof-state chip (NEW vs. reference)
-
-Every data value (or card) that was fetched with a proof variant carries a small chip:
-
-- `✓ Verified` (success green) — proof verified by the WASM SDK.
-- `~ Unverified` (gray) — returned by `*WithProof()` but not yet verified (e.g. still in-flight) or user in untrusted mode.
-- `✗ Proof failed` (danger red) — verification rejected.
-
-A global indicator in the navbar summarises the page's proof state in aggregate.
-
-### 9.8 Navbar + footer
-
-- Navbar (fixed top, 66px, glassy `rgba(24,31,34,0.8)`): logo → menu (Home / Identities / Contracts / Documents / Tokens / DPNS / Epoch / Governance / Network) → `GlobalSearchInput` (15rem) → `NetworkSelect` (mainnet/testnet) → optional `WalletStatus` badge → mobile hamburger.
-- Footer (fixed bottom, 66px on desktop): local time, version, GitHub link, "Proofs ON/OFF" indicator, network status copy.
+Not supported: `NEXT_PUBLIC_TRUSTED_MODE` (removed, §6.2) and
+`NEXT_PUBLIC_DAPI_ADDRESSES_*` (mainnet/testnet use the quorum service's node
+list). `NEXT_PUBLIC_EVO_SDK_VERSION` is set by `next.config.mjs`, not by users.
 
 ---
 
-## 10. Write mode (optional, wallet-gated)
+## 17. Feature matrix
 
-This is **opt-in**. The default experience is 100% read-only.
-
-### 10.1 Wallet / signer contract
-
-A minimal internal interface we implement against multiple backends:
-
-```ts
-interface ExplorerSigner {
-  identityId: Identifier;
-  sign(preimage: Uint8Array, keyId: number, purpose: KeyPurpose): Promise<Uint8Array>;
-  availableKeys(): IdentityPublicKey[];
-}
-```
-
-### 10.2 Supported adapters (order of preference)
-
-1. **Dash Platform Extension** (the browser extension at `/Users/pasta/workspace/dash-platform-extension`) — detected via `window.dashPlatform` or similar; prompts the user for approval per signature. **Recommended default.**
-2. **Ephemeral mnemonic** — user pastes a BIP39 mnemonic into `/wallet`; we derive via `wallet.deriveKeyFromSeedWithPath` + DIP13 paths (`wallet.derivationPathDip13Testnet/Mainnet`). Kept **in-memory only** for the session. Never persisted. Cleared on navigation away from a sensitive route or after 10 minutes idle.
-3. **WIF paste** — single identity key WIF for advanced users doing one-off operations.
-
-All adapters surface the same `ExplorerSigner`.
-
-### 10.3 Write flows — one screen per state transition
-
-`/broadcast` hosts a tabbed console mirroring the `evo-sdk-website` pattern: facade → operation → dynamic form → review → sign → broadcast.
-
-Supported operations (one per SDK write method):
-
-- **Identities**: `create`, `topUp`, `creditTransfer`, `creditWithdrawal`, `update`.
-- **Addresses**: `transfer`, `topUpIdentity`, `withdraw`, `transferFromIdentity`, `fundFromAssetLock`, `createIdentity`.
-- **Documents**: `create`, `replace`, `delete`, `transfer`, `purchase`, `setPrice`.
-- **Contracts**: `publish`, `update`.
-- **Tokens**: `mint`, `burn`, `transfer`, `freeze`, `unfreeze`, `destroyFrozen`, `emergencyAction`, `setPrice`, `directPurchase`, `claim`, `configUpdate` (if exposed).
-- **DPNS**: `registerName`.
-- **Voting**: `masternodeVote`.
-
-Each form:
-
-1. **Build** — typed inputs; schema-validated if possible (e.g. document forms use the contract's JSON Schema).
-2. **Review** — show decoded state transition preview; fee estimate.
-3. **Sign** — invokes `ExplorerSigner`.
-4. **Broadcast** — `sdk.stateTransitions.broadcastAndWait` (default) or `broadcastStateTransition` (fire-and-forget).
-5. **Result** — shows proof response, a link to `/state-transition/[hash]`, and links to affected entities.
-
-### 10.4 Safety features
-
-- **Big red warnings** for actions that destroy state (delete, destroyFrozen, emergencyAction, update that disables keys).
-- **Network confirmation**: broadcasting on **mainnet** requires an explicit checkbox + typed confirmation of the target network.
-- **No key persistence** — reiterate this on every wallet-handling screen.
-
-### 10.5 Disable path
-
-If a deployment wants to ship read-only (e.g. public kiosk), a build-time env var `NEXT_PUBLIC_DISABLE_WRITE_MODE=true` hides the entire `/broadcast` and `/wallet` surface.
-
----
-
-## 11. Cross-cutting concerns
-
-### 11.1 SDK lifecycle
-
-- Single `EvoSDK` instance per (network, trusted-flag) combination, held in a React Context.
-- Lazy `connect()` on first use; subsequent calls no-op.
-- Reconnect on network change (`NetworkSelect` invalidates the current client).
-- `settings`: configurable in `/settings` — `connectTimeoutMs`, `timeoutMs`, `retries`, `banFailedAddress`.
-
-### 11.2 Data fetching & caching
-
-- **React Query 5** wraps every SDK call with:
-  - `queryKey` = `[facade, method, args…, network, trusted]`.
-  - `staleTime`: 30s for real-time (epoch/status), 5 min for structural (contract, identity keys), `Infinity` for immutable (`document.get` at a specific revision, finalized epoch).
-  - `gcTime`: 24h.
-- `Suspense` + `ErrorBoundary` per page.
-- Prefetch on hover for navbar items and search results.
-- **No persistence** of query cache by default (privacy-sensitive by design). Optional `localStorage` persistence for truly non-sensitive, schema-only data behind a setting.
-
-### 11.3 URL state
-
-- `nuqs` syncs filters, pagination, tab selection, query strings — every list view is deep-linkable including filter/page/size/order.
-- Page titles dynamically reflect the viewed entity (e.g. `alice.dash — Native Platform Explorer`).
-
-### 11.4 Well-known registry (bundled)
-
-`src/constants/well-known.ts` — a JSON blob of curated metadata for widely-used system/ecosystem contracts and tokens:
-
-```ts
-export interface WellKnown {
-  id: string;          // base58 identifier
-  kind: 'contract' | 'token' | 'identity';
-  name: string;
-  description?: string;
-  url?: string;
-  tags?: string[];
-}
-```
-
-Seeds:
-- DPNS `GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec`
-- Withdrawals `4fJLR2GYTPFdomuTVvNy3VRrvWgvkKPzqehEBpNf2nk6`
-- Dashpay, Masternode Rewards, Feature Flags, Wallet Utils, Keyword Search (from `data-contracts` package).
-
-This registry is the only way we give names to otherwise anonymous contract/token IDs. Users can extend it via `/settings` (local only).
-
-### 11.5 DPNS-everywhere
-
-Wherever an identity ID appears, we attempt `sdk.dpns.username(id)` (debounced, cached) and render the alias next to the ID. Failures are silent (identity may not have a DPNS name).
-
-### 11.6 DASH/USD rate
-
-Fetched directly from the browser (no backend) from one of: **Kucoin** public ticker (primary), **Coinbase** (fallback). Cached for 60s. Entirely optional — UI degrades gracefully to "credits / DASH only" if both fail. This matches `platform-explorer`'s rate behaviour.
-
-### 11.7 Error handling
-
-- **SDK timeouts**: reported via a toast + inline "Retry" button.
-- **Not found** (e.g. identity undefined): empty-state card with suggested actions ("Try reverse lookup by pk hash").
-- **Proof failures**: a dedicated `ProofFailureBanner` appears at the top of the affected card. (The planned "View unverified data" action is not offered: the pinned SDK has no untrusted query mode.)
-- **Version mismatches**: `sdk.version()` is the Platform protocol version the SDK speaks; if it differs from the protocol version the network reports, show a small warning; the app still works.
-- **Network partitioning**: if all configured DAPI addresses fail, a full-page error with a "Try alternate DAPI endpoints" action that opens `/settings`.
-
-### 11.8 Accessibility
-
-- Semantic HTML through Chakra.
-- Keyboard navigable (all dropdowns, search, tabs).
-- Color-contrast target AA on the dark palette.
-- Screen-reader labels on every `Identifier` / `CodeBlock` / copy button.
-- Motion-reduced mode disables the loading gradient sweep.
-
-### 11.9 Internationalization
-
-- **Scope v1**: English only.
-- Architecture uses plain strings + a thin `t(key)` helper so a future ICU-message layer can drop in. DPNS handles its own unicode (homograph-safety calls).
-
-### 11.10 Privacy
-
-- No analytics by default.
-- Optional, self-hostable anonymous counter (privacy-preserving only) behind a build flag.
-- All SDK traffic is gRPC-web directly from the user's browser to DAPI — the explorer operator never sees user queries.
-
-### 11.11 Security
-
-- **No custody of private keys.** Ever. All signer adapters follow §10.2.
-- CSP headers at hosting layer disallow any external script origins other than self + DAPI.
-- Subresource integrity on the `@dashevo/evo-sdk` bundle (pinned version + SRI hash in the HTML).
-- Build pipeline publishes an `integrity.json` so users can verify the deployed build matches source.
-
----
-
-## 12. File Structure
-
-```
-native-platform-explorer/
-├── package.json                     # deps: next 14, react 18, evo-sdk, chakra, react-query, nuqs, d3, minidenticons
-├── next.config.mjs                  # output: 'export', sass includePath, wasm asset copy
-├── tsconfig.json
-├── src/
-│   ├── app/
-│   │   ├── layout.tsx
-│   │   ├── Providers.tsx           # Chakra + QueryClient + NuqsAdapter + SdkProvider
-│   │   ├── page.tsx                # Home
-│   │   ├── search/page.tsx
-│   │   ├── identity/[id]/page.tsx
-│   │   ├── identity/lookup/[pkh]/page.tsx
-│   │   ├── contract/[id]/page.tsx
-│   │   ├── contract/[id]/documents/[type]/page.tsx
-│   │   ├── contract/[id]/documents/[type]/[docId]/page.tsx
-│   │   ├── contract/[id]/tokens/[position]/page.tsx
-│   │   ├── token/[id]/page.tsx
-│   │   ├── token/[id]/holders/page.tsx
-│   │   ├── address/[addr]/page.tsx
-│   │   ├── dpns/[name]/page.tsx
-│   │   ├── dpns/search/page.tsx
-│   │   ├── epoch/page.tsx
-│   │   ├── epoch/[index]/page.tsx
-│   │   ├── epoch/history/page.tsx
-│   │   ├── evonode/[proTxHash]/page.tsx
-│   │   ├── network/{status,credits,protocol,quorums}/page.tsx
-│   │   ├── governance/{contested,polls}/page.tsx
-│   │   ├── governance/contested/[...slug]/page.tsx
-│   │   ├── groups/[contractId]/page.tsx
-│   │   ├── groups/[contractId]/[position]/page.tsx
-│   │   ├── state-transition/[hash]/page.tsx
-│   │   ├── broadcast/page.tsx       # optional write console
-│   │   ├── wallet/page.tsx          # signer setup
-│   │   ├── settings/page.tsx
-│   │   └── about/page.tsx, sdk-reference/page.tsx
-│   ├── sdk/
-│   │   ├── SdkProvider.tsx          # React context + connect lifecycle
-│   │   ├── hooks.ts                 # useSdk(), useQueryWithProof(), useBroadcast()
-│   │   └── proofs.ts                # proof-state utilities
-│   ├── signer/
-│   │   ├── types.ts                 # ExplorerSigner interface
-│   │   ├── extension.ts             # dash-platform-extension adapter
-│   │   ├── mnemonic.ts              # ephemeral mnemonic adapter
-│   │   └── wif.ts                   # WIF paste adapter
-│   ├── components/
-│   │   ├── layout/{Navbar,Footer,RootComponent,NetworkSelect}.tsx
-│   │   ├── data/{Identifier,CodeBlock,CreditsBlock,DateBlock,TimeDelta,InfoLine,Alias,AliasesList,VoteChoice,ProofChip}.tsx
-│   │   ├── cards/{InfoCard,ValueCard,DashboardCard,CardsGrid}.tsx
-│   │   ├── ui/{Button,Tabs,Table,Tooltip,Popover,CopyButton,BottomSheet,MultiLevelMenu}.tsx
-│   │   ├── search/{GlobalSearchInput,SearchResultsList}.tsx
-│   │   ├── filters/{FilterGroup,InputFilter,RangeFilter,DateRangeFilter,MultiSelectFilter}.tsx
-│   │   ├── charts/{LineGraph,EvonodeBars}.tsx
-│   │   ├── pagination/{Pagination,PageSizeSelector}.tsx
-│   │   ├── breadcrumbs/{Breadcrumbs,BreadcrumbsContext}.tsx
-│   │   ├── identity/{IdentityDigestCard,IdentityTotalCard,PublicKeyCard}.tsx
-│   │   ├── contract/{DataContractDigestCard,SchemaTree,SchemaDiff}.tsx
-│   │   ├── document/{DocumentsFilter,DocumentsList,DocumentDigestCard}.tsx
-│   │   ├── token/{TokenDigestCard,TokenFlagsPills,TokenHoldersScoped}.tsx
-│   │   ├── epoch/{EpochProgress,EvonodesLeaderboard}.tsx
-│   │   ├── governance/{VoteTallyBar,VotePollsList,VoteChoiceBadge}.tsx
-│   │   └── broadcast/{FacadeSelector,OperationForm,ReviewStep,SignStep,ResultStep}.tsx
-│   ├── styles/
-│   │   ├── theme.ts                 # Chakra extendTheme
-│   │   ├── colors.ts                # palette tokens
-│   │   ├── global.scss
-│   │   ├── mixins.scss              # Block(), DefListItem(), LoadingLine() (reused from reference)
-│   │   └── fonts.ts                 # next/font Montserrat + Open Sans + Roboto Mono
-│   ├── enums/
-│   │   ├── keyPurpose.ts, keyType.ts, securityLevel.ts
-│   │   ├── choiceEnum.ts (yes/abstain/lock)
-│   │   └── tokenActions.ts
-│   ├── constants/
-│   │   ├── networks.ts              # DAPI endpoints per network
-│   │   ├── well-known.ts            # curated contract/token registry
-│   │   └── system-data-contracts.ts # DPNS, Dashpay, Withdrawals, etc. IDs
-│   ├── hooks/
-│   │   ├── useDebounce.ts, useFilters.ts, useWindowSize.ts, usePrevious.ts
-│   │   ├── useDpnsAlias.ts          # memoised DPNS lookup for an identity id
-│   │   └── useWellKnownName.ts
-│   ├── util/
-│   │   ├── credits.ts               # creditsToDash, numberFormat
-│   │   ├── datetime.ts              # formatDate, getTimeDelta, iso8601duration
-│   │   ├── identifier.ts            # is43-44Base58, is64Hex, isBech32mAddress
-│   │   ├── dpns.ts                  # convertToHomographSafeChars, validateLabel
-│   │   ├── json.ts                  # stable stringify, JSON diff
-│   │   ├── rate.ts                  # kucoin primary, coinbase fallback
-│   │   └── errors.ts                # SdkError classification
-│   └── tests/
-│       ├── unit/*.spec.ts
-│       └── e2e/*.spec.ts            # Playwright over live testnet
-└── public/
-    └── wasm/                        # evo-sdk wasm artifact if not self-hosted by the npm pkg
-```
-
----
-
-## 13. Feature Matrix (at-a-glance)
-
-| Feature | Supported | SDK call(s) |
+| Feature | Status | SDK calls |
 |---|---|---|
-| Home: height, epoch, credits, protocol, quorums | ✓ | `system.status`, `epoch.current`, `system.totalCreditsInPlatform`, `protocol.versionUpgradeState`, `system.currentQuorumsInfo` |
-| Global search (id / name / address / pk hash / tx hash / epoch) | ✓ | per §6.3 |
-| Identity detail | ✓ | `identities.fetch` + deps |
-| Identity reverse-lookup by pk hash | ✓ | `identities.byPublicKeyHash` / `byNonUniquePublicKeyHash` |
-| Identity key inspection | ✓ | `identities.getKeys` |
-| Identity nonces (global + per-contract) | ✓ | `identities.nonce` / `contractNonce` |
-| Identity token balances (for known tokens) | ✓ | `tokens.identityBalances` |
-| Identity group memberships | ✓ | `group.identityGroups` |
-| Identity votes history | ✓ | `voting.contestedResourceIdentityVotes` |
-| Contract detail + schema + document types | ✓ | `contracts.fetch` |
-| Contract version history | ✓ | `contracts.getHistory` |
-| Document query within contract+type | ✓ | `documents.query` |
-| Single document | ✓ | `documents.get` |
-| Token detail (supply, status, price, config) | ✓ | `tokens.totalSupply` + `statuses` + `directPurchasePrices` + `contractInfo` |
-| Token holders (**scoped / seeded**) | ✓ | `tokens.balances([ids], tokenId)` |
+| Dashboard: height, epoch, credits, protocol, quorums, proposers, polls | ✓ | `system.status`, `epoch.epochsInfo`, `system.totalCreditsInPlatform`, `protocol.versionUpgradeVoteStatus`, `system.currentQuorumsInfo`, `epoch.evonodesProposedBlocksByRange`, `voting.votePollsByEndDate`, `contracts.getMany` |
+| Search (ID, name, prefix, address, pk hash, hash, epoch) | ✓ | see §8 |
+| Identity, keys, nonces, DPNS, tokens, groups, votes, contract keys | ✓ | `identities.*`, `dpns.usernames`, `tokens.identityBalances` / `identityTokenInfos`, `group.identityGroups`, `voting.contestedResourceIdentityVotes` |
+| Reverse lookup by public-key hash | ✓ | `identities.byPublicKeyHash` / `byNonUniquePublicKeyHash` |
+| Contract schema, types, tokens, groups, internal config | ✓ | `contracts.fetch`, `tokens.*`, `group.groupsDataContracts` |
+| Contract history | Partial (keepsHistory only, newest 10) | `contracts.getHistory` |
+| Documents browser with filters and cursors | ✓ | `documents.query` |
+| Single document and revision history | ✓ (history only when kept) | `documents.get`, `documents.history` |
+| SQL query workspace with aggregates | ✓ | `documents.query`, `count`, `sum`, `average` |
+| Token detail, rules, distributions, prices, balance lookup | ✓ (tiered price: first/last tier) | `tokens.*` |
+| Token holders | Seeded list only | `tokens.balances` |
 | Platform address | ✓ | `addresses.get` |
-| DPNS resolve / name availability / contested check | ✓ | `dpns.resolveName`, `isNameAvailable`, `isContestedUsername`, `getUsernameByName` |
-| DPNS prefix search | ✓ | `dpns.usernames` |
-| Current epoch + proposed blocks leaderboard | ✓ | `epoch.current` + `epoch.evonodesProposedBlocksByRange` |
-| Historical epoch detail | ✓ | `epoch.epochsInfo`, `finalizedInfos` |
-| Per-evonode proposed blocks | ✓ | `epoch.evonodesProposedBlocksByIds` |
-| Protocol upgrade state + per-masternode vote | ✓ | `protocol.*` |
-| Contested resources per contract | ✓ | `group.contestedResources` |
-| Contested resource vote tally + voters | ✓ | `voting.contestedResourceVoteState`, `group.contestedResourceVotersForIdentity` |
-| Vote polls by end date | ✓ | `voting.votePollsByEndDate` |
-| Groups within a contract; members; actions | ✓ | `group.*` |
-| Prefunded specialized balance lookup | ✓ | `system.prefundedSpecializedBalance` |
-| State-transition result by hash | ✓ | `stateTransitions.waitForStateTransitionResult` |
-| Proof verification UI (chips, banner) | ✓ | trusted-mode `…WithProof` variants |
-| **Broadcast any state transition** (opt-in) | ✓ | every write facade |
-| **Global list of identities / contracts / tokens / tx / blocks** | ✗ | not a SDK primitive |
-| **Time-series charts** (tx/hour, tps, gas) | ✗ | requires indexer |
-| **Aggregate statistics** (total docs, richest identities, trending tokens) | ✗ | requires indexer |
+| DPNS resolve, availability, contest, prefix search | ✓ | `dpns.*`, `documents.query` |
+| Current, historical and finalized epochs | ✓ | `epoch.epochsInfo`, `finalizedInfos`, `evonodesProposedBlocksByRange` |
+| Evonode blocks, rank and vote | ✓ | `epoch.evonodesProposedBlocksByIds` / `ByRange`, `protocol.versionUpgradeVoteStatus` |
+| Protocol version and full vote tally | ✓ | `protocol.versionUpgradeVoteStatus`, `epoch.*` |
+| Quorums | ✓ (unproved, type/threshold inferred) | `system.currentQuorumsInfo` |
+| Shielded pool | ✓ | `shielded.*` |
+| Contested resources, tallies, voters; vote polls | ✓ | `group.contestedResources`, `voting.contestedResourceVoteState`, `group.contestedResourceVotersForIdentity`, `voting.votePollsByEndDate` |
+| Groups, members, actions, signers | ✓ | `group.*` |
+| Prefunded specialized balance | ✓ | `system.prefundedSpecializedBalance` |
+| State-transition result | ✓ (no proof) | `stateTransitions.waitForStateTransitionResult` |
+| Proof chips, failure banner, Query Inspector, evidence export | ✓ | `…WithProof` variants |
+| Deserializers and path elements | ✓ | WASM classes, `system.pathElements` |
+| Write mode (§13.3) | ✓ (live-tested on testnet for address, asset-lock, raw and token writes only; see §13.4) | write facades |
+| Extension signer | Detection only | — |
+| Custom DAPI endpoints (mainnet/testnet) | ✗ — quorum-service override instead | — |
+| Untrusted mode | ✗ — removed | — |
+| Service worker, CSP, SRI | In progress (I1) | — |
+| Global lists, time series, aggregate statistics | ✗ | not SDK primitives |
 
 ---
 
-## 14. Non-functional requirements
+## 18. Known limitations
 
-### 14.1 Performance
-
-- **First paint < 2s** on a 50 Mbps connection (WASM blob is ~several MB; we lazy-load it on first SDK use, so static home paint is independent).
-- **SDK connect < 2s** to testnet from a residential US connection.
-- **Query latency budget** (trusted mode, proof verified):
-  - Identity / contract / single doc fetch: target p50 < 1s.
-  - Document query (limit=25): target p50 < 2s.
-  - Evonode proposed blocks for current epoch: target p50 < 2s.
-- **Re-renders**: React Query + Suspense keeps most interactions under 100ms after cache hit.
-
-### 14.2 Browser support
-
-- Latest 2 versions of Chrome / Edge / Firefox / Safari.
-- WASM required (drops IE, old Safari).
-
-### 14.3 Offline / resilience
-
-- Service Worker caches app shell + static assets so the UI loads offline; SDK calls fail gracefully with clear messaging.
-- If a single DAPI endpoint fails, the SDK's built-in `banFailedAddress` behaviour takes over (configurable).
-
-### 14.4 Observability
-
-- **Structured client logs** (opt-in) via the SDK's `logs` option (`'info'` default in dev, `'warn'` in prod).
-- Errors surfaced to an in-app "Diagnostics" drawer (`⌘/` toggle), never to external telemetry by default.
-
-### 14.5 Versioning & backwards compatibility
-
-- Pinned to a minor range of `@dashevo/evo-sdk` (`~3.x`). Breaking SDK changes (e.g. v3.0 renames from `v3-sdk-breaking-changes.md`) require an explicit PR.
-- Build embeds SDK + app version in a footer pill and on the `/about` page.
-
----
-
-## 15. Build & Deployment
-
-### 15.1 Local development
-
-```
-git clone <repo>
-cd native-platform-explorer
-pnpm install
-pnpm dev
-```
-
-- `next dev` runs locally; SDK talks to testnet by default.
-- `.env.local` can override `NEXT_PUBLIC_DEFAULT_NETWORK`, `NEXT_PUBLIC_QUORUM_URL_MAINNET` / `_TESTNET` and `NEXT_PUBLIC_DISABLE_WRITE_MODE` (see §15.5).
-
-### 15.2 Production build
-
-```
-pnpm build         # next build + next export → out/
-```
-
-Fully static; deployable to any static host.
-
-### 15.3 Deployment targets
-
-- **Vercel** (default).
-- **Netlify**, **Cloudflare Pages**, **GitHub Pages**.
-- **IPFS / Arweave** — app is immutable per-version, content-addressable build outputs.
-
-### 15.4 CI/CD (GitHub Actions)
-
-- `build.yml` — lint + typecheck + unit tests + Playwright e2e against testnet.
-- `deploy.yml` — on tag `v*.*.*`: build → publish static artifact to Vercel (production) and the IPFS pin (immutable record).
-- `sbom.yml` — emit Software Bill of Materials + SRI hashes for the SDK bundle.
-
-### 15.5 Configuration (env vars, all public)
-
-| Var | Purpose | Default |
+| Limitation | Cause | Mitigation |
 |---|---|---|
-| `NEXT_PUBLIC_DEFAULT_NETWORK` | `mainnet` or `testnet` | `testnet` |
-| `NEXT_PUBLIC_QUORUM_URL_TESTNET` | trusted quorum service (quorum keys + DAPI masternode list) | `https://quorums.testnet.networks.dash.org` |
-| `NEXT_PUBLIC_QUORUM_URL_MAINNET` | idem | `https://quorums.mainnet.networks.dash.org` |
-| `NEXT_PUBLIC_DISABLE_WRITE_MODE` | hide `/broadcast` and `/wallet` | `'false'` |
-| `NEXT_PUBLIC_RATE_PROVIDER` | `kucoin` / `coinbase` / `none` | `kucoin` |
-| `NEXT_PUBLIC_WELL_KNOWN_URL` | optional override of `well-known.ts` (JSON at a URL) | — |
-
-Quorum URLs must use `https://` (`http://` only for localhost); other values are ignored with a console warning. `NEXT_PUBLIC_TRUSTED_MODE` and `NEXT_PUBLIC_DAPI_ADDRESSES_*` are not supported: untrusted sessions cannot query, and the SDK's trusted context replaces explicit addresses with the quorum service's list.
-
----
-
-## 16. Known limitations
-
-| Limitation | Root cause | Mitigation |
-|---|---|---|
-| No global "latest blocks / latest txs" feed | SDK cannot list blocks / transactions | Home surfaces epoch & evonode data instead |
-| No list of all identities / contracts / tokens | SDK has no enumeration primitive | Search-first UX; well-known registry; per-contract listings wherever possible |
-| Token "holders" is only as complete as the seed list | `tokens.balances` takes `[identityIds] × tokenId` only | Clear UI labelling; seed from viewed identities (localStorage opt-in) |
-| No proof for `system.status` and `currentQuorumsInfo` | SDK does not offer proof variants | ProofChip renders "N/A" — clearly labelled |
-| No historical charts / time-series | Would need an indexer | Stated explicitly in the PRD's Non-Goals |
-| Broadcast requires wallet integration | Correct behaviour for a non-custodial tool | Adapters in §10 |
-| WASM bundle size on first load | SDK footprint | Lazy-load on first SDK use; app shell paints independently |
-| DAPI availability varies by masternode | Masternodes can go down | SDK's `banFailedAddress` retries alternates; settings page lets user add DAPI URLs |
+| No latest blocks / transactions feed | SDK cannot list them | Dashboard shows epoch, proposer and governance data |
+| No list of all identities / contracts / tokens | No enumeration primitive | Search, well-known registry, saved items, per-contract lists |
+| Token holders only as complete as the seed list | `tokens.balances` takes identity IDs | Clear labelling; opt-in viewed-identities seed |
+| Status, quorums, transition results, DPNS resolve/availability unproved | No proof variants | Labelled "No proof"; quorum fields labelled inferred |
+| History caps (10) and no contract-history offset | Drive / SDK limits | Pages where possible; says when older entries can't be shown |
+| Protocol "no vote yet" denominator is an estimate | Platform exposes no masternode list | Denominator stated: voters plus recent proposers |
+| Version mismatches block writes | Session protocol version only ratchets up | Notice on /network/status; Clear SDK cache |
+| Several writes not broadcast live (contract, most document and identity-signed operations, DPNS, masternode votes, some token claims, all of mainnet) | No funded run yet; no voting key | Unit and real-WASM tests; see §13.4 |
+| Asset-lock key not checked against the lock's output before submission | Not implemented | The transition's signature must come from the key that locked the funds, so Platform rejects a wrong key; the explorer reports the error after submission rather than before |
+| Extension signer unusable | Extension API not stable | Detection-only tab; bridge backup, mnemonic or WIF |
+| No i18n | Deferred | English strings only |
+| Single ORDER BY in the documents browser | UI scope | Warning when a range and an `in` filter both need ordering |
+| Large SDK download (~9 MB gzip) | SDK size | Loaded lazily; shell works meanwhile |
+| devnet-paloma unreachable | Its quorum service doesn't resolve | Custom devnets |
+| Write kill switch leaves links | `NEXT_PUBLIC_DISABLE_WRITE_MODE` is checked only by the two write pages | Links lead to the disabled notice; nothing can be signed |
 
 ---
 
-## 17. Open questions
+## 19. Open questions
 
-1. **Should the well-known registry be crowd-sourced?** A signed JSON file in a separate repo with a PR review process would keep the client code free of vendor decisions. Leaning yes, but out of v1 scope.
-2. **How to handle v3 SDK breaking changes going forward?** Adopt the "pin minor, PR per minor bump" policy documented in §14.5; requires a short smoke-test matrix.
-3. **Should we ship an embeddable widget?** (e.g. `<native-pe-identity id="..."/>`) — deferred to v2.
-4. **Should there be an explicit "Favorite this identity / contract" feature?** — yes, stored in `localStorage`, proposed for v1.1.
+1. **Crowd-sourced registry.** Remote loading exists (`NEXT_PUBLIC_WELL_KNOWN_URL`).
+   Should production point at a reviewed, signed registry in a separate repo?
+2. **Extension signing.** Adopt the Dash Platform Extension once its signing API
+   is stable?
+3. **Masternode voting acceptance.** A live vote with a real voting key before
+   calling it tested.
+4. **Asset-lock key check.** Compare the asset-lock key with the lock's output
+   script before submission, for a clearer error?
+5. **Unused 5.0 facades.** Which of `contractGroups`, `encryptedFor`,
+   moderation, ranked/composite document queries and key-limit updates are worth
+   surfacing?
+6. **Embeddable widgets** (e.g. an identity card): deferred.
 
 ---
 
-## 18. Appendix: SDK-call index (for fast reference)
+## 20. Appendix: SDK-call index
 
-Every route maps to one or more facade methods. This table is the canonical "if the SDK lost support, this page breaks" mapping.
+Abridged from `src/data/sdk-reference.json` (SDK 5.0.0-rc.8). Each read is
+called through both the plain method and its `…WithProof` variant unless marked
+¹ (plain only: methods without a proof variant, paginated walks and batches,
+or reads inside write flows). Omitted for brevity: `dpns.isContestedUsername`¹
+(a local label rule, on every page that shows identities) and
+`ensureInitialized` (WASM setup on `/tools`).
 
 | Route | SDK calls |
 |---|---|
-| `/` | `system.status`, `epoch.current`, `system.totalCreditsInPlatform`, `protocol.versionUpgradeState`, `system.currentQuorumsInfo`, `epoch.evonodesProposedBlocksByRange`, `voting.votePollsByEndDate` |
-| `/search` | any of (§6.3 rules) |
-| `/identity/[id]` | `identities.fetch`, `identities.balanceAndRevision`, `identities.getKeys`, `identities.nonce`, `dpns.username`, `dpns.usernames`, `group.identityGroups`, `voting.contestedResourceIdentityVotes`, `tokens.identityBalances` |
-| `/identity/lookup/[pkh]` | `identities.byPublicKeyHash` (→ fallback `byNonUniquePublicKeyHash`) |
-| `/contract/[id]` | `contracts.fetch`, `tokens.contractInfo`, `group.groupsDataContracts`, `contracts.getHistory` (lazy) |
-| `/contract/[id]/documents/[type]` | `documents.query` |
-| `/contract/[id]/documents/[type]/[docId]` | `documents.get` |
-| `/token/[id]` | `tokens.totalSupply`, `tokens.statuses`, `tokens.directPurchasePrices`, `tokens.contractInfo`, `tokens.priceByContract` |
-| `/token/[id]/holders` | `tokens.balances([seedIds], tokenId)` |
-| `/address/[addr]` | `addresses.get` |
-| `/dpns/[name]` | `dpns.resolveName`, `dpns.getUsernameByName`, `dpns.isNameAvailable`, `dpns.isContestedUsername`, `dpns.isValidUsername` |
-| `/dpns/search` | `dpns.usernames` |
-| `/epoch` | `epoch.current`, `epoch.evonodesProposedBlocksByRange` |
-| `/epoch/[index]` | `epoch.epochsInfo`, `epoch.finalizedInfos`, `epoch.evonodesProposedBlocksByRange` |
-| `/epoch/history` | `epoch.epochsInfo` (paginated) |
-| `/evonode/[proTxHash]` | `epoch.evonodesProposedBlocksByIds`, `protocol.versionUpgradeVoteStatus` |
-| `/network/status` | `system.status`, `system.currentQuorumsInfo` |
-| `/network/credits` | `system.totalCreditsInPlatform`, `system.prefundedSpecializedBalance` |
-| `/network/protocol` | `protocol.versionUpgradeState`, `protocol.versionUpgradeVoteStatus` |
-| `/network/quorums` | `system.currentQuorumsInfo` |
-| `/governance/contested` | `group.contestedResources` |
-| `/governance/contested/[...]` | `voting.contestedResourceVoteState`, `group.contestedResourceVotersForIdentity` |
-| `/governance/polls` | `voting.votePollsByEndDate` |
-| `/groups/[contractId]` | `group.infos` |
-| `/groups/[contractId]/[position]` | `group.info`, `group.members`, `group.actions`, `group.actionSigners` |
-| `/state-transition/[hash]` | `stateTransitions.waitForStateTransitionResult` |
-| `/broadcast` | every write facade method |
-| `/wallet` | `wallet.*` utilities (no network) |
+| `/` | `contracts.getMany`¹, `epoch.epochsInfo`, `epoch.evonodesProposedBlocksByRange`¹, `protocol.versionUpgradeVoteStatus`¹, `system.currentQuorumsInfo`¹, `system.status`¹, `system.totalCreditsInPlatform`, `voting.votePollsByEndDate` |
+| `/search/` | `addresses.get`, `contracts.fetch`, `documents.query`, `dpns.getUsernameByName`, `dpns.username`, `identities.byNonUniquePublicKeyHash`, `identities.byPublicKeyHash`, `identities.fetch`, `tokens.totalSupply` |
+| `/identity/` | `contracts.fetch`¹, `documents.query`, `dpns.username`, `dpns.usernames`, `group.identityGroups`, `identities.balanceAndRevision`, `identities.contractKeys`, `identities.contractNonce`, `identities.fetch`, `identities.getKeys`, `identities.nonce`, `tokens.identityBalances`, `tokens.identityTokenInfos`, `voting.contestedResourceIdentityVotes` |
+| `/identity/lookup/` | `identities.byNonUniquePublicKeyHash`, `identities.byPublicKeyHash`, `dpns.username` |
+| `/contract/` | `contracts.fetch`, `contracts.getHistory`, `dpns.username`, `group.groupsDataContracts`, `tokens.calculateId`¹, `tokens.directPurchasePrices`, `tokens.statuses`, `tokens.totalSupply` |
+| `/contract/documents/` | `contracts.fetch`, `documents.query`, `dpns.username`, `system.status`¹ |
+| `/contract/document/` | `contracts.fetch`, `documents.get`, `documents.history`, `dpns.username` |
+| `/contract/token/`, `/token/` | `contracts.fetch`, `tokens.calculateId`¹ (contract route), `documents.query` (token route), `dpns.username`, `tokens.contractInfo`, `tokens.directPurchasePrices`, `tokens.identityBalances`, `tokens.identityTokenInfos`, `tokens.perpetualDistributionLastClaim`, `tokens.statuses`, `tokens.totalSupply` |
+| `/token/holders/` | `dpns.resolveName`¹, `dpns.username`, `tokens.balances`¹ |
+| `/address/` | `addresses.get` |
+| `/dpns/` | `dpns.getUsernameByName`, `dpns.isNameAvailable`¹, `dpns.isValidUsername`¹, `dpns.resolveName`¹, `dpns.username` |
+| `/dpns/search/` | `contracts.fetch`¹, `documents.query`, `dpns.username` |
+| `/epoch/` | `epoch.epochsInfo`, `epoch.evonodesProposedBlocksByRange`¹ |
+| `/epoch/detail/` | `epoch.epochsInfo`, `epoch.evonodesProposedBlocksByRange`¹, `epoch.finalizedInfos` |
+| `/epoch/history/` | `epoch.epochsInfo` |
+| `/evonode/` | `epoch.epochsInfo`, `epoch.evonodesProposedBlocksByIds`, `epoch.evonodesProposedBlocksByRange`¹, `epoch.finalizedInfos`, `protocol.versionUpgradeVoteStatus` |
+| `/network/status/` | `system.currentQuorumsInfo`¹, `system.status`¹, `version`¹, `EvoSDK.getLatestVersionNumber` |
+| `/network/quorums/` | `system.currentQuorumsInfo`¹ |
+| `/network/protocol/` | `epoch.epochsInfo`, `epoch.evonodesProposedBlocksByRange`¹, `epoch.finalizedInfos`, `protocol.versionUpgradeState`, `protocol.versionUpgradeVoteStatus`¹ |
+| `/network/credits/` | `system.prefundedSpecializedBalance`, `system.totalCreditsInPlatform` |
+| `/network/shielded/` | `shielded.anchors`, `shielded.encryptedNotes`, `shielded.mostRecentAnchor`, `shielded.nullifiers`, `shielded.poolState` |
+| `/governance/contested/` | `contracts.fetch`, `group.contestedResources` |
+| `/governance/contested/detail/` | `dpns.username`, `group.contestedResourceVotersForIdentity`, `voting.contestedResourceVoteState`, `voting.votePollsByEndDate` |
+| `/governance/polls/` | `voting.votePollsByEndDate` |
+| `/groups/` | `group.infos` |
+| `/groups/detail/` | `dpns.username`, `group.actionSigners`, `group.actions`, `group.info`, `group.members` |
+| `/state-transition/` | `stateTransitions.waitForStateTransitionResult`¹ |
+| `/query/` | `contracts.fetch`, `documents.query`, `documents.count`, `documents.sum`, `documents.average`, `dpns.username`, `system.status`¹ |
+| `/tools/` | `contracts.fetch`, `system.pathElements`; WASM `DataContract`, `Document`, `Identity`, `StateTransition` `.fromBytes`, `PlatformVersion.latest` |
+| `/settings/` | `system.status`¹, `version`¹, `EvoSDK.getLatestVersionNumber` |
+| `/wallet/` | `identities.fetch`¹, `dpns.username`; `wallet.deriveKeyFromSeedWithPath`, `wallet.keyPairFromWif`, `wallet.validateMnemonic`, `PrivateKey.fromBytes` |
+| `/broadcast/` | **Writes:** `contracts.publish`, `contracts.update`, `documents.create` / `replace` / `delete` / `transfer` / `setPrice` / `purchase`, `identities.create` / `topUp` / `creditTransfer` / `creditWithdrawal` / `update`, `addresses.transfer` / `transferFromIdentity` / `topUpIdentity` / `withdraw` / `fundFromAssetLock` / `createIdentity`, `dpns.registerName`, `voting.masternodeVote`, `stateTransitions.broadcastStateTransition` / `waitForResponse` / `waitForAffectedState`, and the token writes `tokens.mint` / `burn` / `transfer` / `freeze` / `unfreeze` / `destroyFrozen` / `emergencyAction` / `setPrice` / `directPurchase` / `claim` / `configUpdate` (²). **Reads:** `addresses.get`, `contracts.fetch`, `documents.get`, `dpns.username`, `epoch.epochsInfo`, `group.actions`, `group.actionSigners`, `identities.balance` / `balances` / `byPublicKeyHash` / `fetch`, `system.totalCreditsInPlatformWithProof`, `tokens.balances` / `calculateId` / `contractInfo` / `directPurchasePrices` / `identitiesTokenInfos` / `statuses` / `totalSupplyWithProof`, `version`, `voting.contestedResourceVoteState`. **Utilities:** `AssetLockProof.*`, `CoreScript.fromP2PKH` / `fromP2SH`, `Identifier.*`, `PrivateKey.fromBytes`, `ResourceVoteChoice.*`, `StateTransition.fromBytes` / `fromHex`, `wallet.*` |
+| `/about/`, `/saved/`, `/sdk-reference/` | none |
 
----
-
-*Document prepared in response to the brief: "PRD for `native-platform-explorer` — no backend, no indexer, evo-sdk only, match platform-explorer style and structure, reduce scope as needed but maximise SDK coverage."*
+² `executors/tokens.ts` calls the token writes through a local alias
+(`const tokens = sdk.tokens`), which the generator does not follow, so they are
+missing from `sdk-reference.json` and the `/sdk-reference` page.

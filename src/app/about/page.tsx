@@ -8,10 +8,8 @@ import { Badge, Box, Heading, Link, Text } from '@chakra-ui/react';
 import { EVO_SDK_VERSION } from '@/version';
 import { usePageTitle } from '@hooks/usePageTitle';
 
-// Simple static rendering. We skip react-markdown here so Stage 5 avoids a
-// new runtime dep + SSR concern; the source file at `src/content/about.md` is
-// the editable canonical version and can be swapped for markdown rendering
-// in a later polish pass.
+// Static copy, rendered directly without a markdown dependency. Keep it in
+// step with docs/PRD.md (proof model, enumeration limits, write mode, privacy).
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'About' }]);
   usePageTitle('About');
@@ -64,9 +62,12 @@ export default function Page() {
             can verify internally without returning those bytes.
           </Text>
           <Text color="gray.250" mb={3}>
-            Some SDK methods (system status, quorum info, DASH/USD rate, a few
-            boolean DPNS helpers) have no proof variant — we label those
-            honestly as &quot;No proof&quot;. Network and query errors are shown as
+            Some reads have no proof: system status, the quorum list (the SDK
+            infers each quorum&apos;s type and threshold from its member count, and
+            the explorer marks them as inferred), state-transition results, DPNS name
+            resolution and availability (<code>dpns.resolveName</code>,{' '}
+            <code>dpns.isNameAvailable</code>), the local DPNS name checks, and the DASH/USD rate from Coinbase. Those are
+            labeled &quot;No proof&quot;. Network and query errors are shown as
             unavailable; only explicit proof verification errors are labeled as
             failed verification.
           </Text>
@@ -90,8 +91,16 @@ export default function Page() {
             browseable list, we either show a seeded list (paste the IDs you care
             about) or, where the SDK has a real list primitive (documents within a
             contract, epochs by index, DPNS labels by prefix, protocol votes,
-            contested resources, groups in a contract), we show a real, paginated
-            browser.
+            evonode block counts, contested resources, groups in a contract), we
+            show a real, paginated browser.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            Platform also caps some lists. Contract and document history return at
+            most 10 entries per request, and contract history has no offset, so
+            only the 10 newest contract versions can be shown. History exists only
+            for contracts and document types that keep it. Shielded notes load in
+            windows of 8,192. Token holders are only the identities you supply,
+            because there is no holder index.
           </Text>
           <Text color="gray.250" mb={3}>
             The raw GroveDB read that would fix this —{' '}
@@ -119,11 +128,23 @@ export default function Page() {
           <Text color="gray.250" mb={3}>
             Opt-in, and off in read-only deployments. Every operation is built, reviewed (inputs
             that contain private keys are never shown back), signed, and broadcast from your
-            browser; mainnet needs a typed confirmation. Identity operations sign with the
-            signer connected on the wallet page. Platform address operations, asset-lock identity
-            creation and top-ups, and masternode votes take their keys in the form instead and keep
-            them in the tab only for that operation. The explorer does not build asset-lock
-            transactions: bring the proof from a Core wallet, or use the bridge.
+            browser; mainnet needs a typed confirmation. Contract, document, token, DPNS and most
+            identity operations sign with the identity connected on the wallet page, from a
+            bridge backup, a mnemonic or a single WIF key, and only with an enabled on-chain key
+            of the purpose and security level Platform requires. The browser-extension option only
+            detects the extension; it cannot sign yet. Platform address operations (except funding
+            addresses from your identity), asset-lock identity creation and top-ups, and masternode
+            votes take their keys in the form instead and keep them in the tab only for that
+            operation. The explorer does not build
+            asset-lock transactions: bring the proof from a Core wallet, or use the bridge.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            Keys are never saved. A connected signer is cleared when you disconnect, after ten
+            minutes without input, when you leave the wallet and broadcast pages, and when the tab
+            closes; only the signer type and public identity ID are kept for this tab as a
+            reconnect hint. Byte arrays the explorer owns are zeroed, but JavaScript strings and
+            copies inside the SDK cannot be reliably erased. Writes are refused while the SDK
+            session and the network run different Platform protocol versions.
           </Text>
           <Text color="gray.250" mb={3}>
             If a write fails after it was sent, the outcome is reported as unknown: check the
@@ -137,8 +158,18 @@ export default function Page() {
           </Heading>
           <Text color="gray.250" mb={3}>
             Your queries go directly from your browser to DAPI. We never see them.
-            No analytics, no telemetry. The session-viewed-identities log (opt-in)
-            is stored only in your browser&apos;s localStorage and never transmitted.
+            No analytics, no telemetry. Your browser also contacts the network&apos;s
+            quorum service (for quorum keys and the masternode list), Dash&apos;s Insight
+            API or a custom devnet&apos;s own Insight URL (for the Core block height),
+            the DASH/USD rate provider (Coinbase by default, unless the deployment
+            turns it off), a remote well-known registry if the deployment configures
+            one, and the bridge only if you follow a bridge link.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            Settings, saved items, saved queries, local registry entries and
+            custom devnets are stored only in your browser&apos;s localStorage. The
+            viewed-identities log is opt-in and stored the same way. None of it is
+            transmitted.
           </Text>
           <Text color="gray.250" mb={3}>
             For mainnet and testnet, the SDK also keeps up to 100 data contracts it has
@@ -168,7 +199,7 @@ export default function Page() {
             >
               @dashevo/evo-sdk
             </Link>
-            , and visually mirrors{' '}
+            . It started as a sibling of{' '}
             <Link href="https://github.com/pshenmic/platform-explorer" isExternal color="brand.light">
               pshenmic/platform-explorer
             </Link>
