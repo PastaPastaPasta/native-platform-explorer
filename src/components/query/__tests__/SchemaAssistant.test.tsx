@@ -17,6 +17,14 @@ vi.mock('@sdk/queries', () => ({
           properties: { group: { type: 'integer' } },
           indices: [{ name: 'group', properties: [{ group: 'asc' }] }],
         },
+        grade: {
+          documentsCountable: true,
+          properties: { class: { type: 'string' }, semester: { type: 'integer' }, score: { type: 'integer' } },
+          indices: [
+            { name: 'byClass', properties: [{ class: 'asc' }], countable: 'countable', summable: 'score' },
+            { name: 'byClassSemester', properties: [{ class: 'asc' }, { semester: 'asc' }], averageable: 'score', rangeAverageable: true },
+          ],
+        },
       },
     },
     isLoading: false,
@@ -51,5 +59,14 @@ describe('Schema query suggestions', () => {
         }),
       }),
     );
+  });
+
+  it('shows which aggregates each index and the document type support', () => {
+    renderWithProviders(<SchemaAssistant contractId="selected" sql="SELECT COUNT(*) FROM grade" onChange={vi.fn()} />);
+    expect(screen.getByText(/Unfiltered aggregates:/)).toHaveTextContent('Unfiltered aggregates: COUNT(*). Filtered COUNT, SUM and AVG need an index with the matching flag below.');
+    expect(screen.getAllByText('countable')).toHaveLength(1);
+    expect(screen.getByText('summable: score')).toBeInTheDocument();
+    expect(screen.getByText('countable, range countable')).toBeInTheDocument();
+    expect(screen.getByText('summable: score (range)')).toBeInTheDocument();
   });
 });

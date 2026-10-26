@@ -105,6 +105,41 @@ export function extractDocumentRows(data: unknown): Array<Record<string, unknown
   );
 }
 
+/** Entry count and last document ID of a documents.query page. Map entries
+ *  whose value is undefined still count: they occupy a slot of the page. */
+export function documentPageCursor(data: unknown): { count: number; lastId?: string } {
+  if (data instanceof Map) {
+    const keys = Array.from(data.keys());
+    return { count: keys.length, lastId: keys.length ? String(keys[keys.length - 1]) : undefined };
+  }
+  if (!Array.isArray(data)) return { count: 0 };
+  const last = data[data.length - 1] as { $id?: unknown; id?: unknown } | undefined;
+  const id = last?.$id ?? last?.id;
+  return { count: data.length, lastId: typeof id === 'string' ? id : undefined };
+}
+
+/** Plain-language explanations for Platform query errors the workspace can
+ *  anticipate. The raw error stays visible alongside. */
+export function describeQueryError(message: string | undefined): string | undefined {
+  if (!message) return undefined;
+  if (/requires a `(?:countable|summable|rangeCountable|rangeSummable)|(?:count|sum) query requires|countable: true/.test(message)) {
+    return 'This document type has no index that supports this aggregate. COUNT needs a countable index whose properties are the WHERE fields (or documentsCountable for an unfiltered count); SUM and AVG need a matching summable index. The schema panel lists each index\'s flags.';
+  }
+  if (/missing order by|orderBy field for each range element/i.test(message)) {
+    return 'Add ORDER BY for every field filtered with a range (<, >, BETWEEN, STARTS WITH) or IN.';
+  }
+  if (/query must be for valid indexes|where clause on non indexed property|query must better match an existing index/i.test(message)) {
+    return 'No index covers this combination of WHERE and ORDER BY fields. Filters and sorting must follow one index\'s property order; the schema panel lists the indices.';
+  }
+  if (/Operation is not implemented or not supported/i.test(message)) {
+    return 'The node that answered does not support this request; it may run an older Platform version. Retry to reach a different node.';
+  }
+  if (/invalid limit/i.test(message)) {
+    return 'The Platform rejected the LIMIT for this query shape. Try a smaller LIMIT.';
+  }
+  return undefined;
+}
+
 /** Keep the canonical group key, rather than guessing a schema-dependent decoded value. */
 export function aggregateExportRows(
   data: unknown,
@@ -139,10 +174,11 @@ function csvCell(value: JsonValue | undefined): string {
         ? JSON.stringify(value)
         : String(value);
   // Exact negative decimal strings are numeric literals. All other text that
-  // could become a spreadsheet formula gets an apostrophe before CSV escaping.
+  // could become a spreadsheet formula gets an apostrophe before CSV escaping,
+  // including the full-width ＝＋－＠ forms some spreadsheets normalize.
   if (
     typeof value === 'string' &&
-    (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@]/.test(text)) &&
+    (/^[\t\r\n]/.test(text) || /^[\s\u0000-\u001f]*[=+\-@\uff1d\uff0b\uff0d\uff20]/.test(text)) &&
     !/^-\d+(?:\.\d+)?$/.test(text)
   ) {
     text = `'${text}`;
@@ -225,18 +261,11 @@ export function buildSdkExample(
     if (parsed.select !== 'count' && !parsed.aggregateField) {
       throw new Error('SUM and AVG SDK examples require an aggregate field.');
     }
-    const method =
-      parsed.select === 'count'
-        ? 'getDocumentsCount'
-        : parsed.select === 'sum'
-          ? 'getDocumentsSum'
-          : 'getDocumentsAverage';
+    const method = parsed.select === 'count' ? 'count' : parsed.select === 'sum' ? 'sum' : 'average';
     const field = parsed.select === 'count' ? '' : `, ${JSON.stringify(parsed.aggregateField)}`;
-    query =
-      '// This workspace uses the WASM aggregate path without proof capture.\n' +
-      '// The pinned SDK also provides countWithProof, sumWithProof, and averageWithProof facades.\n' +
-      'const wasmSdk = await sdk.getWasmSdkConnected();\n' +
-      `const result = await wasmSdk.${method}(params${field});`;
+    query = trusted
+      ? `const response = await sdk.documents.${method}WithProof(params${field});\nconst result = response.data;`
+      : `const result = await sdk.documents.${method}(params${field});`;
   }
   return (
     `// npm install @dashevo/evo-sdk@4.0.0-rc.2\n` +

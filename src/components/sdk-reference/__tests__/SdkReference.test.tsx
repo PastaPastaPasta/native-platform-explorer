@@ -32,10 +32,10 @@ describe('SDK reference', () => {
     fireEvent.change(route, { target: { value: '/query/' } });
     const query = screen.getByRole('region', { name: '/query/' });
     expect(within(query).getByText('documents.queryWithProof')).toBeInTheDocument();
-    expect(within(query).getByText('getDocumentsAverage')).toBeInTheDocument();
+    expect(within(query).getByText('documents.averageWithProof')).toBeInTheDocument();
     expect(screen.getByRole('status')).toHaveTextContent(`1 of ${reference.pages.length} pages`);
-    fireEvent.change(search, { target: { value: 'getDocumentsCount' } });
-    expect(within(query).getByText('getDocumentsCount')).toBeInTheDocument();
+    fireEvent.change(search, { target: { value: 'countWithProof' } });
+    expect(within(query).getByText('documents.countWithProof')).toBeInTheDocument();
     expect(within(query).queryByText('documents.query')).not.toBeInTheDocument();
     fireEvent.change(search, { target: { value: 'no-such-method' } });
     expect(screen.getByText('No pages or SDK calls match these filters.')).toBeInTheDocument();

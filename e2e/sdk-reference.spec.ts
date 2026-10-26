@@ -36,9 +36,9 @@ test('SDK reference filters remain usable while the real shared SDK chunks are h
     await route.selectOption('/query/');
     const query = page.getByRole('region', { name: '/query/' });
     await expect(query.getByText('documents.queryWithProof', { exact: true })).toBeVisible();
-    await expect(query.getByText('getDocumentsAverage', { exact: true })).toBeVisible();
-    await search.fill('getDocumentsCount');
-    await expect(query.getByText('getDocumentsCount', { exact: true })).toBeVisible();
+    await expect(query.getByText('documents.averageWithProof', { exact: true })).toBeVisible();
+    await search.fill('countWithProof');
+    await expect(query.getByText('documents.countWithProof', { exact: true })).toBeVisible();
     await expect(query.getByText('documents.query', { exact: true })).toHaveCount(0);
     await search.fill('nonexistent-method');
     await expect(page.getByText('No pages or SDK calls match these filters.')).toBeVisible();

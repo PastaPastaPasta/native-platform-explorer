@@ -59,7 +59,8 @@ describe('Query workspace execution', () => {
   it('refetches unchanged SQL and puts the network in the query link', async () => {
     const query = vi.fn().mockResolvedValue({ data: [{ $id: 'one', label: 'first' }] });
     renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
-    runSql('SELECT * FROM domain LIMIT 1');
+    // A partial page needs no follow-up request for a next page.
+    runSql('SELECT * FROM domain LIMIT 2');
     await screen.findByText('first');
     expect(query).toHaveBeenCalledTimes(1);
     query.mockResolvedValueOnce({ data: [{ $id: 'two', label: 'updated' }] });
@@ -67,9 +68,44 @@ describe('Query workspace execution', () => {
     await screen.findByText('updated');
     expect(query).toHaveBeenCalledTimes(2);
     expect(navigation.replace).toHaveBeenLastCalledWith(
-      expect.stringContaining('network=testnet'),
+      expect.stringContaining('network=testnet&trusted=1'),
       { scroll: false },
     );
+  });
+
+  it('runs an older unquoted-ID query and suggests quoting it', async () => {
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain WHERE $ownerId == GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec LIMIT 1');
+    await screen.findByText('0 documents returned');
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ where: [['$ownerId', '==', 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec']] }));
+    expect(screen.getByTestId('sql-hint')).toHaveTextContent("Read 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec' as text");
+    setSql("SELECT * FROM domain WHERE $ownerId == 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec' LIMIT 1");
+    expect(screen.queryByTestId('sql-hint')).not.toBeInTheDocument();
+  });
+
+  it('tells a recipient when a shared link came from a different trust mode', async () => {
+    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '0' });
+    // Running the shared query rewrites the address with the recipient's mode.
+    navigation.replace.mockImplementation((url: string) => { navigation.search = new URLSearchParams(url.split('?')[1]); });
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    const { unmount } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    await waitFor(() => expect(navigation.search.get('trusted')).toBe('1'));
+    await screen.findByText('0 documents returned');
+    expect(screen.getByText(/This link was shared from untrusted mode, but trusted mode\s+is on here/)).toHaveTextContent(
+      'Results here are proof-verified.',
+    );
+    navigation.replace.mockReset();
+    unmount();
+    navigation.search = new URLSearchParams({ q: 'SELECT * FROM domain LIMIT 1', trusted: '1' });
+    const { unmount: unmountSame } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    expect(screen.queryByText(/This link was shared from/)).not.toBeInTheDocument();
+    unmountSame();
+    // The parameter is only a claim about the link, never about the sender's results.
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query), trusted: false } });
+    const notice = await screen.findByText(/This link was shared from trusted mode, but trusted mode\s+is off here/);
+    expect(notice).toHaveTextContent('Results here are not proof-verified.');
+    expect(notice).not.toHaveTextContent(/sender/);
   });
 
   it('bounds statement execution and cancels queued and late results', async () => {
@@ -200,6 +236,103 @@ describe('Query workspace execution', () => {
     fireEvent.click(screen.getAllByRole('button', { name: /^Next$/ })[0]!);
     await screen.findByText('a page 2');
     expect(screen.getByText('b page 1')).toBeInTheDocument();
-    expect(query.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({ startAfter: 'a-1' }));
+    expect(query.mock.calls.map(([params]) => params)).toContainEqual(expect.objectContaining({ startAfter: 'a-1' }));
+  });
+
+  it('disables Next when a full page is the last one', async () => {
+    const page = new Map([['doc-1', { $id: 'doc-1', label: 'one' }], ['doc-2', { $id: 'doc-2', label: 'two' }]]);
+    const query = vi.fn().mockImplementation((params: { startAfter?: string }) =>
+      Promise.resolve({ data: params.startAfter ? new Map() : page }),
+    );
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain LIMIT 2');
+    await screen.findByText('two');
+    await waitFor(() => expect(query).toHaveBeenCalledWith(expect.objectContaining({ limit: 1, startAfter: 'doc-2' })));
+    await waitFor(() => expect(screen.queryByText(/checking for more/)).not.toBeInTheDocument());
+    expect(screen.getByRole('button', { name: /^Next$/ })).toBeDisabled();
+  });
+
+  it('still offers Next for a full page when the follow-up request fails', async () => {
+    const page = new Map([['doc-1', { $id: 'doc-1', label: 'one' }]]);
+    const query = vi.fn().mockImplementation((params: { startAfter?: string }) =>
+      params.startAfter ? Promise.reject(new Error('endpoint unavailable')) : Promise.resolve({ data: page }),
+    );
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain LIMIT 1');
+    await screen.findByText('one');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Next$/ })).toBeEnabled());
+  });
+
+  it('counts absent documents toward a full page and continues after them', async () => {
+    const page = new Map<string, unknown>([['doc-1', { $id: 'doc-1', label: 'one' }], ['doc-gone', undefined]]);
+    const query = vi.fn().mockImplementation((params: { startAfter?: string }) =>
+      Promise.resolve({ data: params.startAfter ? new Map([['doc-3', { $id: 'doc-3', label: 'three' }]]) : page }),
+    );
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdkWithQuery(query) } });
+    runSql('SELECT * FROM domain LIMIT 2');
+    await screen.findByText('one');
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Next$/ })).toBeEnabled());
+    fireEvent.click(screen.getByRole('button', { name: /^Next$/ }));
+    await screen.findByText('three');
+    expect(query).toHaveBeenCalledWith(expect.objectContaining({ limit: 2, startAfter: 'doc-gone' }));
+  });
+});
+
+describe('Query workspace index guidance', () => {
+  const dpns = {
+    documents: {
+      domain: {
+        properties: { normalizedLabel: { type: 'string' }, normalizedParentDomainName: { type: 'string' } },
+        indices: [
+          { name: 'parentNameAndLabel', properties: [{ normalizedParentDomainName: 'asc' }, { normalizedLabel: 'asc' }], unique: true },
+        ],
+      },
+    },
+  };
+  const COUNT_ERROR =
+    "transport error: grpc error: code: 'Client specified an invalid argument', message: \"where clause on non indexed property error: prove count requires a `countable: true` (or summableOffCountIndex) index whose properties exactly match the where clause fields\"";
+  function dpnsSdk(documents: Record<string, unknown>) {
+    return createMockSdk({
+      contracts: { fetch: vi.fn().mockResolvedValue(dpns), fetchWithProof: vi.fn().mockResolvedValue({ data: dpns }) },
+      documents,
+    });
+  }
+
+  it('accepts a two-sided range on one field and warns about a missing ORDER BY', async () => {
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    renderWithProviders(<QueryPage />, { sdk: { sdk: dpnsSdk({ query, queryWithProof: query }) } });
+    runSql("SELECT * FROM domain WHERE normalizedParentDomainName = 'dash' AND normalizedLabel >= 'a' AND normalizedLabel <= 'b' ORDER BY normalizedLabel");
+    await screen.findByText('0 documents returned');
+    expect(screen.queryByText(/will probably reject/)).not.toBeInTheDocument();
+
+    runSql("SELECT * FROM domain WHERE normalizedParentDomainName = 'dash' AND normalizedLabel > 'a'");
+    expect(await screen.findByText(/The range filter on `normalizedLabel` needs ORDER BY normalizedLabel/)).toBeInTheDocument();
+  });
+
+  it('applies the index rules of the network protocol version', async () => {
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    const status = (current: number) => vi.fn().mockResolvedValue({ version: { protocol: { drive: { latest: current, current } } } });
+    const sql = 'SELECT * FROM domain ORDER BY normalizedLabel';
+    const sdk13 = dpnsSdk({ query, queryWithProof: query });
+    (sdk13 as unknown as { system: { status: unknown } }).system.status = status(13);
+    const { unmount } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdk13 } });
+    runSql(sql);
+    await screen.findByText('0 documents returned');
+    expect(screen.queryByText(/will probably reject/)).not.toBeInTheDocument();
+    unmount();
+    const sdk14 = dpnsSdk({ query, queryWithProof: query });
+    (sdk14 as unknown as { system: { status: unknown } }).system.status = status(14);
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdk14 } });
+    runSql(sql);
+    expect(await screen.findByText(/`normalizedParentDomainName` comes before `normalizedLabel` and must be filtered first/)).toBeInTheDocument();
+  });
+
+  it('warns before an aggregate without a countable index and explains the Platform error', async () => {
+    const count = vi.fn().mockRejectedValue(new Error(COUNT_ERROR));
+    renderWithProviders(<QueryPage />, { sdk: { sdk: dpnsSdk({ count, countWithProof: count }) } });
+    runSql("SELECT COUNT(*) FROM domain WHERE normalizedParentDomainName = 'dash'");
+    expect(await screen.findByText(/A filtered COUNT needs a countable index/)).toBeInTheDocument();
+    expect(await screen.findByText(/This document type has no index that supports this aggregate/)).toBeInTheDocument();
+    expect(count).toHaveBeenCalledWith(expect.objectContaining({ where: [['normalizedParentDomainName', '==', 'dash']] }));
   });
 });

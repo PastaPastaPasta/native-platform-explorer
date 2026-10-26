@@ -8,7 +8,7 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useSdk } from '@sdk/hooks';
-import { parseSqlMulti, type ParsedQuery } from '@util/sql-parser';
+import { parseSqlMulti, type ParsedQuery, type ParseHint } from '@util/sql-parser';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { SqlEditor } from './SqlEditor';
 import { ContractPicker } from './ContractPicker';
@@ -44,15 +44,20 @@ export function QueryPage() {
   const [sqlText, setSqlText] = useState(params.get('q') ?? '');
   const [run, setRun] = useState<QueryRun | null>(null);
   const [parseError, setParseError] = useState<{ message: string; position: number } | null>(null);
+  const [parseHints, setParseHints] = useState<ParseHint[]>([]);
   const [notice, setNotice] = useState('');
   const initialQueryPending = useRef(!!params.get('q'));
+  // Links record the sender's trust setting. Anyone can edit the URL, so the
+  // notice describes the link and this session, never the sender's results.
+  // Captured once: running the shared query rewrites the URL with ours.
+  const [sharedTrusted] = useState(() => params.get('trusted'));
 
   const queryPath = useCallback(
     (sql: string, contractId: string) => {
-      const qp = new URLSearchParams({ q: sql, contract: contractId, network });
+      const qp = new URLSearchParams({ q: sql, contract: contractId, network, trusted: trusted ? '1' : '0' });
       return `/query/?${qp.toString()}`;
     },
-    [network],
+    [network, trusted],
   );
 
   const startRun = useCallback(
@@ -60,6 +65,7 @@ export function QueryPage() {
       initialQueryPending.current = false;
       const parsed = parseSqlMulti(sql);
       setParseError(parsed.ok ? null : parsed);
+      setParseHints(parsed.ok ? parsed.hints : []);
       setRun(null);
       if (!parsed.ok) return;
       if (status !== 'ready' || !sdk) {
@@ -127,6 +133,7 @@ export function QueryPage() {
     initialQueryPending.current = false;
     setSqlText(sql);
     setParseError(null);
+    setParseHints([]);
   }, []);
 
   return (
@@ -163,6 +170,7 @@ export function QueryPage() {
               onChange={editSql}
               onRun={() => startRun(sqlText, pickerContractId)}
               parseError={parseError}
+              parseHints={parseHints}
               isLoading={isRunning}
               isDisabled={status !== 'ready'}
               onCancel={() => {
@@ -172,6 +180,15 @@ export function QueryPage() {
                 );
               }}
             />
+            {(sharedTrusted === '1' || sharedTrusted === '0') && (sharedTrusted === '1') !== trusted && (
+              <Text fontSize="xs" color="orange.300">
+                This link was shared from {sharedTrusted === '1' ? 'trusted' : 'untrusted'} mode, but trusted mode
+                is {trusted ? 'on' : 'off'} here.{' '}
+                {trusted
+                  ? 'Results here are proof-verified.'
+                  : 'Results here are not proof-verified.'}
+              </Text>
+            )}
             <HStack spacing={3} flexWrap="wrap">
               <Text fontSize="xs" color="gray.400" role="status" aria-live="polite">
                 {isRunning

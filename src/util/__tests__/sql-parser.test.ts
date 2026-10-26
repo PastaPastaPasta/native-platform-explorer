@@ -6,6 +6,7 @@ import {
   toDocumentsQuery,
   type ParsedQuery,
 } from '../sql-parser';
+import mainCorpus from './fixtures/main-parser-corpus.json';
 
 // ── parseSql ───────────────────────────────────────────────────────────
 
@@ -517,4 +518,149 @@ describe('workspace SQL validation', () => {
 it('preserves escaped SQL identifier punctuation', () => {
   const parsed = parseSql('SELECT * FROM `odd``name` ORDER BY `group` ASC LIMIT 25');
   expect(parsed).toEqual(expect.objectContaining({ ok: true, query: expect.objectContaining({ from: 'odd`name' }) }));
+});
+
+describe('SQL edge cases', () => {
+  const error = (sql: string) => {
+    const parsed = parseSql(sql);
+    if (parsed.ok) throw new Error(`expected ${sql} to fail`);
+    return parsed;
+  };
+
+  it('asks for quotes around an unquoted base58 ID that starts with a digit', () => {
+    const sql = 'SELECT * FROM domain WHERE $ownerId = 4EfA9Jrvv3nnCFdSf7fad59851iiTRZ6Wcu6YVJ4iSeF';
+    expect(error(sql)).toEqual({
+      ok: false,
+      message: "Unquoted value '4EfA9Jrvv3nnCFdSf7fad59851iiTRZ6Wcu6YVJ4iSeF'. Write string values, including IDs, in single quotes: '4EfA9Jrvv3nnCFdSf7fad59851iiTRZ6Wcu6YVJ4iSeF'.",
+      position: sql.indexOf('4EfA'),
+    });
+  });
+
+  it('reads unquoted and backticked values as text, with a hint to quote them', () => {
+    const sql = "SELECT * FROM doc WHERE x = y AND z IN (a, 'b', y)";
+    expect(parseSql(sql)).toEqual({
+      ok: true,
+      query: expect.objectContaining({
+        where: [
+          { field: 'x', operator: '==', value: 'y' },
+          { field: 'z', operator: 'in', value: ['a', 'b', 'y'] },
+        ],
+      }),
+      hints: [{ message: "Read 'y', 'a' as text, not as fields. Put string values, including IDs, in single quotes.", position: sql.indexOf('y') }],
+    });
+    expect(parseSqlMulti("SELECT * FROM doc WHERE x = `it's`")).toEqual(
+      expect.objectContaining({
+        hints: [{ message: "Read 'it''s' as text, not as a field. Put string values, including IDs, in single quotes; backticks are for field names.", position: 28 }],
+      }),
+    );
+    expect(parseSql("SELECT * FROM doc WHERE x = 'y'")).toEqual(expect.objectContaining({ hints: [] }));
+    const many = parseSql('SELECT * FROM doc WHERE x IN (a, b, c, d, e)');
+    expect(many.ok && many.hints[0]!.message).toMatch(/^Read 'a', 'b', 'c' and 2 more as text, not as fields\./);
+  });
+
+  it('allows a field named like, and LIKE in operator position', () => {
+    expect(parseSql("SELECT * FROM doc WHERE like = 'x' ORDER BY like DESC")).toEqual(
+      expect.objectContaining({
+        ok: true,
+        query: expect.objectContaining({ where: [{ field: 'like', operator: '==', value: 'x' }], orderBy: [{ field: 'like', direction: 'desc' }] }),
+      }),
+    );
+    expect(parseSql("SELECT * FROM doc WHERE like LIKE 'a%'")).toEqual(
+      expect.objectContaining({ ok: true, query: expect.objectContaining({ where: [{ field: 'like', operator: 'startsWith', value: 'a' }] }) }),
+    );
+  });
+
+  it('treats -- as a comment even straight after an operator', () => {
+    // `x==--1` never parsed before comments were supported (the stray `-` was rejected).
+    expect(error('SELECT * FROM doc WHERE x==--1')).toEqual({ ok: false, message: "Expected value, got ''", position: 30 });
+    expect(parseSql('SELECT * FROM doc WHERE x == -1')).toEqual(
+      expect.objectContaining({ ok: true, query: expect.objectContaining({ where: [{ field: 'x', operator: '==', value: -1 }] }) }),
+    );
+  });
+
+  it('reports malformed numbers as syntax errors', () => {
+    const sql = 'SELECT * FROM doc WHERE amount = 1.2.3';
+    expect(error(sql)).toEqual({ ok: false, message: "Invalid number '1.2.3'.", position: sql.indexOf('1.2.3') });
+    expect(parseSql('SELECT * FROM doc WHERE amount = 1. LIMIT 10.')).toEqual(
+      expect.objectContaining({ ok: true, query: expect.objectContaining({ where: [{ field: 'amount', operator: '==', value: 1 }], limit: 10 }) }),
+    );
+  });
+
+  it('ignores -- line comments', () => {
+    const parsed = parseSqlMulti("-- newest names\nSELECT * FROM domain -- the DPNS type\nWHERE label = 'a--b' -- trailing\n; -- done");
+    expect(parsed).toEqual(expect.objectContaining({ ok: true }));
+    if (!parsed.ok) return;
+    expect(parsed.queries).toHaveLength(1);
+    expect(parsed.queries[0]!.where).toEqual([{ field: 'label', operator: '==', value: 'a--b' }]);
+    expect(parseSql('SELECT * FROM doc WHERE x > -5 -- negative')).toEqual(
+      expect.objectContaining({ ok: true, query: expect.objectContaining({ where: [{ field: 'x', operator: '>', value: -5 }] }) }),
+    );
+  });
+
+  it('rejects inequality and NOT with explanations', () => {
+    expect(error("SELECT * FROM doc WHERE x != 'a'").message).toMatch(/^'!=' is not supported — Platform queries/);
+    expect(error("SELECT * FROM doc WHERE x <> 'a'").message).toMatch(/^'<>' is not supported/);
+    expect(error("SELECT * FROM doc WHERE x NOT IN ('a')").message).toMatch(/^NOT is not supported/);
+    expect(error("SELECT * FROM doc WHERE NOT x = 'a'").message).toMatch(/^NOT is not supported/);
+    expect(error("SELECT * FROM doc WHERE x NOT LIKE 'a%'").message).toMatch(/^NOT is not supported/);
+  });
+
+  it('maps a LIKE prefix pattern to startsWith', () => {
+    const parsed = parseSql("SELECT * FROM domain WHERE normalizedLabel like 'ali%' ORDER BY normalizedLabel");
+    expect(parsed).toEqual(expect.objectContaining({ ok: true }));
+    if (!parsed.ok) return;
+    expect(parsed.query.where).toEqual([{ field: 'normalizedLabel', operator: 'startsWith', value: 'ali' }]);
+  });
+
+  it.each([
+    ["LIKE '%ali'", /^Only prefix patterns are supported/],
+    ["LIKE 'a_i%'", /^Only prefix patterns are supported/],
+    ["LIKE '%'", /^Only prefix patterns are supported/],
+    ["LIKE 'a%b'", /^Only prefix patterns are supported/],
+    ["LIKE 'alice'", /^LIKE 'alice' has no wildcard; use = 'alice'/],
+    ['LIKE 5', /^LIKE needs a quoted pattern/],
+  ])('rejects %s', (clause, message) => {
+    expect(error(`SELECT * FROM domain WHERE normalizedLabel ${clause}`).message).toMatch(message);
+  });
+});
+
+describe('compatibility with queries written for the earlier parser', () => {
+  // Generated by running the parser from main (557cb8d) over the presets and
+  // older-style queries; saved queries, history and share links rely on them.
+  it.each(mainCorpus)('parses $sql to the same SDK parameters', ({ sql, params }) => {
+    const parsed = parseSqlMulti(sql);
+    if (!parsed.ok) throw new Error(parsed.message);
+    const current = parsed.queries.map((q) => toDocumentsQuery(q, 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec'));
+    expect(JSON.parse(JSON.stringify(current))).toEqual(params);
+  });
+});
+
+describe('aggregate range clauses', () => {
+  const where = (sql: string) => {
+    const parsed = parseSql(sql);
+    if (!parsed.ok) throw new Error(parsed.message);
+    return toDocumentsQuery(parsed.query, 'C').where;
+  };
+
+  it('sends a two-sided range as one between clause for aggregates only', () => {
+    expect(where("SELECT SUM(score) FROM grade WHERE class = 'a' AND semester > 20241 AND semester < 20253")).toEqual([
+      ['class', '==', 'a'],
+      ['semester', 'BetweenExcludeBounds', [20241, 20253]],
+    ]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester <= 9 AND semester >= 1')).toEqual([['semester', 'Between', [1, 9]]]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester >= 1 AND semester < 9')).toEqual([['semester', 'BetweenExcludeRight', [1, 9]]]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester > 1 AND semester <= 9')).toEqual([['semester', 'BetweenExcludeLeft', [1, 9]]]);
+    expect(where('SELECT * FROM grade WHERE semester > 1 AND semester < 9 ORDER BY semester')).toEqual([
+      ['semester', '>', 1],
+      ['semester', '<', 9],
+    ]);
+  });
+
+  it('leaves one-sided and conflicting ranges alone', () => {
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester > 1')).toEqual([['semester', '>', 1]]);
+    expect(where('SELECT COUNT(*) FROM grade WHERE semester > 1 AND semester > 2')).toEqual([
+      ['semester', '>', 1],
+      ['semester', '>', 2],
+    ]);
+  });
 });

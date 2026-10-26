@@ -9,7 +9,7 @@ export type { AggregateKind };
 
 export interface ParsedQuery {
   /** `'documents'` is the regular SELECT *; the others are aggregate queries
-   *  that hit the new wasm-sdk `getDocuments{Count,Sum,Average}` primitives. */
+   *  run through the SDK's documents count / sum / average facade. */
   select: 'documents' | AggregateKind;
   /** For SUM(field) / AVG(field) — the integer property to aggregate. Always
    *  unset for COUNT / documents. */
@@ -30,12 +30,18 @@ export interface ParsedCondition {
   value: unknown;
 }
 
+/** A non-blocking note about how part of the SQL was read. */
+export interface ParseHint {
+  message: string;
+  position: number;
+}
+
 export type ParseResult =
-  | { ok: true; query: ParsedQuery }
+  | { ok: true; query: ParsedQuery; hints: ParseHint[] }
   | { ok: false; message: string; position: number };
 
 export type MultiParseResult =
-  | { ok: true; queries: ParsedQuery[] }
+  | { ok: true; queries: ParsedQuery[]; hints: ParseHint[] }
   | { ok: false; message: string; position: number };
 
 // ── Tokenizer ──────────────────────────────────────────────────────────
@@ -53,6 +59,8 @@ const TT = {
   Dot: 9,
   Semicolon: 10,
   EOF: 11,
+  /** A word starting with a digit, e.g. an unquoted base58 ID. Never valid SQL. */
+  BareWord: 12,
 } as const;
 
 type TT = (typeof TT)[keyof typeof TT];
@@ -61,6 +69,8 @@ interface Token {
   type: TT;
   value: string;
   pos: number;
+  /** Backtick-quoted identifier. */
+  quoted?: boolean;
 }
 
 const KEYWORDS = new Set([
@@ -102,6 +112,13 @@ function tokenize(sql: string): Token[] {
     const ch = sql[i]!;
     const pos = i;
 
+    // `--` starts a line comment anywhere outside a string, as in standard
+    // SQL, so `x == --1` is `x ==` followed by a comment (it never parsed).
+    if (ch === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      continue;
+    }
+
     // single-char tokens
     if (ch === '(') {
       tokens.push({ type: TT.LParen, value: '(', pos });
@@ -134,11 +151,11 @@ function tokenize(sql: string): Token[] {
       continue;
     }
 
-    // operators: >=, <=, ==, !=, >, <, =
+    // operators: >=, <=, ==, !=, <>, >, <, =
     if (ch === '>' || ch === '<' || ch === '=' || ch === '!') {
       let op = ch;
-      if (i + 1 < sql.length && sql[i + 1] === '=') {
-        op += '=';
+      if (i + 1 < sql.length && (sql[i + 1] === '=' || (ch === '<' && sql[i + 1] === '>'))) {
+        op += sql[i + 1];
         i++;
       }
       tokens.push({ type: TT.Operator, value: op, pos });
@@ -182,6 +199,15 @@ function tokenize(sql: string): Token[] {
         num += sql[i];
         i++;
       }
+      // A digit-led word such as a base58 ID: keep it whole so the parser can
+      // ask for quotes instead of reporting a stray clause.
+      if (i < sql.length && /[a-zA-Z_$]/.test(sql[i]!)) {
+        while (i < sql.length && /[a-zA-Z0-9_$]/.test(sql[i]!)) num += sql[i++];
+        tokens.push({ type: TT.BareWord, value: num, pos });
+        continue;
+      }
+      // A trailing point (`1.`) has always been accepted as the integer.
+      if (!/^-?\d+(?:\.\d*)?$/.test(num)) throw new ParseError(`Invalid number '${num}'.`, pos);
       tokens.push({ type: TT.Number, value: num, pos });
       continue;
     }
@@ -201,7 +227,7 @@ function tokenize(sql: string): Token[] {
         id += sql[i++];
       }
       if (!closed) throw new ParseError('Unterminated quoted identifier.', pos);
-      tokens.push({ type: TT.Identifier, value: id, pos });
+      tokens.push({ type: TT.Identifier, value: id, pos, quoted: true });
       continue;
     }
 
@@ -246,6 +272,8 @@ function canBeNegativeNumber(tokens: Token[]): boolean {
 class Parser {
   private tokens: Token[];
   private pos = 0;
+  /** Unquoted or backticked values read as strings, for one combined hint. */
+  private bareValues: Token[] = [];
 
   constructor(tokens: Token[]) {
     this.tokens = tokens;
@@ -258,7 +286,7 @@ class Parser {
       // come from a `;`-terminated multi-statement source.
       if (this.peek().type === TT.Semicolon) this.advance();
       this.expect(TT.EOF, 'end of query');
-      return { ok: true, query };
+      return { ok: true, query, hints: this.hints() };
     } catch (e) {
       if (e instanceof ParseError) {
         return { ok: false, message: e.message, position: e.position };
@@ -278,13 +306,26 @@ class Parser {
         // Statements are `;`-separated; trailing `;` is optional.
         while (this.peek().type === TT.Semicolon) this.advance();
       }
-      return { ok: true, queries };
+      return { ok: true, queries, hints: this.hints() };
     } catch (e) {
       if (e instanceof ParseError) {
         return { ok: false, message: e.message, position: e.position };
       }
       throw e;
     }
+  }
+
+  private hints(): ParseHint[] {
+    const [first] = this.bareValues;
+    if (!first) return [];
+    const words = Array.from(new Set(this.bareValues.map((t) => t.value)));
+    const shown = words.slice(0, 3);
+    const more = words.length > shown.length ? ` and ${words.length - shown.length} more` : '';
+    const quoted = shown.map((w) => `'${w.replace(/'/g, "''")}'`).join(', ');
+    return [{
+      message: `Read ${quoted}${more} as text, not as ${words.length === 1 ? 'a field' : 'fields'}. Put string values, including IDs, in single quotes${this.bareValues.some((t) => t.quoted) ? '; backticks are for field names' : ''}.`,
+      position: first.pos,
+    }];
   }
 
   private parseQuery(): ParsedQuery {
@@ -408,7 +449,9 @@ class Parser {
   }
 
   private parseCondition(): ParsedCondition {
+    this.rejectNot();
     const field = this.parseFieldPath();
+    this.rejectNot();
 
     if (this.peekKeyword('BETWEEN')) {
       this.advance();
@@ -433,6 +476,12 @@ class Parser {
       return { field, operator: 'startsWith', value };
     }
 
+    // LIKE is only a keyword here, so a field may still be named `like`.
+    if (this.peek().type === TT.Identifier && !this.peek().quoted && this.peek().value.toUpperCase() === 'LIKE') {
+      this.advance();
+      return { field, operator: 'startsWith', value: this.parseLikePrefix() };
+    }
+
     // also accept startsWith as a single identifier (case-insensitive)
     if (this.peek().type === TT.Identifier && this.peek().value.toLowerCase() === 'startswith') {
       this.advance();
@@ -443,6 +492,35 @@ class Parser {
     const op = this.parseOperator();
     const value = this.parseValue();
     return { field, operator: op, value };
+  }
+
+  private rejectNot(): void {
+    if (this.peekKeyword('NOT')) {
+      throw new ParseError(
+        'NOT is not supported — Platform queries cannot negate a filter (NOT IN, NOT LIKE, NOT BETWEEN).',
+        this.peek().pos,
+      );
+    }
+  }
+
+  /** `LIKE 'abc%'` is a prefix match, which Platform supports as startsWith. */
+  private parseLikePrefix(): string {
+    const tok = this.peek();
+    if (tok.type !== TT.String) {
+      throw new ParseError(`LIKE needs a quoted pattern such as 'abc%', got '${tok.value}'`, tok.pos);
+    }
+    this.advance();
+    if (!/[%_]/.test(tok.value)) {
+      throw new ParseError(`LIKE '${tok.value}' has no wildcard; use = '${tok.value}' for an exact match.`, tok.pos);
+    }
+    const prefix = tok.value.endsWith('%') ? tok.value.slice(0, -1) : '';
+    if (!prefix || /[%_]/.test(prefix)) {
+      throw new ParseError(
+        "Only prefix patterns are supported: LIKE 'abc%' (a literal prefix and one trailing %). Use STARTS WITH for a prefix containing % or _.",
+        tok.pos,
+      );
+    }
+    return prefix;
   }
 
   private parseFieldPath(): string {
@@ -470,6 +548,12 @@ class Parser {
           return '<';
         case '<=':
           return '<=';
+        case '!=':
+        case '<>':
+          throw new ParseError(
+            `'${tok.value}' is not supported — Platform queries can match values, ranges, IN lists and prefixes, but not exclude a value.`,
+            tok.pos,
+          );
         default:
           throw new ParseError(`Unknown operator '${tok.value}'`, tok.pos);
       }
@@ -506,10 +590,19 @@ class Parser {
       this.advance();
       return null;
     }
-    // allow unquoted identifiers as string values (e.g. base58 IDs)
+    // Unquoted words (e.g. base58 IDs) have always been read as strings;
+    // keep that for saved and shared queries, with a hint to quote them.
     if (tok.type === TT.Identifier) {
       this.advance();
+      this.bareValues.push(tok);
       return tok.value;
+    }
+    // A digit-led word was never a value, so it still asks for quotes.
+    if (tok.type === TT.BareWord) {
+      throw new ParseError(
+        `Unquoted value '${tok.value}'. Write string values, including IDs, in single quotes: '${tok.value}'.`,
+        tok.pos,
+      );
     }
     throw new ParseError(`Expected value, got '${tok.value}'`, tok.pos);
   }
@@ -657,6 +750,30 @@ function conditionToWhere(c: ParsedCondition): [string, string, unknown] {
   }
 }
 
+const BOUNDED_RANGE: Record<string, string> = {
+  '>=,<=': 'Between',
+  '>,<': 'BetweenExcludeBounds',
+  '>,<=': 'BetweenExcludeLeft',
+  '>=,<': 'BetweenExcludeRight',
+};
+
+/**
+ * Aggregates need a two-sided range as one `between*` clause: the SUM/AVG
+ * index pickers and the SDK's COUNT proof check don't pair two clauses on a
+ * field (document queries do, so they keep the clauses as written).
+ */
+function aggregateWhere(where: ParsedCondition[]): Array<[string, string, unknown]> {
+  const out: Array<[string, string, unknown]> = [];
+  for (const c of where) {
+    const onField = where.filter((o) => o.field === c.field);
+    const low = onField.find((o) => o.operator === '>' || o.operator === '>=');
+    const high = onField.find((o) => o.operator === '<' || o.operator === '<=');
+    if (onField.length !== 2 || !low || !high) out.push(conditionToWhere(c));
+    else if (c === low) out.push([c.field, BOUNDED_RANGE[`${low.operator},${high.operator}`]!, [low.value, high.value]]);
+  }
+  return out;
+}
+
 export function toDocumentsQuery(
   parsed: ParsedQuery,
   contractId: string,
@@ -665,7 +782,9 @@ export function toDocumentsQuery(
   return {
     dataContractId: contractId,
     documentTypeName: parsed.from,
-    where: parsed.where.length ? parsed.where.map(conditionToWhere) : undefined,
+    where: parsed.where.length
+      ? parsed.select === 'documents' ? parsed.where.map(conditionToWhere) : aggregateWhere(parsed.where)
+      : undefined,
     orderBy: parsed.orderBy.length ? parsed.orderBy.map((o) => [o.field, o.direction]) : undefined,
     limit: parsed.limit ?? (parsed.select === 'documents' ? 25 : undefined),
     startAfter: overrides?.startAfter,

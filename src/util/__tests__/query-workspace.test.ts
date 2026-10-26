@@ -3,6 +3,8 @@ import type { DocumentsQueryParams } from '@sdk/queries';
 import type { ParsedQuery } from '../sql-parser';
 import { installStorageMock } from '@/test/storage';
 import {
+  describeQueryError,
+  documentPageCursor,
   aggregateExportRows,
   buildSdkExample,
   extractDocumentRows,
@@ -181,7 +183,7 @@ describe('serializeQueryCsv', () => {
     );
   });
 
-  it.each(['=1+1', '+SUM(A1)', '-1+2', '@SUM(A1)', ' =1+1', '\t=1+1', '\r=1+1'])(
+  it.each(['=1+1', '+SUM(A1)', '-1+2', '@SUM(A1)', ' =1+1', '\t=1+1', '\r=1+1', '＝1+1', '＋SUM(A1)', '－1+2', '＠SUM(A1)', '\u3000＝1+1'])(
     'neutralizes a spreadsheet formula %j',
     (text) => {
       const csv = serializeQueryCsv([{ text }]);
@@ -269,27 +271,26 @@ describe('buildSdkExample', () => {
   });
 
   it.each([
-    ['count', 'getDocumentsCount'],
-    ['sum', 'getDocumentsSum'],
-    ['avg', 'getDocumentsAverage'],
-  ] as const)('uses the connected WASM SDK for %s', async (select, method) => {
-    const aggregateMethod = vi.fn(async () => new Map([['', 2n]]));
-    const sdk = {
-      connect: vi.fn(),
-      getWasmSdkConnected: vi.fn(async () => ({ [method]: aggregateMethod })),
-    };
+    ['count', 'count', true],
+    ['sum', 'sum', true],
+    ['avg', 'average', true],
+    ['count', 'count', false],
+    ['avg', 'average', false],
+  ] as const)('uses the documents facade for %s (%s, trusted %s)', async (select, method, trusted) => {
+    const plain = vi.fn(async () => new Map([['', 2n]]));
+    const withProof = vi.fn(async () => ({ data: new Map([['', 2n]]) }));
+    const sdk = { connect: vi.fn(), documents: { [method]: plain, [`${method}WithProof`]: withProof } };
     const parsed = {
       ...documentQuery,
       select,
       aggregateField: select === 'count' ? undefined : 'amount',
     };
-    const example = buildSdkExample(parsed, params, 'mainnet', true);
+    const example = buildSdkExample(parsed, params, 'mainnet', trusted);
     await executeExample(example, sdk);
-    expect(sdk.getWasmSdkConnected).toHaveBeenCalledOnce();
-    expect(aggregateMethod.mock.calls[0]).toEqual(
-      select === 'count' ? [params] : [params, 'amount'],
-    );
-    expect(example).toContain('WASM aggregate path without proof capture');
+    const called = trusted ? withProof : plain;
+    expect((trusted ? plain : withProof)).not.toHaveBeenCalled();
+    expect(called.mock.calls[0]).toEqual(select === 'count' ? [params] : [params, 'amount']);
+    expect(example).not.toContain('getWasmSdkConnected');
   });
 
   it('quotes query parameter strings so pasted code cannot execute their content', async () => {
@@ -491,5 +492,31 @@ it('normalizes SDK Documents through toObject before versioned toJSON', async ()
   );
   expect(JSON.parse(log.mock.calls[0]![0] as string)).toEqual({
     'doc-id': { $id: 'doc-id', amount: '9007199254740993' },
+  });
+});
+
+describe('describeQueryError', () => {
+  it.each([
+    // Raw testnet responses captured while validating the workspace.
+    ["transport error: grpc error: code: 'Client specified an invalid argument', message: \"where clause on non indexed property error: prove count requires a `countable: true` (or summableOffCountIndex) index whose properties exactly match the where clause fields\"", /no index that supports this aggregate/],
+    ["transport error: grpc error: code: 'Client specified an invalid argument', message: \"missing order by for range error: query must have an orderBy field for each range element\"", /Add ORDER BY for every field/],
+    ["transport error: grpc error: code: 'Client specified an invalid argument', message: \"where clause on non indexed property error: query must be for valid indexes, valid indexes are: {}\"", /No index covers this combination/],
+    ["DapiClientError [-1]: transport error: grpc error: code: 'Operation is not implemented or not supported'", /does not support this request/],
+    ['invalid limit error: limit 500 exceeds 100', /rejected the LIMIT/],
+  ])('explains %s', (message, explanation) => {
+    expect(describeQueryError(message)).toMatch(explanation);
+  });
+
+  it('leaves unknown errors to the generic hint', () => {
+    expect(describeQueryError('connection refused')).toBeUndefined();
+    expect(describeQueryError(undefined)).toBeUndefined();
+  });
+});
+
+describe('documentPageCursor', () => {
+  it('counts absent documents and uses the last key as the cursor', () => {
+    expect(documentPageCursor(new Map<string, unknown>([['a', {}], ['b', undefined]]))).toEqual({ count: 2, lastId: 'b' });
+    expect(documentPageCursor([{ $id: 'x' }, { $id: 'y' }])).toEqual({ count: 2, lastId: 'y' });
+    expect(documentPageCursor(undefined)).toEqual({ count: 0 });
   });
 });

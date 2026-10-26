@@ -188,8 +188,7 @@ describe('SDK freshness policies', () => {
     const firstResponse = deferred<never>();
     const fetch = vi.fn().mockReturnValueOnce(firstResponse.promise).mockResolvedValue(kind === 'documents' ? ['second run'] : new Map([['count', 2n]]));
     const context = createSdkContextValue({ trusted: false, sdk: createMockSdk({
-      documents: { query: fetch },
-      getWasmSdkConnected: vi.fn().mockResolvedValue({ getDocumentsCount: fetch }),
+      documents: kind === 'documents' ? { query: fetch } : { count: fetch },
     }) });
     const params = { dataContractId: 'contract', documentTypeName: 'type' };
     function DocumentsProbe({ executionId }: { executionId: number }) {

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  platformProtocolVersion,
   computeNetworkHealth,
   extractPlatformStatus,
   type PlatformStatus,
@@ -49,6 +50,15 @@ describe('extractPlatformStatus', () => {
     expect(s.latestBlockHeight).toBeNull();
     expect(s.coreChainLockedHeight).toBeNull();
     expect(s.latestBlockMs).toBeNull();
+  });
+});
+
+describe('platformProtocolVersion', () => {
+  it('reads the current Drive protocol version from system.status', () => {
+    // Testnet status shape on 2026-10-26 (Drive 5.0.0-rc.8).
+    expect(platformProtocolVersion({ version: { software: { drive: '5.0.0-rc.8' }, protocol: { drive: { latest: 14, current: 14 } } } })).toBe(14);
+    expect(platformProtocolVersion({ version: {} })).toBeUndefined();
+    expect(platformProtocolVersion(undefined)).toBeUndefined();
   });
 });
 

@@ -97,6 +97,18 @@ export function extractPlatformStatus(raw: unknown): PlatformStatus {
   };
 }
 
+/** The Drive protocol version the network currently runs (`version.protocol.drive.current`). */
+export function platformProtocolVersion(raw: unknown): number | undefined {
+  const plain = raw ? (toPlain(raw) as Record<string, unknown> | undefined) : undefined;
+  const version = plain?.version as { protocol?: { drive?: { current?: unknown } } } | undefined;
+  return firstNum(version?.protocol?.drive?.current) ?? undefined;
+}
+
+/** Protocol version from the status the meter bar already polls. */
+export function usePlatformProtocolVersion(): number | undefined {
+  return platformProtocolVersion(useSystemStatus().data);
+}
+
 // ----- health verdict -----
 
 export type HealthLevel = 'healthy' | 'degraded' | 'stale' | 'unknown';

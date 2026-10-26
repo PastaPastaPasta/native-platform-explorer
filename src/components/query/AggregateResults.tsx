@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import {
   Box,
+  Code,
   Heading,
   HStack,
   Table,
@@ -33,6 +34,12 @@ export interface AggregateResultsProps {
   aggregateField?: string;
   groupBy?: string[];
   groupBySchemas?: GroupByPropertySchemas;
+  /** Most entries the server returns, when that can truncate the groups (see `aggregateGroupBound`). */
+  groupBound?: { limit: number; entriesPerGroup: number };
+  /** GROUP BY field that also carries the range filter, when groups are distinct range values. */
+  rangeGroupField?: string;
+  /** Groups are walked in descending order (first ORDER BY is DESC). */
+  descending?: boolean;
   data: AggregateResultMap | undefined;
   isLoading: boolean;
   isError: boolean;
@@ -83,12 +90,12 @@ function decodeUtf8(bytes: Uint8Array): string | undefined {
 
 /** GROUP BY map keys arrive as hex-encoded "canonical bytes" of the
  *  splitting property's value (per the wasm-sdk doc comment on
- *  getDocumentsCount). When we know the property schema we decode by type;
+ *  documents.count). When we know the property schema we decode by type;
  *  otherwise we fall back to printable-ASCII / fixed-width-int heuristics. */
 function decodeGroupKey(
   hex: string,
   propertySchema?: Record<string, unknown>,
-): { display: string; raw?: string } {
+): { display: string; raw?: string; literal?: string } {
   if (!hex) return { display: '(all)' };
   if (hex.length % 2 !== 0) return { display: `0x${hex}` };
   const bytes = hexToBytes(hex);
@@ -100,11 +107,14 @@ function decodeGroupKey(
     const mediaType = propertySchema.contentMediaType as string | undefined;
 
     if (type === 'string') {
-      return { display: decodeUtf8(bytes) ?? `0x${hex}`, raw: hex };
+      const text = decodeUtf8(bytes);
+      return text === undefined
+        ? { display: `0x${hex}`, raw: hex }
+        : { display: text, raw: hex, literal: `'${text.replace(/'/g, "''")}'` };
     }
     if (type === 'integer') {
       const n = decodeIndexedInt(bytes);
-      return n !== undefined ? { display: n.toString(), raw: hex } : { display: `0x${hex}` };
+      return n !== undefined ? { display: n.toString(), raw: hex, literal: n.toString() } : { display: `0x${hex}` };
     }
     if (type === 'boolean') {
       if (bytes.length === 1) return { display: bytes[0] === 0 ? 'false' : 'true', raw: hex };
@@ -153,18 +163,21 @@ export function AggregateResults({
   aggregateField,
   groupBy,
   groupBySchemas,
+  groupBound,
+  rangeGroupField,
+  descending,
   data,
   isLoading,
   isError,
   error,
   refetch,
 }: AggregateResultsProps) {
-  // Today we only render one group-key column even for compound GROUP BY
-  // (the SDK collapses compound count into a flat map keyed by the second
-  // field). Use the matching schema entry — last one for compound, first for
-  // single-field.
+  // The SDK merges compound GROUP BY (a, b) entries by b, summing across
+  // every a, so only the last field is a real column. Use its schema.
   const groupByPrimarySchema = groupBySchemas?.[groupBySchemas.length - 1];
   const grouped = !!groupBy && groupBy.length > 0;
+  const groupField = groupBy?.[groupBy.length - 1];
+  const mergedFields = groupBy?.slice(0, -1) ?? [];
 
   // The aggregate map's `""` key is the global total; per-group entries are
   // keyed by the hex-encoded canonical bytes of the splitting property value
@@ -184,6 +197,14 @@ export function AggregateResults({
     return data.get('');
   }, [data]);
 
+  // Server entries stop at the limit. Compound rows each merge up to one entry
+  // per IN value, so they may be truncated before the row count reaches it.
+  const truncated = grouped && !!groupBound && rows.length * groupBound.entriesPerGroup >= groupBound.limit;
+  const merged = !!groupBound && groupBound.entriesPerGroup > 1;
+  const lastLiteral = truncated && !merged && rangeGroupField === groupField && rows.length
+    ? decodeGroupKey(rows[rows.length - 1]!.key, groupByPrimarySchema).literal
+    : undefined;
+
   return (
     <InfoBlock>
       {isLoading ? (
@@ -201,15 +222,50 @@ export function AggregateResults({
               {totalLabel(kind, aggregateField)} GROUP BY {groupBy!.join(', ')}
             </Heading>
             <Text fontSize="xs" color="gray.400">
-              {rows.length} group{rows.length === 1 ? '' : 's'}
+              {rows.length}
+              {truncated ? '+' : ''} group{rows.length === 1 ? '' : 's'}
             </Text>
           </HStack>
+          {mergedFields.length > 0 && (
+            <Text fontSize="xs" color="gray.400">
+              One row per <Code fontSize="2xs">{groupField}</Code> value, totalled across every{' '}
+              <Code fontSize="2xs">{mergedFields.join(', ')}</Code> value in the filter. The SDK merges
+              compound groups this way; run one statement per{' '}
+              <Code fontSize="2xs">{mergedFields.join(', ')}</Code> value for separate rows.
+            </Text>
+          )}
+          {rows.length === 1 && rows[0]!.key === '' && (
+            <Text role="note" fontSize="xs" color="orange.300">
+              This GROUP BY came back as one total instead of a row per{' '}
+              <Code fontSize="2xs">{groupField}</Code> value, as testnet does for two ranges, or IN with a range,
+              grouped by one field. Run one statement per value for separate totals.
+            </Text>
+          )}
+          {truncated && (
+            <Text role="status" fontSize="xs" color="orange.300">
+              {merged
+                ? `Platform returns at most ${groupBound!.limit} (${mergedFields.join(', ')}, ${groupField}) pairs before the SDK merges them, so these ${rows.length} groups may be incomplete. `
+                : `Showing the first ${rows.length} groups: the limit of ${groupBound!.limit} was reached, so more groups may exist. `}
+              Aggregates have no page cursor.{' '}
+              {lastLiteral ? (
+                <>
+                  To continue, filter on{' '}
+                  <Code fontSize="2xs">
+                    {rangeGroupField} {descending ? '<' : '>'} {lastLiteral}
+                  </Code>{' '}
+                  instead of the current {descending ? 'upper' : 'lower'} bound.
+                </>
+              ) : (
+                'Narrow the WHERE filter to see the rest.'
+              )}
+            </Text>
+          )}
           <Box overflowX="auto">
             <Table size="sm" variant="simple">
               <Thead>
                 <Tr>
                   <Th color="gray.400" fontFamily="mono">
-                    {groupBy!.join(' / ')}
+                    {groupField}
                   </Th>
                   {kind === 'avg' ? (
                     <>

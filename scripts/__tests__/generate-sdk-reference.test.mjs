@@ -281,7 +281,7 @@ test('the shipped generated map binds actual epoch, aggregate, signer and no-cal
   assert.deepEqual(methods('/sdk-reference/'), []);
   assert.ok(methods('/epoch/').includes('epoch.epochsInfoWithProof'));
   assert.ok(!methods('/epoch/').includes('epoch.current'));
-  assert.ok(methods('/query/').includes('getDocumentsCount'));
+  assert.ok(methods('/query/').includes('documents.countWithProof'));
   assert.ok(methods('/wallet/').includes('wallet.deriveKeyFromSeedWithPath'));
   assert.ok(methods('/broadcast/').includes('documents.replace'));
   assert.ok(!methods('/broadcast/').includes('identities.topUp'));
