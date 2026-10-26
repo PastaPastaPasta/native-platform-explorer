@@ -5,6 +5,7 @@ import { AddIcon, MinusIcon, RepeatIcon } from '@chakra-ui/icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   buildLayerTree,
+  flattenLayers,
   parseProofTree,
   type ParsedLayer,
   type TreeNode,
@@ -23,6 +24,12 @@ const NODE_H = 64;
 const COL_GAP = 24;
 const ROW_GAP = 56;
 const PAD = 16;
+/** Real merk layers are AVL-balanced and far smaller; beyond these bounds the
+ *  proof is malformed or adversarial and is summarized instead of drawn. */
+export const MAX_DRAWN_NODES = 4000;
+export const MAX_DRAWN_DEPTH = 64;
+/** GroveDB paths are about a dozen layers deep. */
+export const MAX_LAYER_NESTING = 48;
 
 type NodeClass = 'target' | 'descend' | 'internal' | 'opaque';
 
@@ -37,7 +44,7 @@ function classifyNode(node: TreeNode): NodeClass {
   if (node.kind === 'kv') return 'target';
   if (node.kind === 'subtree') return 'descend';
   // sibling
-  const op = node.op!;
+  const op = node.op;
   if (op.kind === 'hash') return 'opaque';
   // kvHash, kvDigest are internal siblings (we know the key)
   return 'internal';
@@ -50,14 +57,12 @@ function ellipsize(s: string | undefined, head: number, tail: number): string {
 }
 
 function nodeLabels(node: TreeNode): { primary: string; secondary?: string } {
-  const op = node.op!;
-  if (node.kind === 'kv') {
-    return { primary: ellipsize(op.key, 8, 6), secondary: op.value ? ellipsize(op.value, 10, 8) : undefined };
-  }
-  if (node.kind === 'subtree') {
+  const op = node.op;
+  if (node.kind === 'kv' || node.kind === 'subtree') {
+    const value = op.value ?? op.treeValue;
     return {
       primary: ellipsize(op.key, 8, 6),
-      secondary: op.treeValue ? ellipsize(op.treeValue, 14, 6) : undefined,
+      secondary: value ? ellipsize(value, node.kind === 'kv' ? 10 : 14, node.kind === 'kv' ? 8 : 6) : undefined,
     };
   }
   // sibling
@@ -72,9 +77,9 @@ function nodeLabels(node: TreeNode): { primary: string; secondary?: string } {
 }
 
 function nodeTooltip(node: TreeNode): string {
-  const op = node.op!;
+  const op = node.op;
   const lines: string[] = [];
-  lines.push(`${node.kind.toUpperCase()}  #${op.index} (${op.kind})`);
+  lines.push(`${node.kind.toUpperCase()}  #${op.index} (${op.inverted ? 'PushInverted ' : ''}${op.variant ?? op.kind})`);
   if (op.key) lines.push(`key:        ${op.key}`);
   if (op.value) lines.push(`value:      ${op.value}`);
   if (op.treeValue) lines.push(`subtree:    ${op.treeValue}`);
@@ -98,28 +103,42 @@ interface Layout {
   height: number;
 }
 
-function computeLayout(root: TreeNode): Layout {
-  const placements: Placement[] = [];
-  let nextCol = 0;
+type LayoutResult = { layout: Layout } | { tooLarge: { nodes: number; depth: number } };
+
+/** In-order layout without recursion, so a pathological chain cannot overflow
+ *  the call stack. Gives up once the tree exceeds the drawable bounds. */
+export function computeLayout(root: TreeNode): LayoutResult {
+  const byNode = new Map<TreeNode, Placement>();
+  const pending: Array<{ node: TreeNode; depth: number }> = [];
+  let current: TreeNode | undefined = root;
+  let depth = 0;
   let maxDepth = 0;
+  while (current || pending.length) {
+    while (current) {
+      if (depth > MAX_DRAWN_DEPTH || pending.length + byNode.size >= MAX_DRAWN_NODES) {
+        return { tooLarge: { nodes: pending.length + byNode.size + 1, depth: Math.max(depth, maxDepth) } };
+      }
+      pending.push({ node: current, depth });
+      current = current.left;
+      depth++;
+    }
+    const next = pending.pop()!;
+    if (next.depth > maxDepth) maxDepth = next.depth;
+    byNode.set(next.node, { node: next.node, col: byNode.size, depth: next.depth });
+    current = next.node.right;
+    depth = next.depth + 1;
+  }
 
-  const walk = (node: TreeNode, depth: number): Placement => {
-    if (depth > maxDepth) maxDepth = depth;
-    let leftP: Placement | undefined;
-    let rightP: Placement | undefined;
-    if (node.left) leftP = walk(node.left, depth + 1);
-    const p: Placement = { node, col: nextCol++, depth, left: leftP, right: rightP };
-    placements.push(p);
-    if (node.right) p.right = walk(node.right, depth + 1);
-    return p;
-  };
-  walk(root, 0);
-
-  const cols = nextCol;
+  const placements = Array.from(byNode.values());
+  for (const p of placements) {
+    p.left = p.node.left ? byNode.get(p.node.left) : undefined;
+    p.right = p.node.right ? byNode.get(p.node.right) : undefined;
+  }
+  const cols = placements.length;
   const rows = maxDepth + 1;
   const width = PAD * 2 + cols * NODE_W + Math.max(0, cols - 1) * COL_GAP;
   const height = PAD * 2 + rows * NODE_H + Math.max(0, rows - 1) * ROW_GAP;
-  return { placements, width, height };
+  return { layout: { placements, width, height } };
 }
 
 function colX(col: number): number {
@@ -292,7 +311,7 @@ function MerkTreeSVG({
         const { primary, secondary } = nodeLabels(p.node);
         const x = colX(p.col);
         const y = rowY(p.depth);
-        const op = p.node.op!;
+        const op = p.node.op;
         const childLayer = p.node.kind === 'subtree' && op.key ? childrenMap.get(op.key) : undefined;
         const subtreeOpen = childLayer ? expandedSubtrees.has(op.key!) : false;
         const clickable = !!childLayer;
@@ -374,9 +393,28 @@ function MerkTreeSVG({
 
 /* ----- Layer + nesting ----------------------------------------------- */
 
+function TreeIssues({ issues }: { issues: string[] }) {
+  if (issues.length === 0) return null;
+  return (
+    <Box role="note" px={3} py={2} bg="rgba(210,153,34,0.08)" borderBottom="1px solid" borderColor="#30363d">
+      <Text fontSize="2xs" color="orange.200" fontWeight="600">
+        Incomplete or malformed tree — showing what could be reconstructed.
+      </Text>
+      <VStack as="ul" align="stretch" spacing={0.5} mt={1} pl={4}>
+        {issues.slice(0, 8).map((issue, i) => (
+          <Text as="li" key={i} fontSize="2xs" color="gray.400" lineHeight="1.5">{issue}</Text>
+        ))}
+        {issues.length > 8 ? (
+          <Text as="li" fontSize="2xs" color="gray.500">{issues.length - 8} more…</Text>
+        ) : null}
+      </VStack>
+    </Box>
+  );
+}
+
 function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpand?: boolean }) {
   const tree = useMemo(() => buildLayerTree(layer), [layer]);
-  const layout = useMemo(() => (tree ? computeLayout(tree) : null), [tree]);
+  const layoutResult = useMemo(() => (tree.root ? computeLayout(tree.root) : null), [tree]);
   const [expanded, setExpanded] = useState<Set<string>>(
     () => (autoExpand ? new Set(layer.children.keys()) : new Set()),
   );
@@ -389,16 +427,13 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
     });
   };
 
-  if (!layout) {
-    return <Text fontSize="2xs" color="gray.500">Could not reconstruct this layer&apos;s tree.</Text>;
-  }
-
   // For each expanded subtree, find the matching nested layer to render.
   const expandedChildren: Array<{ key: string; child: ParsedLayer }> = [];
   for (const key of expanded) {
     const child = layer.children.get(key);
     if (child) expandedChildren.push({ key, child });
   }
+  const nestingCapped = layer.depth + 1 >= MAX_LAYER_NESTING && expandedChildren.length > 0;
 
   return (
     <VStack align="stretch" spacing={4}>
@@ -426,31 +461,51 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
             </Text>
           ) : null}
         </HStack>
+        <TreeIssues issues={tree.issues} />
         {layer.decodedParentKey?.description ? (
           <Text fontSize="2xs" color="gray.500" px={3} pt={2} lineHeight="1.5">
             {layer.decodedParentKey.description}
           </Text>
         ) : null}
         <Box px={3} py={3}>
-          <MerkTreeSVG
-            layout={layout}
-            childrenMap={layer.children}
-            expandedSubtrees={expanded}
-            onToggleSubtree={toggle}
-          />
+          {layer.proofKind ? (
+            <Text fontSize="2xs" color="gray.500">
+              This layer uses a {layer.proofKind} proof, which is not drawn as a merk tree. See the raw parser output.
+            </Text>
+          ) : !layoutResult ? (
+            <Text fontSize="2xs" color="gray.500">Could not reconstruct this layer&apos;s tree.</Text>
+          ) : 'tooLarge' in layoutResult ? (
+            <Text fontSize="2xs" color="gray.500">
+              This layer&apos;s tree is too large to draw (more than {layoutResult.tooLarge.depth > MAX_DRAWN_DEPTH ? `${MAX_DRAWN_DEPTH} levels deep` : `${MAX_DRAWN_NODES} nodes`}).
+              A merk tree from a well-formed proof is balanced and much smaller. See the raw parser output.
+            </Text>
+          ) : (
+            <MerkTreeSVG
+              layout={layoutResult.layout}
+              childrenMap={layer.children}
+              expandedSubtrees={expanded}
+              onToggleSubtree={toggle}
+            />
+          )}
         </Box>
       </Box>
 
-      {expandedChildren.map(({ key, child }) => (
-        <Box key={key} ml={6}>
-          {/* Cascade auto-expand through every layer so the user sees the
-              actual data (TARGET nodes) without having to click DESCEND
-              through each navigation layer. Matches the auto-parse principle:
-              show the proof end-to-end by default; user can collapse what
-              they don't want. */}
-          <LayerPanel layer={child} autoExpand />
-        </Box>
-      ))}
+      {nestingCapped ? (
+        <Text fontSize="2xs" color="orange.200" ml={6}>
+          Layers nested deeper than {MAX_LAYER_NESTING} are not drawn. See the raw parser output.
+        </Text>
+      ) : (
+        expandedChildren.map(({ key, child }) => (
+          <Box key={key} ml={6}>
+            {/* Cascade auto-expand through every layer so the user sees the
+                actual data (TARGET nodes) without having to click DESCEND
+                through each navigation layer. Matches the auto-parse principle:
+                show the proof end-to-end by default; user can collapse what
+                they don't want. */}
+            <LayerPanel layer={child} autoExpand />
+          </Box>
+        ))
+      )}
     </VStack>
   );
 }
@@ -459,6 +514,10 @@ function LayerPanel({ layer, autoExpand = true }: { layer: ParsedLayer; autoExpa
 
 export function ProofTreeView({ text }: { text: string }) {
   const root = useMemo(() => parseProofTree(text), [text]);
+  const damagedLayers = useMemo(
+    () => (root ? flattenLayers(root).filter((layer) => buildLayerTree(layer).issues.length > 0).length : 0),
+    [root],
+  );
   if (!root) return null;
 
   return (
@@ -470,6 +529,12 @@ export function ProofTreeView({ text }: { text: string }) {
         <Text as="span" color="#1f6feb" fontWeight="600">DESCEND</Text> = subtree ref (click to expand the nested layer),{' '}
         <Text as="span" color="gray.300" fontWeight="600">INTERNAL</Text>/<Text as="span" color="#9aa4ac" fontWeight="600">OPAQUE</Text> = sibling hashes needed for verification.
       </Text>
+      {damagedLayers > 0 ? (
+        <Text role="status" fontSize="xs" color="orange.200" mb={3} lineHeight="1.6">
+          {damagedLayers === 1 ? '1 layer' : `${damagedLayers} layers`} could not be fully reconstructed from
+          the parser output; affected layers are marked below. The SDK verifies proofs independently of this view.
+        </Text>
+      ) : null}
       <LayerPanel layer={root} />
     </Box>
   );

@@ -1,0 +1,152 @@
+GroveDBProofV1 {
+  LayerProof {
+    proof: Merk(
+      0: Push(Hash(HASH[c4168dfb78e5a8a23972d01ba37287f356f946ce36d657bb3dfa75fa1178d457]))
+      1: Push(KVValueHash(@, Tree(5bb4077299c35f3d25823bac24779abe40e3e0ff4d76104b5b6a074687142a48), HASH[c0a59dd4012ec711a621b1fc9ca12e6dee753f173d2a4484cd34c35a4c724caf]))
+      2: Parent
+      3: Push(Hash(HASH[4aaf2238fe316d56c7dddcae2aef5fc8059007e8baefa570d8ee5518a6a8516a]))
+      4: Child)
+    lower_layers: {
+      @ => {
+        LayerProof {
+          proof: Merk(
+            0: Push(Hash(HASH[f37ef2200a6a7ea32d223914690650e198de1a19d2bfc8ee74e2c5d84eb47d40]))
+            1: Push(KVHash(HASH[99e81e94d648eb7e24a274205b8a5b3591f7e6fca64424b6a41da17d0400e11d]))
+            2: Parent
+            3: Push(Hash(HASH[bf636b947546796d0c2ed55d92efd1b7b0d7a952d7137de396939bf9c375d5ed]))
+            4: Push(KVHash(HASH[8896ff98d70d8847e5acc01ea72f037d3893d11b158d610b7c938c92fb89377d]))
+            5: Parent
+            6: Push(Hash(HASH[4aaa85956c335644f887706a52aaaae3b29f78e7b4e724a03f10e94ce7d88524]))
+            7: Push(KVHash(HASH[c6981bf539e6fbb154c946a45da68737a91762549229257c62d8e8b5357e9b47]))
+            8: Parent
+            9: Push(Hash(HASH[a23ab24a36cd7ae3d728c8f3a2e9c8cb4d30528056fa005160c17eed83d08101]))
+            10: Push(KVValueHash(0xe668c659af66aee1e72c186dde7b5b7e0a1d712a09c40d5721f622bf53c53155, Tree(01), HASH[661f7f5fd4fd63e8ec50e335dedc47044db5bf1041eddc20bcff4a3d2befdd06]))
+            11: Parent
+            12: Push(Hash(HASH[1502218008cab6e853e74fbd8413507261c12fb4cdfb9457c8d4e974640fdd55]))
+            13: Child
+            14: Child
+            15: Child
+            16: Child)
+          lower_layers: {
+            0xe668c659af66aee1e72c186dde7b5b7e0a1d712a09c40d5721f622bf53c53155 => {
+              LayerProof {
+                proof: Merk(
+                  0: Push(Hash(HASH[b1e20029a16629367dc30b6832c6c46cd361f64b665c627917514619f3d82610]))
+                  1: Push(KVValueHash(0x01, Tree(7072656f72646572), HASH[3038d2bbc8b8d4a3e7f2520b66a1e6d8021cc4b5a379fa9d251158916a525af0]))
+                  2: Parent
+                  3: Push(Hash(HASH[8d689406f10166694bb9f00bafc3bf705d118dac40f81df125244fa0d2969ab5]))
+                  4: Child)
+                lower_layers: {
+                  0x01 => {
+                    LayerProof {
+                      proof: Merk(
+                        0: Push(KVValueHash(domain, Tree(6e6f726d616c697a6564506172656e74446f6d61696e4e616d65), HASH[055f91c247ea377565ab793c6c1bd8748b021f5f98f5ebd7069a9e35fae67d66]))
+                        1: Push(KVHash(HASH[0378b1a5b551ff1f8cac458a9e226821de86ebc1741bf8c10946c4e6212d8d8f]))
+                        2: Parent)
+                      lower_layers: {
+                        domain => {
+                          LayerProof {
+                            proof: Merk(
+                              0: Push(Hash(HASH[c1c704f0bf1bf0ff3a4f6fb872569d40df346442f5331cade0617dd0daefb6e0]))
+                              1: Push(KVValueHash(normalizedParentDomainName, Tree(00), HASH[c0972050e1be8dc2bd012ad6eb8cb18429469225fc989b7b1d26a24a70b12c2c]))
+                              2: Parent
+                              3: Push(Hash(HASH[f03d52675c96a79ce595502aca1cc36706bc0fa9e2c204d8edda8db1e7bafd00]))
+                              4: Child)
+                            lower_layers: {
+                              normalizedParentDomainName => {
+                                LayerProof {
+                                  proof: Merk(
+                                    0: Push(KVHash(HASH[4c4eed41aeffef136bc3d8ae1757a25002bfe220bb5257d28836d187e3a065b2]))
+                                    1: Push(KVValueHash(dash, Tree(6e6f726d616c697a65644c6162656c), HASH[b39ec1b458a5231a119552580d826f2822ab0c898192e34df17f3bb04c52b1a6]))
+                                    2: Child)
+                                  lower_layers: {
+                                    dash => {
+                                      LayerProof {
+                                        proof: Merk(
+                                          0: Push(KVValueHash(normalizedLabel, Tree(7231306e2d323032342d30392d30342d73646b76342d322d30), HASH[4ef314bb8e81d26ac2144c2e5866a5839d46e1e65b21f160e5939caa7baaa63b])))
+                                        lower_layers: {
+                                          normalizedLabel => {
+                                            LayerProof {
+                                              proof: Merk(
+                                                0: Push(KVValueHash(000, Tree(00), HASH[e0b16c523c9767f971bca1fcaed3c3a0e3ae3ddee784491d8442d4be222d3a97]))
+                                                1: Push(KVValueHash(0000, Tree(00), HASH[f23a1aa4b269d9443424c916de3620850ec07411f4490c73fdcdf4d85f08804d]))
+                                                2: Parent
+                                                3: Push(KVValueHash(0000-0000-0000-00001, Tree(00), HASH[ad1bbafedac53f97504fb5b316d20e0dc4bcfc1d4b02be90a3d61e7288299825]))
+                                                4: Push(Hash(HASH[8c79891338643c5dfa424f160b3aa3189888a134de12dd2be69318d6e107cd0d]))
+                                                5: Child
+                                                6: Child
+                                                7: Push(KVHash(HASH[811953b63184e639c86b6a0b3e70bba745b99c1288ac0a5f70c21f5223b95330]))
+                                                8: Parent
+                                                9: Push(Hash(HASH[99a2d60c7ff01257180e253dc5a6891c97bcf377416365534290a8ebe9845208]))
+                                                10: Child
+                                                11: Push(KVHash(HASH[a12686c6b4a1e19107b5417844cc8d17cfa9a7003792d48ec7fb6438821a09e2]))
+                                                12: Parent
+                                                13: Push(Hash(HASH[cb90b3f5d418cd0d2b6ab8954468db195204e2b44d1e917c92a8f79e925244c5]))
+                                                14: Child
+                                                15: Push(KVHash(HASH[6604561a4d0b01683a45343c908e24dd767bc5776218a8701009e27964378393]))
+                                                16: Parent
+                                                17: Push(Hash(HASH[168aa33fcf3b9d26c481664ffd75811631659d5afe33dd088b9e1aae72103fb9]))
+                                                18: Child
+                                                19: Push(KVHash(HASH[eda87f3002736cd1416fdd1dc17109c65d2e28c2534252174b36cc033dc09b54]))
+                                                20: Parent
+                                                21: Push(Hash(HASH[3e0226b232c9268b3dbc0c9b69c46f2dae7fef9756d034b640fc4ef6c857117e]))
+                                                22: Child
+                                                23: Push(KVHash(HASH[d87dfb2a94e8388e6bdbc1c8197b3b23f115a998764eb32a41e53388439ae841]))
+                                                24: Parent
+                                                25: Push(Hash(HASH[cb33820700f133408849e2667cdb27cd5726393b65dd6a9263102b81312e001a]))
+                                                26: Child
+                                                27: Push(KVHash(HASH[3902674761ba7eca4ceb6162781cb6a637e9f20f0b4fcc87e62555cc421855d1]))
+                                                28: Parent
+                                                29: Push(Hash(HASH[2b6b91e92f69696b52ad3bd54eb33c0b95c8fef3047591105484d353dc7e18b4]))
+                                                30: Child
+                                                31: Push(KVHash(HASH[2a4737b106e115e9d35c2ed2b93faa00b96f3ac7592747d25cc57f075f2ed76a]))
+                                                32: Parent
+                                                33: Push(Hash(HASH[b0668e60d5771515635f87c2438314ee25269962a7d325cc86166383660d674f]))
+                                                34: Child
+                                                35: Push(KVHash(HASH[203b6163ccb21324bd0761a05ee102fb695b80e60ea660d75e5f7bb5f07f41ac]))
+                                                36: Parent
+                                                37: Push(Hash(HASH[53474e9bef064db35c7c32d46c569f921a6c72650f3a14ffcacdf3ea55d49db4]))
+                                                38: Child)
+                                              lower_layers: {
+                                                000 => {
+                                                  LayerProof {
+                                                    proof: Merk(
+                                                      0: Push(KVRefValueHash(0x00, Item(0x00bdd783e9211d05a72516aeeedf72bc3c08860cc8fdb0d00073bdcded406348f8818757877c9f19221f25214bcbf7abcd093721301af9ce297d6d6f708ccbc3300100070000019571462745000001957146274500000195714627450003303030033030300104646173680464617368002101818757877c9f19221f25214bcbf7abcd093721301af9ce297d6d6f708ccbc3300100), HASH[338d1d1e775def0cf8e416c229f0b72c3cd95c42747a9148a14d27b00f9a15c3])))
+                                                  }
+                                                }
+                                                0000 => {
+                                                  LayerProof {
+                                                    proof: Merk(
+                                                      0: Push(KVRefValueHash(0x00, Item(0x0002b57139fd606dcd664f23f6d32603c08f5d9398709fb6aa4a897176ffa333367e08bf330c11cfa48a57e9478e9ef12b45e33f5023cdcb3b8495d2039630162b0100070000019bc6b26cb20000019bc6b26cb20000019bc6b26cb2000430303030043030303001046461736804646173680021017e08bf330c11cfa48a57e9478e9ef12b45e33f5023cdcb3b8495d2039630162b0100), HASH[c7a1e49ec629dfdbb10b302e80ab11b2320503bacf01d1d5938b38f9c543a981])))
+                                                  }
+                                                }
+                                                0000-0000-0000-00001 => {
+                                                  LayerProof {
+                                                    proof: Merk(
+                                                      0: Push(KVRefValueHash(0x00, Item(0x0086fc3fd89cc9107e620819d2b50fceae6f45e5b9877cb0702faa12ecb2a0b41e1f15126ca685c5bbaf4d4a6b7ebe5ad3253abb811ab137525af4b13b02a39b1c0100070000019190007e5b0000019190007e5b0000019190007e5b0014303030302d303030302d303030302d303030303114303030302d303030302d303030302d303030303101046461736804646173680021011f15126ca685c5bbaf4d4a6b7ebe5ad3253abb811ab137525af4b13b02a39b1c0100, flags: [2, 31, 21, 18, 108, 166, 133, 197, 187, 175, 77, 74, 107, 126, 190, 90, 211, 37, 58, 187, 129, 26, 177, 55, 82, 90, 244, 177, 59, 2, 163, 155, 28, 3, 161]), HASH[85edcecb5d28851c371bc2be5f2b38d931ff0f0eb63b4885aa827c528fdd7abc])))
+                                                  }
+                                                }
+                                              }
+                                            }
+                                          }
+                                        }
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

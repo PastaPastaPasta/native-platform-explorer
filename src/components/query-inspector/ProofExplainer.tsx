@@ -2,182 +2,14 @@
 
 import { Box, HStack, Text, VStack } from '@chakra-ui/react';
 import { useMemo } from 'react';
-import { contextLabel, decodeGroveKey, type DecodedKey, type GroveContext } from './grovedb-schema';
-
-interface LayerStats {
-  depth: number;
-  /** parent key that opens this layer, hex-encoded (empty for the root layer) */
-  parentKey: string;
-  /** Decoded form of `parentKey`, resolved against the parent layer's context. */
-  decodedParentKey?: DecodedKey;
-  /** What GroveDB context this layer IS — used to decode the *next* layer's parent key. */
-  context: GroveContext;
-  kv: number;
-  kvValueHash: number;
-  kvHash: number;
-  hash: number;
-  combine: number;
-  /** A few sample data keys at this layer, for orientation. */
-  sampleKeys: string[];
-}
-
-interface ProofStats {
-  layers: LayerStats[];
-  totals: {
-    kv: number;
-    kvValueHash: number;
-    kvHash: number;
-    hash: number;
-    combine: number;
-  };
-}
-
-/**
- * Parse the parsed-proof-tree text emitted by grovedb-proof-parser
- * (Rust Display impl) and extract per-layer statistics. The format we parse:
- *
- *   GroveDBProofV0 {
- *     LayerProof {
- *       merk_proof:
- *         0: Push(KV(0x..., Item(0x..)))
- *         1: Push(KVHash(HASH[...]))
- *         2: Parent
- *         ...
- *       lower_layers: {
- *         0x.. => {
- *           LayerProof { ... }
- *         }
- *       }
- *     }
- *   }
- *
- * We don't need a full parser — line-level pattern matching with brace
- * tracking is enough to count ops and discover nested layers.
- */
-function parseProofStats(text: string): ProofStats {
-  const lines = text.split('\n');
-  // Track ALL open `{` blocks, tagging which ones are LayerProof blocks. A
-  // single `}` line could close any of: the outer GroveDBProofV0 wrapper,
-  // a `lower_layers: {` block, a `<key> => {` opener, or an actual LayerProof.
-  // Popping the layer stack on every `}` (as a previous implementation did)
-  // misattributes ops to the wrong layer in multi-layer proofs.
-  const blockStack: Array<{ isLayer: boolean; layer?: LayerStats }> = [];
-  const all: LayerStats[] = [];
-
-  const makeLayer = (
-    depth: number,
-    parentKey: string,
-    decodedParentKey: DecodedKey | undefined,
-    context: GroveContext,
-  ): LayerStats => ({
-    depth,
-    parentKey,
-    decodedParentKey,
-    context,
-    kv: 0,
-    kvValueHash: 0,
-    kvHash: 0,
-    hash: 0,
-    combine: 0,
-    sampleKeys: [],
-  });
-
-  const currentLayer = (): LayerStats | undefined => {
-    for (let i = blockStack.length - 1; i >= 0; i--) {
-      const frame = blockStack[i]!;
-      if (frame.isLayer) return frame.layer;
-    }
-    return undefined;
-  };
-
-  let nextParentKey = '';
-
-  for (const raw of lines) {
-    const line = raw.trim();
-
-    if (line.startsWith('LayerProof {')) {
-      // Determine this layer's context based on the parent layer's context +
-      // the key that opened this block. Layer 1 has no parent and is always
-      // the root tree itself.
-      const parentLayer = currentLayer();
-      let context: GroveContext;
-      let decoded: DecodedKey | undefined;
-      if (!parentLayer) {
-        context = 'root';
-      } else {
-        decoded = decodeGroveKey(nextParentKey, parentLayer.context);
-        context = decoded.nextContext ?? 'unknown';
-      }
-      const layer = makeLayer(all.length, nextParentKey, decoded, context);
-      blockStack.push({ isLayer: true, layer });
-      all.push(layer);
-      nextParentKey = '';
-      continue;
-    }
-
-    if (line === '}') {
-      blockStack.pop();
-      continue;
-    }
-
-    // `<key> => {` opens a non-layer block; remember the key for the next
-    // LayerProof we open inside it. The grovedb parser emits keys as either
-    // a single printable ASCII char (e.g. `@` for 0x40, `c` for the Votes
-    // ContestedResource tree), `0x...` hex, or `x` placeholder for unprintable
-    // single bytes — so match any non-whitespace run before `=>`.
-    const childMatch = line.match(/^(\S+)\s*=>\s*\{/);
-    if (childMatch) {
-      nextParentKey = childMatch[1] ?? '';
-      blockStack.push({ isLayer: false });
-      continue;
-    }
-
-    // Any other line that opens a `{` block (GroveDBProofV0, lower_layers,
-    // etc.) — push a non-layer frame so the matching `}` doesn't pop a real
-    // layer.
-    if (line.endsWith('{')) {
-      blockStack.push({ isLayer: false });
-      continue;
-    }
-
-    const cur = currentLayer();
-    if (!cur) continue;
-
-    if (line.includes('Push(KV(')) {
-      cur.kv++;
-      // Extract the key (hex string between Push(KV( and ,).
-      const m = line.match(/Push\(KV\(([^,]+),/);
-      if (m && cur.sampleKeys.length < 3) cur.sampleKeys.push(m[1]!);
-    } else if (line.includes('Push(KVValueHash(') || line.includes('Push(KVRefValueHash(')) {
-      cur.kvValueHash++;
-    } else if (line.includes('Push(KVDigest(') || line.includes('Push(KVHash(')) {
-      cur.kvHash++;
-    } else if (line.includes('Push(Hash(')) {
-      cur.hash++;
-    } else if (line === 'Parent' || line === 'Child' || line === 'ParentInverted' || line === 'ChildInverted') {
-      cur.combine++;
-    }
-  }
-
-  const totals = all.reduce(
-    (acc, l) => ({
-      kv: acc.kv + l.kv,
-      kvValueHash: acc.kvValueHash + l.kvValueHash,
-      kvHash: acc.kvHash + l.kvHash,
-      hash: acc.hash + l.hash,
-      combine: acc.combine + l.combine,
-    }),
-    { kv: 0, kvValueHash: 0, kvHash: 0, hash: 0, combine: 0 },
-  );
-
-  return { layers: all, totals };
-}
+import { contextLabel } from './grovedb-schema';
+import { parseProofTree, summarizeProof, type ProofLayerSummary } from './parse-proof-tree';
 
 function plural(count: number, singular: string, pluralForm = singular + 's'): string {
   return `${count} ${count === 1 ? singular : pluralForm}`;
 }
 
-function layerSummary(layer: LayerStats): string {
+function layerSummary(layer: ProofLayerSummary): string {
   const siblings = layer.kvHash + layer.hash;
   const parts: string[] = [];
   if (layer.kv > 0) parts.push(plural(layer.kv, 'data item'));
@@ -227,11 +59,12 @@ function LegendRow({ symbol, name, body }: { symbol: string; name: string; body:
 }
 
 export function ProofExplainer({ text }: { text: string }) {
-  const stats = useMemo(() => parseProofStats(text), [text]);
+  // Statistics come from the same parse the tree view draws, so PushInverted
+  // ops, printable keys and the V0/V1 layouts are counted consistently.
+  const stats = useMemo(() => summarizeProof(parseProofTree(text)), [text]);
   if (stats.layers.length === 0) return null;
 
   const { totals, layers } = stats;
-  const sigItems = totals.kv + totals.kvValueHash;
   const siblings = totals.kvHash + totals.hash;
 
   return (
@@ -253,8 +86,13 @@ export function ProofExplainer({ text }: { text: string }) {
         />
         <Stat
           label="data items"
-          value={sigItems}
+          value={totals.kv}
           hint="Full key+value pairs this proof attests to. These are what the query actually returned."
+        />
+        <Stat
+          label="subtree refs"
+          value={totals.kvValueHash}
+          hint="Nodes holding a nested tree. The proof descends through them into the next layer."
         />
         <Stat
           label="sibling hashes"
@@ -273,16 +111,16 @@ export function ProofExplainer({ text }: { text: string }) {
           Layers (outer → inner)
         </Text>
         <VStack align="stretch" spacing={2}>
-          {layers.map((layer, i) => (
+          {layers.map(({ layer, ...counts }, i) => (
             <Box
               key={i}
               pl={2}
               borderLeft="2px solid"
-              borderColor={layer.kv > 0 ? 'brand.normal' : 'gray.700'}
+              borderColor={counts.kv > 0 ? 'brand.normal' : 'gray.700'}
             >
               <HStack spacing={2} align="baseline" flexWrap="wrap">
                 <Text fontSize="xs" color="gray.200" fontWeight="600">
-                  Layer {i + 1}
+                  Layer {layer.layerIndex}
                 </Text>
                 <Text fontSize="2xs" color="brand.light" fontWeight="600">
                   {contextLabel(layer.context)}
@@ -306,11 +144,16 @@ export function ProofExplainer({ text }: { text: string }) {
                 </Text>
               ) : null}
               <Text fontSize="2xs" color="gray.400" mt={0.5}>
-                {layerSummary(layer)}
+                {layerSummary({ layer, ...counts })}
               </Text>
-              {layer.sampleKeys.length > 0 ? (
+              {counts.issues.length > 0 ? (
+                <Text fontSize="2xs" color="orange.200" mt={0.5}>
+                  Tree incomplete or malformed ({plural(counts.issues.length, 'issue')}).
+                </Text>
+              ) : null}
+              {counts.sampleKeys.length > 0 ? (
                 <Text fontSize="2xs" color="gray.500" mt={0.5} fontFamily="mono" lineHeight="1.5" wordBreak="break-all">
-                  e.g. {layer.sampleKeys.map((k) => k.length > 22 ? k.slice(0, 10) + '…' + k.slice(-8) : k).join('  ')}
+                  e.g. {counts.sampleKeys.map((k) => k.length > 22 ? k.slice(0, 10) + '…' + k.slice(-8) : k).join('  ')}
                 </Text>
               ) : null}
             </Box>
@@ -326,7 +169,7 @@ export function ProofExplainer({ text }: { text: string }) {
           <LegendRow
             symbol="Push(KV(key, value))"
             name="data item"
-            body="A full key/value pair the proof attests to. These are the values the query returned (or proves absent)."
+            body="A full key/value pair the proof attests to. These are the values the query returned (or proves absent). KVRefValueHash is the same for a reference, carrying the value it resolves to."
           />
           <LegendRow
             symbol="Push(KVValueHash(…))"
@@ -347,6 +190,11 @@ export function ProofExplainer({ text }: { text: string }) {
             symbol="Parent / Child"
             name="stack-combine op"
             body="Pop two items off the stack and combine them into a parent-child pair, hashing them together. This is how the verifier rebuilds the tree shape."
+          />
+          <LegendRow
+            symbol="PushInverted / …Inverted"
+            name="descending order"
+            body="The same operations for a proof walked right to left, as produced by ORDER BY … DESC queries. The Inverted combine ops attach children on the opposite side."
           />
           <LegendRow
             symbol="lower_layers: { key => … }"

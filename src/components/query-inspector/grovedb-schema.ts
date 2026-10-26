@@ -8,6 +8,8 @@
  *   - packages/rs-drive/src/drive/votes/paths.rs (Vote tree chars)
  *
  * Keys are stored here as lowercase hex byte values (single byte, no 0x prefix).
+ * The proof parser prints keys as text when every byte is in
+ * `[A-Za-z0-9_\-/\\[\]@]` and as `0x…` hex otherwise; see `normalizeKey`.
  */
 
 export type GroveContext =
@@ -23,6 +25,9 @@ export type GroveContext =
   | 'contract-documents'
   | 'document-type'
   | 'document-primary'
+  | 'index-property'
+  | 'index-value'
+  | 'index-references'
   | 'unknown';
 
 interface KeyInfo {
@@ -42,8 +47,16 @@ interface KeyInfo {
  *   data-contract  → 32-byte contract ID
  *   contract-id    → 0x01 = documents tree
  *   contract-documents → document type name (variable-length UTF-8 string)
- *   document-type  → 0x00 = primary keys tree
+ *   document-type  → 0x00 = primary keys tree, or the first property name of an index
  *   document-primary → 32-byte document ID
+ *
+ * Index trees hang off the document-type tree, alternating property names and
+ * values: [..., docType, prop1, value1, prop2, value2, 0x00]. The 0x00 key
+ * under the last value terminates the index: a reference for unique indexes,
+ * or a tree of references keyed by document ID.
+ *   index-property → an encoded property value
+ *   index-value    → the next index property name, or 0x00 = index terminator
+ *   index-references → 32-byte document ID
  */
 
 /** Indices into the root tree (single byte). */
@@ -93,9 +106,14 @@ const CONTRACT_ID_TREE: Record<string, KeyInfo> = {
   '01': { name: 'Documents tree', nextContext: 'contract-documents', description: 'Holds one subtree per document type defined by this contract.' },
 };
 
-/** Keys inside the document-type subtree (after a 0x00 byte). */
+/** Keys inside the document-type subtree; any other key names an index property. */
 const DOCUMENT_TYPE_TREE: Record<string, KeyInfo> = {
   '00': { name: 'Primary keys tree', nextContext: 'document-primary', description: 'Holds the document records keyed by their 32-byte primary key (document ID).' },
+};
+
+/** Keys inside an index value subtree; any other key names the next index property. */
+const INDEX_VALUE_TREE: Record<string, KeyInfo> = {
+  '00': { name: 'Index terminator', nextContext: 'index-references', description: 'Ends the index path: a reference to the document for unique indexes, or references keyed by document ID.' },
 };
 
 /** Votes tree uses ASCII character bytes. */
@@ -107,31 +125,23 @@ const VOTES_TREE: Record<string, KeyInfo> = {
   '70': { name: "'p' ActivePolls", description: 'Currently active vote polls.' },
 };
 
+/** Characters grovedb-query's `hex_to_ascii` prints as plain text. A key made
+ *  only of these is printed verbatim (e.g. `@`, `domain`, `dash`); any other
+ *  key is printed as `0x` + lowercase hex. An empty key prints as nothing. */
+const PRINTABLE_KEY = /^[A-Za-z0-9_\-/\\[\]@]*$/;
+
 /** Normalize a key emitted by the Rust parser to lowercase hex bytes.
- *  Returns null when the key is non-decodable.
+ *  Returns null when the text cannot be a parser-printed key.
  *
- *  The grovedb proof parser emits keys in three forms:
- *    - `0xNN...` — hex with prefix (multi-byte values, or single bytes that
- *      aren't printable ASCII). The DataContractDocuments root key `0x40` for
- *      example is emitted as the literal char `@` (its ASCII representation),
- *      while small non-printable bytes like 0x01 are emitted as `0x01`.
- *    - A single printable ASCII character — the byte value of that char.
- *      Used for the Votes tree chars ('c', 'd', 'e', 'i', 'p'), the
- *      DataContractDocuments root key (`@` = 0x40), etc.
- *    - `x` — placeholder for any unprintable single byte the parser couldn't
- *      render. We can't decode these. */
-function normalizeKey(raw: string): string | null {
-  if (raw === 'x') return null;
-  if (raw.startsWith('0x')) {
-    const hex = raw.slice(2);
-    return hex.length > 0 && /^[0-9a-fA-F]+$/.test(hex) ? hex.toLowerCase() : null;
-  }
-  // Single printable ASCII character — convert to its byte value.
-  if (raw.length === 1) {
-    const code = raw.charCodeAt(0);
-    if (code >= 0x20 && code < 0x7f) return code.toString(16).padStart(2, '0');
-  }
-  return null;
+ *  `0x` followed by an even number of hex digits is read as hex. A printable
+ *  key that happens to look like that (the 4-byte text `0x40`) is
+ *  indistinguishable in the printed form; hex is the likelier reading. */
+function normalizeKey(raw: string): { hex: string; printedAsHex: boolean } | null {
+  if (/^0x(?:[0-9a-fA-F]{2})+$/.test(raw)) return { hex: raw.slice(2).toLowerCase(), printedAsHex: true };
+  if (!PRINTABLE_KEY.test(raw)) return null;
+  let hex = '';
+  for (let i = 0; i < raw.length; i++) hex += raw.charCodeAt(i).toString(16).padStart(2, '0');
+  return { hex, printedAsHex: false };
 }
 
 export interface DecodedKey {
@@ -154,6 +164,8 @@ const IDENTIFIER_BY_CONTEXT: Partial<Record<GroveContext, { name: string; nextCo
   'data-contract': { name: '32-byte contract ID', nextContext: 'contract-id' },
   identity: { name: '32-byte identity ID' },
   'document-primary': { name: '32-byte document ID' },
+  'index-references': { name: '32-byte document ID' },
+  'index-property': { name: '32-byte indexed value', nextContext: 'index-value' },
 };
 
 /** Single-byte key tables, keyed by context. Contexts without a table have no decodable keys. */
@@ -165,11 +177,12 @@ const TABLE_BY_CONTEXT: Partial<Record<GroveContext, Record<string, KeyInfo>>> =
   votes: VOTES_TREE,
   'contract-id': CONTRACT_ID_TREE,
   'document-type': DOCUMENT_TYPE_TREE,
+  'index-value': INDEX_VALUE_TREE,
 };
 
 /** Try to decode a hex string as an ASCII identifier (e.g. document type name). */
 function asciiFromHex(hex: string): string | null {
-  if (hex.length % 2 !== 0) return null;
+  if (hex.length === 0 || hex.length % 2 !== 0) return null;
   let out = '';
   for (let i = 0; i < hex.length; i += 2) {
     const b = parseInt(hex.slice(i, i + 2), 16);
@@ -182,45 +195,59 @@ function asciiFromHex(hex: string): string | null {
 export function decodeGroveKey(raw: string, context: GroveContext): DecodedKey {
   const norm = normalizeKey(raw);
 
-  // 32-byte identifiers (identity IDs, contract IDs, token IDs).
-  if (norm && norm.length === 64) {
-    // 'root' shouldn't normally happen — root keys are single bytes.
+  // 32-byte identifiers (identity IDs, contract IDs, token IDs). Random IDs
+  // essentially never consist only of printable key characters, so require
+  // the hex form; a 32-character label or type name stays text.
+  if (norm?.printedAsHex && norm.hex.length === 64) {
     const info = IDENTIFIER_BY_CONTEXT[context] ?? { name: '32-byte identifier' };
     return { raw, name: info.name, nextContext: info.nextContext, isIdentifier: true };
   }
 
-  // Inside the documents subtree of a data contract, keys are UTF-8 document
-  // type names like "directPurchase" or "domain". They'll arrive as either a
-  // hex blob (`0x646972...`) or, if the parser rendered it as a single char,
-  // a printable string. Try to decode as ASCII.
-  if (context === 'contract-documents' && norm) {
-    const ascii = asciiFromHex(norm);
-    if (ascii && ascii.length > 1) {
-      return {
-        raw,
-        name: `'${ascii}' (document type)`,
-        nextContext: 'document-type',
-        description: `The "${ascii}" document type defined by this contract.`,
-        isIdentifier: false,
-      };
-    }
-  }
-
   if (!norm) return { raw, isIdentifier: false };
 
-  const table = TABLE_BY_CONTEXT[context];
-  if (!table) return { raw, isIdentifier: false };
+  const info = TABLE_BY_CONTEXT[context]?.[norm.hex];
+  if (info) {
+    return {
+      raw,
+      name: info.name,
+      description: info.description,
+      nextContext: info.nextContext,
+      isIdentifier: false,
+    };
+  }
 
-  const info = table[norm];
-  if (!info) return { raw, isIdentifier: false };
+  // Document type names and index property names are UTF-8 text such as
+  // "domain" or "normalizedLabel"; the parser usually prints them verbatim.
+  const ascii = asciiFromHex(norm.hex);
+  if (context === 'contract-documents' && ascii) {
+    return {
+      raw,
+      name: `'${ascii}' (document type)`,
+      nextContext: 'document-type',
+      description: `The "${ascii}" document type defined by this contract.`,
+      isIdentifier: false,
+    };
+  }
+  if ((context === 'document-type' || context === 'index-value') && ascii) {
+    return {
+      raw,
+      name: `'${ascii}' (index property)`,
+      nextContext: 'index-property',
+      description: `Index level for the "${ascii}" property; its keys are the indexed values.`,
+      isIdentifier: false,
+    };
+  }
+  if (context === 'index-property') {
+    return {
+      raw,
+      name: ascii ? `'${ascii}' (indexed value)` : 'indexed value',
+      nextContext: 'index-value',
+      description: 'An encoded property value. Documents with this value continue under it.',
+      isIdentifier: false,
+    };
+  }
 
-  return {
-    raw,
-    name: info.name,
-    description: info.description,
-    nextContext: info.nextContext,
-    isIdentifier: false,
-  };
+  return { raw, isIdentifier: false };
 }
 
 /** Human label for a context. */
@@ -238,6 +265,9 @@ export function contextLabel(c: GroveContext): string {
     case 'contract-documents': return 'documents-by-type subtree';
     case 'document-type': return 'per-document-type subtree';
     case 'document-primary': return 'document primary keys tree';
+    case 'index-property': return 'index property subtree';
+    case 'index-value': return 'index value subtree';
+    case 'index-references': return 'index references subtree';
     case 'unknown': return 'subtree';
   }
 }

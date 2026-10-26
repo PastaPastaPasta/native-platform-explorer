@@ -3,15 +3,27 @@
  *
  * Each LayerProof becomes a `ParsedLayer` with its ops captured in order and
  * its nested `lower_layers` linked as `children`. The renderer can then walk
- * the structure recursively and show each subtree where it belongs.
+ * the structure and show each subtree where it belongs.
+ *
+ * The parser prints two layouts (grovedb/src/operations/proof/mod.rs):
+ *
+ *   GroveDBProofV0                     GroveDBProofV1
+ *     LayerProof {                       LayerProof {
+ *       merk_proof:                        proof: Merk(
+ *         0: Push(KV(...))                   0: Push(KV(...))
+ *         1: Parent                          1: Parent)
+ *
+ * In V1 the `)` closing `Merk(` lands on the last op line, so op bodies are
+ * re-balanced before matching. Everything here is iterative: proofs come from
+ * the network and may be arbitrarily deep or malformed.
  */
 
 import { decodeGroveKey, type DecodedKey, type GroveContext } from './grovedb-schema';
 
 export type OpKind =
-  | 'kv'              // Push(KV(key, value)) — data item proven by the query
-  | 'kvValueHash'     // Push(KVValueHash(key, Tree(...), HASH)) — subtree ref
-  | 'kvRefValueHash'  // Push(KVRefValueHash(...)) — reference node variant
+  | 'kv'              // Push(KV(key, value)) / KVCount — data item proven by the query
+  | 'kvValueHash'     // Push(KVValueHash(key, value, HASH)) and the FeatureType variants
+  | 'kvRefValueHash'  // Push(KVRefValueHash(key, value, HASH)) — reference resolved to its value
   | 'kvDigest'        // Push(KVDigest(key, HASH)) — sibling (value omitted)
   | 'kvHash'          // Push(KVHash(HASH)) — sibling
   | 'hash'            // Push(Hash(HASH)) — deep sibling
@@ -19,16 +31,22 @@ export type OpKind =
 
 export interface OpNode {
   kind: OpKind;
-  /** Op index within the layer (matches the `0:`, `1:`, ... prefix in raw text). */
+  /** Op index printed by the parser (the `0:`, `1:`, ... prefix in raw text). */
   index: number;
   /** Original raw line, for fallback display. */
   raw: string;
-  /** For KV* ops, the key as the parser emitted it (printable char, 0x.., or `x`). */
+  /** Merk node variant as printed, e.g. `KVValueHashFeatureTypeWithChildHash`. */
+  variant?: string;
+  /** True for `PushInverted(...)` (descending proofs). */
+  inverted?: boolean;
+  /** For KV* ops, the key as the parser emitted it (printable text or `0x..` hex). */
   key?: string;
-  /** For Push(KV(...)), the value text (e.g. "Item(0x0b)", or a nested Tree). */
+  /** For KV / KVRefValueHash ops, the value text (e.g. "Item(0x0b)"). */
   value?: string;
-  /** For Push(KVValueHash(...)), the inner value descriptor (e.g. "Tree(01)", "SumTree(04e9, 12345)"). */
+  /** For KVValueHash* ops, the element descriptor (e.g. "Tree(01)", "SumTree(04e9, 12345)"). */
   treeValue?: string;
+  /** True when the op's element is a tree, i.e. it opens a nested layer. */
+  isTree?: boolean;
   /** For ops carrying a hash, the 32-byte hash as hex. */
   hash?: string;
   /** For combine ops, which kind. */
@@ -36,27 +54,40 @@ export interface OpNode {
 }
 
 export interface ParsedLayer {
-  /** 1-indexed layer number, assigned during a depth-first walk. */
+  /** 1-indexed layer number, assigned in depth-first order. */
   layerIndex: number;
+  /** Nesting depth; the root layer is 0. */
+  depth: number;
   /** Raw key that opened this layer (matches a key in the parent's `lower_layers`). Empty for root. */
   parentKey: string;
   /** Semantic decoding of `parentKey`. */
   decodedParentKey?: DecodedKey;
   /** GroveDB context for THIS layer (root | identity | tokens | ...). */
   context: GroveContext;
+  /** Proof encoding of this layer when it is not a Merk proof (e.g. `MMR`). */
+  proofKind?: string;
   /** All ops in order. */
   ops: OpNode[];
+  /** Op lines the parser printed but we could not interpret. */
+  issues: string[];
   /** Nested layers, keyed by the raw key that opens them. */
   children: Map<string, ParsedLayer>;
 }
 
 /** A node in the reconstructed binary merkle tree. */
 export interface TreeNode {
-  /** Source op that produced this leaf (undefined for synthetic internal nodes — never happens in practice; every node here comes from a Push op). */
-  op?: OpNode;
+  /** Source op that produced this node; every node comes from a Push op. */
+  op: OpNode;
   kind: 'kv' | 'subtree' | 'sibling';
   left?: TreeNode;
   right?: TreeNode;
+}
+
+export interface LayerTree {
+  /** The layer's root, or null when no node could be reconstructed. */
+  root: TreeNode | null;
+  /** Reasons the reconstruction is incomplete; empty for a well-formed layer. */
+  issues: string[];
 }
 
 type CombineOp = NonNullable<OpNode['combine']>;
@@ -73,18 +104,23 @@ const COMBINE_RULES: Record<CombineOp, { topIsParent: boolean; childGoesLeft: bo
   ChildInverted:  { topIsParent: false, childGoesLeft: true  },
 };
 
-function leafKind(op: OpNode): TreeNode['kind'] {
-  if (op.kind === 'kv') return 'kv';
-  if (op.kind === 'kvValueHash' || op.kind === 'kvRefValueHash') return 'subtree';
+/** Element descriptors that open a nested subtree (Tree, SumTree, CountTree, MmrTree, …). */
+const TREE_ELEMENT = /^\w*Tree\(/;
+
+export function leafKind(op: OpNode): TreeNode['kind'] {
+  if (op.kind === 'kv' || op.kind === 'kvRefValueHash') return 'kv';
+  if (op.kind === 'kvValueHash') return op.isTree ? 'subtree' : 'kv';
   return 'sibling';
 }
 
 /**
  * Reconstruct the binary merkle tree by replaying the layer's stack operations.
- * After running every op, a well-formed proof leaves exactly one node on the
- * stack — the layer's root. Returns null if the stack was empty or malformed.
+ * A well-formed proof leaves exactly one node on the stack — the layer's root.
+ * Anything else (underflow, a filled child slot, leftovers, unreadable ops) is
+ * reported in `issues`; merk's verifier would reject such a proof outright.
  */
-export function buildLayerTree(layer: ParsedLayer): TreeNode | null {
+export function buildLayerTree(layer: ParsedLayer): LayerTree {
+  const issues = [...layer.issues];
   const stack: TreeNode[] = [];
   for (const op of layer.ops) {
     if (op.kind !== 'combine') {
@@ -93,15 +129,7 @@ export function buildLayerTree(layer: ParsedLayer): TreeNode | null {
     }
     if (!op.combine) continue;
     if (stack.length < 2) {
-      // Malformed proof: combine op with <2 stack items. Merk treats this as
-      // a hard error; we're a read-only viewer, so warn and skip — but flag it
-      // so a developer staring at a half-built tree knows why.
-      if (typeof console !== 'undefined') {
-        console.warn(
-          `[proof-tree] stack underflow at op ${op.index} (${op.combine}); ` +
-          `proof may be malformed. Render will continue with partial tree.`,
-        );
-      }
+      issues.push(`Op ${op.index} (${op.combine}) needs two nodes but the stack holds ${stack.length}.`);
       continue;
     }
     const top = stack.pop()!;
@@ -109,11 +137,20 @@ export function buildLayerTree(layer: ParsedLayer): TreeNode | null {
     const rule = COMBINE_RULES[op.combine];
     const parent = rule.topIsParent ? top : below;
     const child = rule.topIsParent ? below : top;
-    if (rule.childGoesLeft) parent.left = child;
-    else parent.right = child;
+    const slot = rule.childGoesLeft ? 'left' : 'right';
+    if (parent[slot]) {
+      // Merk rejects attaching to an occupied slot; keep the first child.
+      issues.push(`Op ${op.index} (${op.combine}) attaches a ${slot} child to op ${parent.op.index}, which already has one.`);
+    } else {
+      parent[slot] = child;
+    }
     stack.push(parent);
   }
-  return stack[stack.length - 1] ?? null;
+  if (stack.length > 1) {
+    issues.push(`${stack.length} nodes were never combined into one tree; showing the last one.`);
+  }
+  if (layer.ops.length === 0 && !layer.proofKind) issues.push('This layer has no ops.');
+  return { root: stack[stack.length - 1] ?? null, issues };
 }
 
 /**
@@ -123,35 +160,20 @@ export function parseProofTree(text: string): ParsedLayer | null {
   // Strip CR so Windows line endings don't leak into op bodies.
   const lines = text.replace(/\r/g, '').split('\n');
 
-  // Each frame is either an open layer (with the under-construction layer) or
-  // a non-layer brace block (`lower_layers: {`, `<key> => {`, the outer
-  // wrapper, etc.). Brace tracking is symmetric — every `{` opens a frame,
-  // every `}` pops one.
-  const blockStack: Array<{ isLayer: boolean; layer?: ParsedLayer; parent?: ParsedLayer; parentKey?: string }> = [];
+  // Each frame is either an open layer or a non-layer brace block
+  // (`lower_layers: {`, `<key> => {`, the outer wrapper, etc.). Brace tracking
+  // is symmetric — every `{` opens a frame, every `}` pops one.
+  const blockStack: Array<{ layer?: ParsedLayer }> = [];
+  const openLayers: ParsedLayer[] = [];
   let root: ParsedLayer | null = null;
   let nextParentKey = '';
-
-  const currentLayer = (): ParsedLayer | undefined => {
-    for (let i = blockStack.length - 1; i >= 0; i--) {
-      if (blockStack[i]!.isLayer) return blockStack[i]!.layer;
-    }
-    return undefined;
-  };
-
-  const makeLayer = (parentKey: string, decoded: DecodedKey | undefined, context: GroveContext): ParsedLayer => ({
-    layerIndex: 0, // filled in during second pass
-    parentKey,
-    decodedParentKey: decoded,
-    context,
-    ops: [],
-    children: new Map(),
-  });
+  let layerCount = 0;
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
 
     if (line.startsWith('LayerProof {')) {
-      const parent = currentLayer();
+      const parent = openLayers[openLayers.length - 1];
       let context: GroveContext;
       let decoded: DecodedKey | undefined;
       if (!parent) {
@@ -160,143 +182,173 @@ export function parseProofTree(text: string): ParsedLayer | null {
         decoded = decodeGroveKey(nextParentKey, parent.context);
         context = decoded.nextContext ?? 'unknown';
       }
-      const layer = makeLayer(nextParentKey, decoded, context);
+      const layer: ParsedLayer = {
+        layerIndex: ++layerCount,
+        depth: openLayers.length,
+        parentKey: nextParentKey,
+        decodedParentKey: decoded,
+        context,
+        ops: [],
+        issues: [],
+        children: new Map(),
+      };
       if (!root) root = layer;
       if (parent) parent.children.set(nextParentKey, layer);
-      blockStack.push({ isLayer: true, layer, parent, parentKey: nextParentKey });
+      blockStack.push({ layer });
+      openLayers.push(layer);
       nextParentKey = '';
       continue;
     }
 
     if (line === '}') {
-      blockStack.pop();
+      if (blockStack.pop()?.layer) openLayers.pop();
       continue;
     }
 
-    const childMatch = line.match(/^(\S+)\s*=>\s*\{/);
+    // Keys never contain whitespace or `=>`; an empty key prints as nothing.
+    const childMatch = line.match(/^(\S*)\s*=>\s*\{$/);
     if (childMatch) {
       nextParentKey = childMatch[1] ?? '';
-      blockStack.push({ isLayer: false });
+      blockStack.push({});
       continue;
     }
 
     if (line.endsWith('{')) {
-      blockStack.push({ isLayer: false });
+      blockStack.push({});
       continue;
     }
 
-    const cur = currentLayer();
+    const cur = openLayers[openLayers.length - 1];
     if (!cur) continue;
 
-    const op = parseOp(line, cur.ops.length);
-    if (op) cur.ops.push(op);
+    const proofKind = line.match(/^proof:\s*(\w+)\(/)?.[1];
+    if (proofKind) {
+      if (proofKind !== 'Merk') cur.proofKind = proofKind;
+      continue;
+    }
+
+    const op = parseOpLine(line);
+    if (op === 'not-an-op') continue;
+    if (typeof op === 'string') {
+      cur.issues.push(op);
+      continue;
+    }
+    if (op.kind === 'hash' && op.variant !== 'Hash') {
+      cur.issues.push(`Op ${op.index} uses the unrecognized node variant ${op.variant}; it is drawn as an opaque sibling.`);
+    }
+    cur.ops.push(op);
   }
 
-  if (root) assignLayerIndices(root, { n: 1 });
   return root;
 }
 
-function assignLayerIndices(layer: ParsedLayer, counter: { n: number }): void {
-  layer.layerIndex = counter.n++;
-  for (const child of layer.children.values()) {
-    assignLayerIndices(child, counter);
+/** Depth-first (pre-order) list of every layer, without recursion. */
+export function flattenLayers(root: ParsedLayer): ParsedLayer[] {
+  const out: ParsedLayer[] = [];
+  const pending: ParsedLayer[] = [root];
+  while (pending.length) {
+    const layer = pending.pop()!;
+    out.push(layer);
+    const children = Array.from(layer.children.values());
+    for (let i = children.length - 1; i >= 0; i--) pending.push(children[i]!);
   }
+  return out;
+}
+
+/** Remove `)` characters that close an enclosing `Merk(` on the last op line. */
+function balanceTrailingParens(body: string): string {
+  let depth = 0;
+  for (const c of body) {
+    if (c === '(') depth++;
+    else if (c === ')') depth--;
+  }
+  let out = body;
+  while (depth < 0 && out.endsWith(')')) {
+    out = out.slice(0, -1).trimEnd();
+    depth++;
+  }
+  return out;
 }
 
 /**
- * Parse a single op line. Returns null for lines that aren't ops (e.g. the
- * `merk_proof:` header or empty lines).
+ * Parse a single op line. Returns `'not-an-op'` for lines that aren't ops
+ * (headers, blank lines), an `OpNode` for a recognized op, or an issue string
+ * for an op line we could not interpret.
  */
-function parseOp(line: string, index: number): OpNode | null {
+function parseOpLine(line: string): OpNode | string | 'not-an-op' {
   // Lines look like: `0: Push(KV(0xabc..., Item(0x0b)))` or `2: Parent`.
-  // Strip the leading "N:" prefix.
-  const prefixMatch = line.match(/^\d+:\s*(.*)$/);
-  const body = prefixMatch ? prefixMatch[1]! : line;
+  const prefixMatch = line.match(/^(\d+):\s*(.*)$/);
+  if (!prefixMatch) return 'not-an-op';
+  const index = Number(prefixMatch[1]);
+  const body = balanceTrailingParens(prefixMatch[2]!.trim());
 
-  if (body === 'Parent') return { kind: 'combine', index, raw: line, combine: 'Parent' };
-  if (body === 'Child') return { kind: 'combine', index, raw: line, combine: 'Child' };
-  if (body === 'ParentInverted') return { kind: 'combine', index, raw: line, combine: 'ParentInverted' };
-  if (body === 'ChildInverted') return { kind: 'combine', index, raw: line, combine: 'ChildInverted' };
-
-  // Anchor on `Push(<Name>(` ... `))` rather than fixed-length suffix stripping,
-  // so trailing whitespace / CR doesn't shift the slice indices.
-  const pushMatch = body.match(/^Push\((\w+)\((.*)\)\)\s*$/);
-  if (pushMatch) {
-    const [, name, inner] = pushMatch as unknown as [string, string, string];
-    // Reference: grovedb-query/src/proofs/mod.rs `enum Node` — 11 variants.
-    // Variants we recognize, mapped to our OpKind classification. The trailing
-    // *Count* variants carry an extra u64 count we don't visualize but still
-    // need to consume so the stack count stays in sync with merk's verifier
-    // (otherwise later combine ops underflow).
-    switch (name) {
-      // KV(key, value)
-      case 'KV': {
-        const split = splitFirstTopLevelComma(inner);
-        if (split) return { kind: 'kv', index, raw: line, key: split[0], value: split[1] };
-        break;
-      }
-      // KVCount(key, value, count) — same shape + trailing count
-      case 'KVCount': {
-        const parts = splitTopLevelArgs(inner);
-        if (parts.length >= 3) {
-          return { kind: 'kv', index, raw: line, key: parts[0], value: `${parts[1]} (count=${parts[2]})` };
-        }
-        break;
-      }
-      // KVValueHash(key, value, hash)
-      // KVRefValueHash(key, value, hash)
-      // KVValueHashFeatureType(key, value, hash, feature_type) — trailing feature
-      // KVRefValueHashCount(key, value, hash, count) — trailing count
-      case 'KVValueHash':
-      case 'KVRefValueHash':
-      case 'KVValueHashFeatureType':
-      case 'KVRefValueHashCount': {
-        const parts = splitTopLevelArgs(inner);
-        if (parts.length >= 3) {
-          const isRef = name === 'KVRefValueHash' || name === 'KVRefValueHashCount';
-          const extra =
-            name === 'KVValueHashFeatureType' && parts[3] ? ` ${parts[3]}` :
-            name === 'KVRefValueHashCount' && parts[3] ? ` (count=${parts[3]})` :
-            '';
-          return {
-            kind: isRef ? 'kvRefValueHash' : 'kvValueHash',
-            index,
-            raw: line,
-            key: parts[0],
-            treeValue: (parts[1] ?? '') + extra,
-            hash: extractHash(parts[2] ?? ''),
-          };
-        }
-        break;
-      }
-      // KVDigest(key, hash)
-      // KVDigestCount(key, hash, count) — trailing count
-      case 'KVDigest':
-      case 'KVDigestCount': {
-        const parts = splitTopLevelArgs(inner);
-        if (parts.length >= 2) {
-          return { kind: 'kvDigest', index, raw: line, key: parts[0], hash: extractHash(parts[1] ?? '') };
-        }
-        break;
-      }
-      // KVHash(hash)
-      // KVHashCount(hash, count) — trailing count
-      case 'KVHash':
-      case 'KVHashCount':
-        return { kind: 'kvHash', index, raw: line, hash: extractHash(inner) };
-      // Hash(hash)
-      case 'Hash':
-        return { kind: 'hash', index, raw: line, hash: extractHash(inner) };
-    }
-    // Unknown Push variant — log so we notice rather than silently dropping
-    // (which would cause stack underflow on subsequent combine ops).
-    if (typeof console !== 'undefined') {
-      console.warn(`[proof-tree] unknown Push variant '${name}' at op ${index}; treating as opaque sibling so the stack stays in sync.`);
-    }
-    return { kind: 'hash', index, raw: line };
+  if (body === 'Parent' || body === 'Child' || body === 'ParentInverted' || body === 'ChildInverted') {
+    return { kind: 'combine', index, raw: line, combine: body };
   }
 
-  return null;
+  const pushMatch = body.match(/^(Push|PushInverted)\((\w+)\((.*)\)\)$/);
+  if (!pushMatch) {
+    if (body.startsWith('Error decoding op')) return `Op ${index}: the parser stopped (${body}).`;
+    return `Op ${index} is not a recognized Merk op: ${body.slice(0, 120)}`;
+  }
+  const [, push, variant, inner] = pushMatch as unknown as [string, string, string, string];
+  const base = { index, raw: line, variant, ...(push === 'PushInverted' ? { inverted: true } : {}) };
+
+  // Reference: grovedb-query/src/proofs/mod.rs `enum Node`, as printed by
+  // node_to_string. The *Count variants carry a trailing u64 we show but
+  // otherwise ignore; every variant pushes exactly one node.
+  switch (variant) {
+    case 'KV':
+    case 'KVCount': {
+      const [key, rest] = splitKey(inner);
+      const parts = splitTopLevelArgs(rest);
+      if (parts.length < 1 || (variant === 'KVCount' && parts.length < 2)) break;
+      const count = variant === 'KVCount' ? ` (count=${parts[parts.length - 1]})` : '';
+      const value = (variant === 'KVCount' ? parts.slice(0, -1) : parts).join(', ');
+      return { ...base, kind: 'kv', key, value: value + count };
+    }
+    case 'KVValueHash':
+    case 'KVValueHashFeatureType':
+    case 'KVValueHashFeatureTypeWithChildHash':
+    case 'KVRefValueHash':
+    case 'KVRefValueHashCount': {
+      const [key, rest] = splitKey(inner);
+      const parts = splitTopLevelArgs(rest);
+      if (parts.length < 2) break;
+      const element = parts[0]!;
+      const extra =
+        variant === 'KVRefValueHashCount' && parts[2] ? ` (count=${parts[2]})` :
+        variant.startsWith('KVValueHashFeatureType') && parts[2] ? ` ${parts[2]}` :
+        '';
+      const hash = extractHash(parts[1]!);
+      if (variant.startsWith('KVRef')) {
+        return { ...base, kind: 'kvRefValueHash', key, value: element + extra, hash };
+      }
+      return {
+        ...base,
+        kind: 'kvValueHash',
+        key,
+        treeValue: element + extra,
+        isTree: TREE_ELEMENT.test(element),
+        hash,
+      };
+    }
+    case 'KVDigest':
+    case 'KVDigestCount': {
+      const [key, rest] = splitKey(inner);
+      return { ...base, kind: 'kvDigest', key, hash: extractHash(rest) };
+    }
+    case 'KVHash':
+    case 'KVHashCount':
+      return { ...base, kind: 'kvHash', hash: extractHash(inner) };
+    case 'Hash':
+      return { ...base, kind: 'hash', hash: extractHash(inner) };
+    default:
+      // Every Push variant pushes one node, so keep the stack in sync with an
+      // opaque sibling (reported by the caller).
+      return { ...base, kind: 'hash' };
+  }
+  return `Op ${index} (${variant}) has an unexpected shape: ${body.slice(0, 120)}`;
 }
 
 function extractHash(s: string): string | undefined {
@@ -304,15 +356,21 @@ function extractHash(s: string): string | undefined {
   return m ? m[1] : undefined;
 }
 
-/** Split "a, b" into ["a", "b"] respecting nested parens/brackets. */
-function splitFirstTopLevelComma(s: string): [string, string] | null {
-  const idx = findTopLevelComma(s, 0);
-  if (idx === -1) return null;
-  return [s.slice(0, idx).trim(), s.slice(idx + 1).trim()];
+/**
+ * Keys print as `0x…` hex or as text drawn from `[A-Za-z0-9_\-/\\[\]@]`
+ * (grovedb-query `hex_to_ascii`) — never containing a comma — so the key is
+ * everything before the first comma. Splitting it off first keeps `[`/`]`
+ * inside keys from upsetting the bracket-depth tracking below.
+ */
+function splitKey(inner: string): [string, string] {
+  const comma = inner.indexOf(',');
+  if (comma === -1) return [inner.trim(), ''];
+  return [inner.slice(0, comma).trim(), inner.slice(comma + 1).trim()];
 }
 
 /** Split top-level comma-separated args in a single linear pass. */
 function splitTopLevelArgs(s: string): string[] {
+  if (!s) return [];
   const out: string[] = [];
   let depth = 0;
   let start = 0;
@@ -329,13 +387,55 @@ function splitTopLevelArgs(s: string): string[] {
   return out;
 }
 
-function findTopLevelComma(s: string, from: number): number {
-  let depth = 0;
-  for (let i = from; i < s.length; i++) {
-    const c = s[i];
-    if (c === '(' || c === '[' || c === '{') depth++;
-    else if (c === ')' || c === ']' || c === '}') depth--;
-    else if (c === ',' && depth === 0) return i;
-  }
-  return -1;
+export interface ProofLayerSummary {
+  layer: ParsedLayer;
+  /** Data items: KV, KVRefValueHash, and KVValueHash nodes holding a non-tree element. */
+  kv: number;
+  /** Subtree references: KVValueHash* nodes holding a tree element. */
+  kvValueHash: number;
+  /** KVHash / KVDigest siblings. */
+  kvHash: number;
+  /** Hash siblings. */
+  hash: number;
+  combine: number;
+  /** Issues found while reconstructing this layer's tree. */
+  issues: string[];
+  /** A few sample data keys at this layer, for orientation. */
+  sampleKeys: string[];
+}
+
+export interface ProofSummary {
+  layers: ProofLayerSummary[];
+  totals: { kv: number; kvValueHash: number; kvHash: number; hash: number; combine: number; issues: number };
+}
+
+/** Per-layer op statistics, derived from the same parse the tree view uses. */
+export function summarizeProof(root: ParsedLayer | null): ProofSummary {
+  const totals = { kv: 0, kvValueHash: 0, kvHash: 0, hash: 0, combine: 0, issues: 0 };
+  if (!root) return { layers: [], totals };
+  const layers = flattenLayers(root).map((layer): ProofLayerSummary => {
+    const s: ProofLayerSummary = {
+      layer, kv: 0, kvValueHash: 0, kvHash: 0, hash: 0, combine: 0,
+      issues: buildLayerTree(layer).issues,
+      sampleKeys: [],
+    };
+    for (const op of layer.ops) {
+      if (op.kind === 'combine') s.combine++;
+      else if (op.kind === 'kvHash' || op.kind === 'kvDigest') s.kvHash++;
+      else if (op.kind === 'hash') s.hash++;
+      else if (leafKind(op) === 'subtree') s.kvValueHash++;
+      else {
+        s.kv++;
+        if (op.key !== undefined && s.sampleKeys.length < 3) s.sampleKeys.push(op.key);
+      }
+    }
+    totals.kv += s.kv;
+    totals.kvValueHash += s.kvValueHash;
+    totals.kvHash += s.kvHash;
+    totals.hash += s.hash;
+    totals.combine += s.combine;
+    totals.issues += s.issues.length;
+    return s;
+  });
+  return { layers, totals };
 }
