@@ -182,7 +182,7 @@
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 273,
+              "line": 268,
               "owner": "executeContractUpdate"
             },
             {
@@ -208,7 +208,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 243,
+              "line": 238,
               "owner": "executeContractRegister"
             }
           ]
@@ -219,7 +219,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 308,
+              "line": 303,
               "owner": "executeContractUpdate"
             }
           ]
@@ -230,7 +230,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 382,
+              "line": 377,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -241,7 +241,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 453,
+              "line": 448,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -252,7 +252,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 353,
+              "line": 348,
               "owner": "fetchExistingDocument"
             },
             {
@@ -268,7 +268,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 581,
+              "line": 576,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -279,7 +279,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 421,
+              "line": 416,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -290,7 +290,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 538,
+              "line": 533,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -301,7 +301,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 498,
+              "line": 493,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -323,7 +323,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 809,
+              "line": 804,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -378,7 +378,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 639,
+              "line": 634,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -389,7 +389,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 672,
+              "line": 667,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -400,7 +400,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 359,
+              "line": 354,
               "owner": "fetchExistingIdentity"
             }
           ]
@@ -411,18 +411,18 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 708,
+              "line": 703,
               "owner": "executeIdentityUpdateKeys"
             }
           ]
         },
         {
-          "method": "system.status",
+          "method": "system.totalCreditsInPlatformWithProof",
           "kind": "facade",
           "sources": [
             {
               "file": "src/sdk/protocol-version.ts",
-              "line": 60,
+              "line": 66,
               "owner": "assertWritableProtocolVersion"
             }
           ]
@@ -433,7 +433,7 @@
           "sources": [
             {
               "file": "src/sdk/protocol-version.ts",
-              "line": 16,
+              "line": 19,
               "owner": "sessionProtocolVersion"
             }
           ]
@@ -444,12 +444,12 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 495,
+              "line": 490,
               "owner": "executeDocumentTransfer"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 578,
+              "line": 573,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -460,7 +460,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 747,
+              "line": 742,
               "owner": "newIdentityKeys"
             }
           ]
@@ -487,7 +487,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 666,
+              "line": 661,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -686,7 +686,7 @@
           "sources": [
             {
               "file": "src/sdk/contract-cache.ts",
-              "line": 35,
+              "line": 33,
               "owner": "withContractRefresh"
             },
             {
@@ -796,7 +796,7 @@
           "sources": [
             {
               "file": "src/sdk/contract-cache.ts",
-              "line": 35,
+              "line": 33,
               "owner": "withContractRefresh"
             },
             {
@@ -1215,7 +1215,7 @@
           "sources": [
             {
               "file": "src/sdk/contract-cache.ts",
-              "line": 35,
+              "line": 33,
               "owner": "withContractRefresh"
             }
           ]
@@ -1883,7 +1883,7 @@
           "sources": [
             {
               "file": "src/sdk/contract-cache.ts",
-              "line": 35,
+              "line": 33,
               "owner": "withContractRefresh"
             }
           ]
@@ -2579,7 +2579,7 @@
           "sources": [
             {
               "file": "src/sdk/protocol-version.ts",
-              "line": 16,
+              "line": 19,
               "owner": "sessionProtocolVersion"
             }
           ]
@@ -2590,7 +2590,7 @@
           "sources": [
             {
               "file": "src/sdk/version.ts",
-              "line": 40,
+              "line": 38,
               "owner": "useProtocolVersionCheck"
             }
           ]
@@ -2607,7 +2607,7 @@
           "sources": [
             {
               "file": "src/sdk/contract-cache.ts",
-              "line": 35,
+              "line": 33,
               "owner": "withContractRefresh"
             },
             {
@@ -3008,7 +3008,7 @@
           "sources": [
             {
               "file": "src/sdk/protocol-version.ts",
-              "line": 16,
+              "line": 19,
               "owner": "sessionProtocolVersion"
             }
           ]
@@ -3019,7 +3019,7 @@
           "sources": [
             {
               "file": "src/sdk/version.ts",
-              "line": 40,
+              "line": 38,
               "owner": "useProtocolVersionCheck"
             }
           ]
