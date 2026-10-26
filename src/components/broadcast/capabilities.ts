@@ -2,6 +2,7 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import { describePurpose, keyMeetsCriteria } from '@/signer/keys';
 import type { ExplorerSigner, KeySelectionCriteria, SignerKeyDescriptor } from '@/signer/types';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
+import { TRANSFER_KEY_OPERATIONS, tokenKindFromOperationId } from './tokens/options';
 
 export interface OperationCapabilityRequirement {
   status: 'available' | 'unsupported';
@@ -29,8 +30,26 @@ export interface OperationCapability {
   reason: string;
 }
 
+/**
+ * Token transitions are batch transitions (Platform v5.0.0-rc.8). Drive's
+ * `combined_security_level_requirement` raises any batch holding a token
+ * transition to CRITICAL only, and `BatchTransitionV1::purpose_requirement`
+ * accepts AUTHENTICATION keys, plus TRANSFER keys when the batch is a single
+ * transfer or claim (TRANSFER keys are CRITICAL by definition).
+ */
+export function tokenKeyCriteria(id: string): KeySelectionCriteria | undefined {
+  const kind = tokenKindFromOperationId(id);
+  if (!kind) return undefined;
+  return {
+    purpose: TRANSFER_KEY_OPERATIONS.has(kind) ? ['AUTHENTICATION', 'TRANSFER'] : 'AUTHENTICATION',
+    allowedSecurityLevels: ['CRITICAL'],
+  };
+}
+
 /** Capabilities describe the implemented path, before collecting or reviewing inputs. */
 export function operationRequirement(id: string): OperationCapabilityRequirement {
+  const tokenCriteria = tokenKeyCriteria(id);
+  if (tokenCriteria) return { status: 'available', criteria: tokenCriteria };
   switch (id) {
     case 'identity.create':
     case 'identity.topUp':
@@ -154,6 +173,11 @@ export async function resolveSigningCriteria(
       allowedSecurityLevels: documentSecurityLevels(schema.signatureSecurityLevelRequirement),
       target: { contractId, documentType },
     };
+  }
+  if (tokenKindFromOperationId(id)) {
+    // Keys bound to one contract may act on its tokens; keys bound to a
+    // document type never may (rs-dpp ContractBounds::check_batched_transition).
+    return { ...base, target: { contractId: String(input.contractId ?? '') } };
   }
   if (id === 'dpns.registerName') {
     // Preorder and domain documents: keys bound to one DPNS document type cannot sign both.
