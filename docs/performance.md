@@ -57,8 +57,9 @@ Release the SDK request and confirm that the connection state and data recover.
 Check the browser console for hydration, chunk-loading, and uncaught errors.
 The startup browser tests discover the provider's actual SDK chunks from the
 build manifest, hold their requests while editing controls, then release the
-unchanged files and verify real non-trusted SDK startup. External endpoints are
-aborted to keep this check independent of network availability; no successful
+unchanged files and verify real trusted SDK startup against recorded
+quorum-service fixtures (untrusted startup was removed in #40). Other external
+endpoints are aborted to keep this check independent of network availability; no successful
 query response or signer is fabricated.
 Keep shell readiness measurements separate from module loading, SDK construction,
 and SDK connection. SDK connection includes WASM initialization and network or

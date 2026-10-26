@@ -1,5 +1,10 @@
 # Explicit epoch queries and bounded history
 
+> **Note:** written against evo-sdk 4.0.0-rc.2. The app now pins 5.0.0-rc.8
+> (#45); the explicit `{ startEpoch, count, ascending }` input and the
+> ten-epoch batches are unchanged, and 5.0's `epoch.current()` no longer
+> trusts `metadata.epoch` (see `../current-epoch-integrity.md`).
+
 The explorer was passing `{ startIndex: 42, endIndex: 42 }` to Evo SDK
 4.0.0-rc.2. Its published input is `{ startEpoch, count, ascending }`. The
 `as never` casts hid that mismatch from TypeScript. The WASM parser silently
