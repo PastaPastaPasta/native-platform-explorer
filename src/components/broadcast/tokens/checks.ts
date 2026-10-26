@@ -10,15 +10,33 @@ import { configChangeAuthority, configChangeProblems } from './config-change';
 import { cosignParameters, pendingActionKind, type PendingGroupAction } from './group-actions';
 import { operationAuthority, type Authority, type TokenModel } from './model';
 import { MAX_TOKEN_AMOUNT, describeTokenAmount, publicNoteError } from './amount';
-import { GROUP_OPERATIONS, type TokenOperationKind, type TokenOperationOptions } from './options';
+import { fingerprint } from '../fingerprint';
+import {
+  CHANGE_RULES,
+  DISTRIBUTION_KINDS,
+  GROUP_OPERATIONS,
+  type TokenConfigChange,
+  type TokenDistributionKind,
+  type TokenOperationKind,
+  type TokenOperationOptions,
+} from './options';
 import type { TokenSnapshot } from './state';
 
-/** Identities whose balance and frozen state the operation depends on. */
-export function holderIdsFor(options: TokenOperationOptions, burnFromId?: string): string[] {
+/** Identities a configuration change names, which Platform requires to exist. */
+function configChangeIdentityIds(change: TokenConfigChange): string[] {
+  if (change.item === 'newTokensDestinationIdentity') return change.value ? [change.value] : [];
+  if (change.item === 'rule') return change.takers.type === 'identity' ? [change.takers.identityId] : [];
+  if (change.item === 'perpetualDistribution' && change.value?.recipient.type === 'identity')
+    return [change.value.recipient.identityId];
+  return [];
+}
+
+/** Identities whose existence, balance or frozen state the operation depends on. */
+export function holderIdsFor(options: TokenOperationOptions): string[] {
   const ids = [options.signerId];
   if ('recipientId' in options) ids.push(options.recipientId);
   if ('targetIdentityId' in options) ids.push(options.targetIdentityId);
-  if (burnFromId) ids.push(burnFromId);
+  if (options.kind === 'configUpdate') ids.push(...configChangeIdentityIds(options.change));
   return [...new Set(ids)];
 }
 
@@ -38,7 +56,7 @@ export function duePreProgrammed(model: TokenModel, identityId: string, nowMs: n
 
 /** Why the signer can or cannot claim from each distribution. */
 export function claimProblem(
-  distribution: 'perpetual' | 'preProgrammed' | 'oncePerIdentity',
+  distribution: TokenDistributionKind,
   model: TokenModel,
   signerId: string,
   nowMs: number,
@@ -119,21 +137,10 @@ export function actionMatches(action: PendingGroupAction, options: TokenOperatio
 }
 
 function sameParameters(expected: NonNullable<ReturnType<typeof cosignParameters>>, options: TokenOperationOptions): boolean {
-  const { kind: _kind, ...fields } = expected;
+  // burnFromId is the proposer's account, not an input the co-signer repeats.
+  const { kind: _kind, burnFromId: _from, ...fields } = expected as typeof expected & { burnFromId?: string };
   const record = options as unknown as Record<string, unknown>;
-  return Object.entries(fields).every(([key, value]) =>
-    key === 'burnFromId' ? true : stable(record[key]) === stable(value),
-  );
-}
-
-/** Key-order independent JSON with tagged bigints. */
-function stable(value: unknown): string {
-  return JSON.stringify(value, (_key, v: unknown) => {
-    if (typeof v === 'bigint') return `${v}n`;
-    if (v && typeof v === 'object' && !Array.isArray(v))
-      return Object.fromEntries(Object.entries(v).sort(([a], [b]) => a.localeCompare(b)));
-    return v;
-  });
+  return Object.entries(fields).every(([key, value]) => fingerprint(record[key]) === fingerprint(value));
 }
 
 function amountProblem(amount: bigint): string | null {
@@ -193,7 +200,8 @@ export function tokenOperationProblems(options: TokenOperationOptions, snapshot:
       }
       const recipient = holder(snapshot, options.recipientId);
       if (!recipient.exists) problems.push(`Recipient ${shortId(options.recipientId)} does not exist.`);
-      if (recipient.frozen) problems.push(`Recipient ${shortId(options.recipientId)} has a frozen balance.`);
+      if (recipient.frozen && !model.allowTransferToFrozenBalance)
+        problems.push(`Recipient ${shortId(options.recipientId)} has a frozen balance, which this token does not let receive tokens.`);
       push(supplyProblem(snapshot, options.amount, 'Minting'));
       break;
     }
@@ -290,31 +298,11 @@ export function tokenOperationProblems(options: TokenOperationOptions, snapshot:
       break;
     case 'configUpdate':
       problems.push(...configChangeProblems(options.change, model, snapshot.totalSupply));
+      for (const id of configChangeIdentityIds(options.change))
+        if (!holder(snapshot, id).exists) problems.push(`Identity ${shortId(id)} does not exist.`);
       break;
   }
   return [...new Set(problems)];
-}
-
-/** Operations the signer could plausibly perform, for entry-point links. */
-export function plausibleOperations(
-  model: TokenModel,
-  signerId: string,
-  context: { balance?: bigint; forSale: boolean; nowMs: number },
-): TokenOperationKind[] {
-  const kinds: TokenOperationKind[] = [];
-  for (const kind of ['mint', 'burn', 'freeze', 'unfreeze', 'destroyFrozen', 'emergencyAction', 'setPrice'] as const) {
-    const authority = operationAuthority(kind, model, signerId);
-    if (!authority || authority.kind === 'denied') continue;
-    // Burning takes your own balance, unless you co-sign a group burn.
-    if (kind === 'burn' && authority.kind === 'direct' && (context.balance ?? 0n) === 0n) continue;
-    kinds.push(kind);
-  }
-  if ((context.balance ?? 0n) > 0n) kinds.push('transfer');
-  if (context.forSale) kinds.push('directPurchase');
-  if ((['perpetual', 'preProgrammed', 'oncePerIdentity'] as const).some((d) => !claimProblem(d, model, signerId, context.nowMs)))
-    kinds.push('claim');
-  if (canUpdateConfig(model, signerId)) kinds.push('configUpdate');
-  return kinds;
 }
 
 /** Whether the signer governs any configuration item. */
@@ -327,39 +315,69 @@ export function canUpdateConfig(model: TokenModel, signerId: string): boolean {
     { item: 'mintingAllowChoosingDestination', value: true },
     { item: 'marketplaceTradeMode', value: 'NotTradeable' },
     { item: 'mainControlGroup', value: null },
-    ...(['conventions', 'maxSupply', 'manualMinting', 'manualBurning', 'freeze', 'unfreeze', 'destroyFrozenFunds', 'emergencyAction', 'perpetualDistribution', 'newTokensDestinationIdentity', 'mintingAllowChoosingDestination', 'marketplaceTradeMode'] as const).map(
-      (rule) => ({ item: 'rule', rule, target: 'authorized', takers: { type: 'contractOwner' } }) as const,
-    ),
-  ] as const;
+    ...CHANGE_RULES.map((rule) => ({ item: 'rule', rule, target: 'authorized', takers: { type: 'contractOwner' } }) as const),
+  ] as TokenConfigChange[];
   return changes.some((change) => configChangeAuthority(change, model, signerId).kind !== 'denied');
 }
 
-const DISTRIBUTION_KINDS = ['perpetual', 'preProgrammed', 'oncePerIdentity'] as const;
+interface SignerContext {
+  balance: bigint;
+  forSale: boolean;
+  nowMs: number;
+}
 
 /** Why the signer cannot perform this kind of operation on the token at all, before any input. */
-export function tokenOperationUnavailable(
+function operationUnavailable(
   kind: TokenOperationKind,
-  snapshot: TokenSnapshot,
+  model: TokenModel,
   signerId: string,
+  context: SignerContext,
 ): string | null {
-  const { model } = snapshot;
   const authority = operationAuthority(kind, model, signerId);
   if (authority?.kind === 'denied') return authority.reason;
-  const balance = snapshot.holders[signerId]?.balance ?? 0n;
   switch (kind) {
     case 'transfer':
-      return balance === 0n ? `You hold no ${model.name}.` : null;
+      return context.balance === 0n ? `You hold no ${model.name}.` : null;
     case 'burn':
-      return authority?.kind === 'direct' && balance === 0n ? `You hold no ${model.name} to burn.` : null;
+      // Burning takes your own balance, unless you co-sign a group burn.
+      return authority?.kind === 'direct' && context.balance === 0n ? `You hold no ${model.name} to burn.` : null;
     case 'directPurchase':
-      return snapshot.price ? null : 'This token is not for sale: no direct-purchase price is set.';
+      return context.forSale ? null : 'This token is not for sale: no direct-purchase price is set.';
     case 'claim':
-      return DISTRIBUTION_KINDS.every((d) => claimProblem(d, model, signerId, snapshot.nowMs))
-        ? (claimProblem('perpetual', model, signerId, snapshot.nowMs) ?? 'Nothing to claim.')
+      return DISTRIBUTION_KINDS.every((d) => claimProblem(d, model, signerId, context.nowMs))
+        ? (claimProblem('perpetual', model, signerId, context.nowMs) ?? 'Nothing to claim.')
         : null;
     case 'configUpdate':
       return canUpdateConfig(model, signerId) ? null : "You do not govern any part of this token's configuration.";
     default:
       return null;
   }
+}
+
+export function tokenOperationUnavailable(
+  kind: TokenOperationKind,
+  snapshot: TokenSnapshot,
+  signerId: string,
+): string | null {
+  return operationUnavailable(kind, snapshot.model, signerId, {
+    balance: snapshot.holders[signerId]?.balance ?? 0n,
+    forSale: !!snapshot.price,
+    nowMs: snapshot.nowMs,
+  });
+}
+
+/** Entry-point order: the authority's actions, then what holders and buyers do. */
+const LINK_ORDER: TokenOperationKind[] = [
+  'mint', 'burn', 'freeze', 'unfreeze', 'destroyFrozen', 'emergencyAction', 'setPrice',
+  'transfer', 'directPurchase', 'claim', 'configUpdate',
+];
+
+/** Operations the signer could plausibly perform, for entry-point links. */
+export function plausibleOperations(
+  model: TokenModel,
+  signerId: string,
+  context: { balance?: bigint; forSale: boolean; nowMs: number },
+): TokenOperationKind[] {
+  const full = { ...context, balance: context.balance ?? 0n };
+  return LINK_ORDER.filter((kind) => operationUnavailable(kind, model, signerId, full) === null);
 }

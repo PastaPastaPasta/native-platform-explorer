@@ -8,7 +8,7 @@ import { Text } from '@chakra-ui/react';
 import type { OperationDescriptor, OperationFormProps } from '../OperationShell';
 import type { ExecuteArgs } from '../executors';
 import type { TokenResult } from '../executors/tokens';
-import { summariseTokenOperation, tokenOperationIsDestructive } from './review';
+import { ALWAYS_DESTRUCTIVE, summariseTokenOperation, tokenOperationIsDestructive } from './review';
 import { tokenOperationId, type TokenOperationKind, type TokenOperationOptions } from './options';
 
 const TokenOperationForm = dynamic(
@@ -28,7 +28,7 @@ async function execute(args: ExecuteArgs<TokenOperationOptions>): Promise<TokenR
   return executeTokenOperation(args);
 }
 
-export interface TokenOperationSpec {
+interface TokenOperationSpec {
   id: string;
   label: string;
   blurb: string;
@@ -64,12 +64,8 @@ export const TOKEN_OPERATION_SPECS: TokenOperationSpec[] = SPECS.map(([kind, lab
   descriptor: {
     title: label,
     description,
-    destructive:
-      kind === 'burn' || kind === 'destroyFrozen' || kind === 'emergencyAction'
-        ? true
-        : kind === 'configUpdate'
-          ? tokenOperationIsDestructive
-          : undefined,
+    // Static where every input is destructive, so the badge shows before review.
+    destructive: ALWAYS_DESTRUCTIVE.has(kind) ? true : kind === 'configUpdate' ? tokenOperationIsDestructive : undefined,
     secrets: 'none',
     FormComponent: formFor(kind),
     summarise: summariseTokenOperation,

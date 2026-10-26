@@ -1,5 +1,6 @@
 'use client';
 
+import { useMemo } from 'react';
 import { WriteActions } from '@components/broadcast/WriteActions';
 import { plausibleOperations } from '@components/broadcast/tokens/checks';
 import { tokenModelFromContract } from '@components/broadcast/tokens/model';
@@ -42,13 +43,14 @@ export function TokenWriteActions({
   const { signer, stash } = useSigner();
   const identityId = signer?.identityId ?? stash?.identityId;
   const balancesQ = useTokenIdentityBalances(identityId, identityId ? [tokenId] : undefined);
-  if (!identityId) return null;
-  let model;
-  try {
-    model = tokenModelFromContract(contract, { tokenId, contractId, position });
-  } catch {
-    return null;
-  }
+  const model = useMemo(() => {
+    try {
+      return tokenModelFromContract(contract, { tokenId, contractId, position });
+    } catch {
+      return null;
+    }
+  }, [contract, tokenId, contractId, position]);
+  if (!identityId || !model) return null;
   const balance = balancesQ.data instanceof Map ? ((balancesQ.data.get(tokenId) as bigint | undefined) ?? 0n) : undefined;
   const kinds = plausibleOperations(model, identityId, { balance, forSale, nowMs: Date.now() });
   return (

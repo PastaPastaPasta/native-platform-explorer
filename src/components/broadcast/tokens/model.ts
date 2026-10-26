@@ -6,6 +6,7 @@
 import { normaliseContract, toRecord, tokenConfigAt } from '@util/contract';
 import { enumVariant } from '@util/token-rules';
 import { shortId } from '@util/identifier';
+import { toUnsignedBigInt } from '@util/numbers';
 import type { ActionTakers, ChangeRule, TokenOperationKind } from './options';
 
 export interface TokenGroup {
@@ -43,13 +44,6 @@ export interface TokenModel {
   /** The raw token configuration JSON, for display and rule lookups. */
   config: Record<string, unknown>;
 }
-
-const toBigInt = (value: unknown): bigint | undefined => {
-  if (typeof value === 'bigint') return value;
-  if (typeof value === 'number' && Number.isSafeInteger(value)) return BigInt(value);
-  if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
-  return undefined;
-};
 
 const optionalRecord = (value: unknown) => toRecord(value) ?? undefined;
 
@@ -144,7 +138,7 @@ export function tokenModelFromContract(
     contractOwnerId: shape.ownerId,
     name: config.primaryName ?? `token #${target.position}`,
     decimals: config.decimals,
-    maxSupply: toBigInt(raw.maxSupply),
+    maxSupply: toUnsignedBigInt(raw.maxSupply),
     mainControlGroup:
       raw.mainControlGroup !== null && raw.mainControlGroup !== undefined && Number.isInteger(mainControlGroup)
         ? mainControlGroup
@@ -162,7 +156,10 @@ export function tokenModelFromContract(
 }
 
 /** Where each rule sits in the token configuration JSON. */
-const RULE_PATHS: Record<ChangeRule | 'directPurchasePricing', string[]> = {
+/** A rule a configuration update can re-assign, or the direct-purchase pricing rule, which it cannot. */
+export type RuleKey = ChangeRule | 'directPurchasePricing';
+
+const RULE_PATHS: Record<RuleKey, string[]> = {
   conventions: ['conventionsChangeRules'],
   maxSupply: ['maxSupplyChangeRules'],
   perpetualDistribution: ['distributionRules', 'perpetualDistributionRules'],
@@ -178,14 +175,14 @@ const RULE_PATHS: Record<ChangeRule | 'directPurchasePricing', string[]> = {
   emergencyAction: ['emergencyActionRules'],
 };
 
-export function ruleFor(model: TokenModel, rule: ChangeRule | 'directPurchasePricing'): ChangeControlRules | null {
+export function ruleFor(model: TokenModel, rule: RuleKey): ChangeControlRules | null {
   let current: unknown = model.config;
   for (const key of RULE_PATHS[rule]) current = toRecord(current)?.[key];
   return parseRules(current);
 }
 
 /** The rule that authorizes an operation, for operations governed by one. */
-export const OPERATION_RULES: Partial<Record<TokenOperationKind, ChangeRule | 'directPurchasePricing'>> = {
+export const OPERATION_RULES: Partial<Record<TokenOperationKind, RuleKey>> = {
   mint: 'manualMinting',
   burn: 'manualBurning',
   freeze: 'freeze',

@@ -3,7 +3,7 @@
 
 import { describeTokenAmount } from './amount';
 import { configChangeIsDestructive, describeConfigChange } from './config-change';
-import type { TokenOperationOptions, TokenPriceSchedule } from './options';
+import type { TokenDistributionKind, TokenOperationKind, TokenOperationOptions, TokenPriceSchedule } from './options';
 
 function credits(value: bigint): string {
   return `${value} credit${value === 1n ? '' : 's'}`;
@@ -75,13 +75,7 @@ export function summariseTokenOperation(options: TokenOperationOptions): string 
       break;
     }
     case 'claim':
-      effect = `Claims the ${
-        options.distributionType === 'preProgrammed'
-          ? 'due pre-programmed'
-          : options.distributionType === 'oncePerIdentity'
-            ? 'once-per-identity'
-            : 'perpetual'
-      } distribution of ${name} for ${options.signerId}.`;
+      effect = `Claims the ${CLAIMED[options.distributionType]} distribution of ${name} for ${options.signerId}.`;
       break;
     case 'configUpdate':
       effect = describeConfigChange(options.change, decimals, name);
@@ -90,16 +84,17 @@ export function summariseTokenOperation(options: TokenOperationOptions): string 
   return `${effect}${groupSuffix(options)} Token ${options.tokenId} (contract ${options.contractId}, position ${options.tokenPosition}).`;
 }
 
+const CLAIMED: Record<TokenDistributionKind, string> = {
+  perpetual: 'perpetual',
+  preProgrammed: 'due pre-programmed',
+  oncePerIdentity: 'once-per-identity',
+};
+
+/** Operations that destroy tokens or stop trading, whatever their inputs. */
+export const ALWAYS_DESTRUCTIVE: ReadonlySet<TokenOperationKind> = new Set(['burn', 'destroyFrozen', 'emergencyAction']);
+
 /** Destroys tokens, stops trading, or gives up control of the token. */
 export function tokenOperationIsDestructive(options: TokenOperationOptions): boolean {
-  switch (options.kind) {
-    case 'burn':
-    case 'destroyFrozen':
-    case 'emergencyAction':
-      return true;
-    case 'configUpdate':
-      return configChangeIsDestructive(options.change);
-    default:
-      return false;
-  }
+  if (ALWAYS_DESTRUCTIVE.has(options.kind)) return true;
+  return options.kind === 'configUpdate' && configChangeIsDestructive(options.change, options.decimals);
 }

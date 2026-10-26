@@ -295,7 +295,7 @@
             },
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 132,
+              "line": 131,
               "owner": "loadTokenSnapshot"
             }
           ]
@@ -476,7 +476,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 120,
+              "line": 119,
               "owner": "loadPendingAction"
             }
           ]
@@ -487,7 +487,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 113,
+              "line": 112,
               "owner": "loadPendingAction"
             },
             {
@@ -514,7 +514,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 137,
+              "line": 136,
               "owner": "loadTokenSnapshot"
             }
           ]
@@ -525,7 +525,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 92,
+              "line": 91,
               "owner": "loadHolders"
             }
           ]
@@ -683,7 +683,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 93,
+              "line": 92,
               "owner": "loadHolders"
             }
           ]
@@ -694,7 +694,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 34,
+              "line": 40,
               "owner": "resolveTokenTarget"
             }
           ]
@@ -705,7 +705,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 42,
+              "line": 48,
               "owner": "resolveTokenTarget"
             }
           ]
@@ -716,7 +716,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 135,
+              "line": 134,
               "owner": "loadTokenSnapshot"
             }
           ]
@@ -727,7 +727,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 94,
+              "line": 93,
               "owner": "loadHolders"
             }
           ]
@@ -738,7 +738,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 133,
+              "line": 132,
               "owner": "loadTokenSnapshot"
             }
           ]
@@ -749,7 +749,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/tokens/state.ts",
-              "line": 134,
+              "line": 133,
               "owner": "loadTokenSnapshot"
             }
           ]

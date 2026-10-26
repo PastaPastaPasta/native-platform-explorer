@@ -9,8 +9,11 @@
 import { toRecord } from '@util/contract';
 import { idToString } from '@util/sdk-shape';
 import { parseActionTakers } from './model';
+import { toUnsignedBigInt } from '@util/numbers';
 import {
   CHANGE_RULES,
+  ruleItemName,
+  sortTiers,
   type ChangeRule,
   type TokenConfigChange,
   type TokenOperationKind,
@@ -71,49 +74,38 @@ export function pendingActionFromJson(
   };
 }
 
-const big = (value: unknown): bigint | undefined => {
-  if (typeof value === 'bigint') return value;
-  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
-  if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
-  return undefined;
-};
+const big = toUnsignedBigInt;
 
 const id = (value: unknown): string | undefined => idToString(value) ?? undefined;
 
-/** rs-dpp `TokenPricingSchedule` JSON: `{ $type: "singlePrice" | "setPrices", value }`, or null. */
+/**
+ * rs-dpp `TokenPricingSchedule` JSON, internally tagged:
+ * `{ $type: "singlePrice", price }` or `{ $type: "setPrices", prices }`; null
+ * removes the price.
+ */
 export function parsePricingSchedule(value: unknown): TokenPriceSchedule | null {
   if (value === null || value === undefined) return { type: 'none' };
   const rec = toRecord(value);
-  if (!rec) return null;
-  const type = String(rec.$type ?? Object.keys(rec)[0] ?? '');
-  const payload = rec.$type !== undefined ? rec.value : rec[type];
-  if (/^singlePrice$/i.test(type)) {
-    const price = big(payload);
+  if (rec?.$type === 'singlePrice') {
+    const price = big(rec.price);
     return price === undefined ? null : { type: 'single', price };
   }
-  if (/^setPrices$/i.test(type)) {
-    const tiers = Object.entries(toRecord(payload) ?? {}).map(([amount, price]) => ({
+  if (rec?.$type === 'setPrices') {
+    const tiers = Object.entries(toRecord(rec.prices) ?? {}).map(([amount, price]) => ({
       minAmount: big(amount),
       price: big(price),
     }));
     if (tiers.length === 0 || tiers.some((t) => t.minAmount === undefined || t.price === undefined)) return null;
-    return {
-      type: 'tiers',
-      tiers: (tiers as Array<{ minAmount: bigint; price: bigint }>).sort((a, b) =>
-        a.minAmount < b.minAmount ? -1 : 1,
-      ),
-    };
+    return { type: 'tiers', tiers: sortTiers(tiers as Array<{ minAmount: bigint; price: bigint }>) };
   }
   return null;
 }
 
-const RULE_ITEM_NAMES: Record<string, { rule: ChangeRule; target: 'authorized' | 'admin' }> = {};
-for (const rule of CHANGE_RULES) {
-  const plainIsControl = ['manualMinting', 'manualBurning', 'freeze', 'unfreeze', 'destroyFrozenFunds', 'emergencyAction'].includes(rule);
-  if (plainIsControl) RULE_ITEM_NAMES[rule] = { rule, target: 'authorized' };
-  else RULE_ITEM_NAMES[`${rule}ControlGroup`] = { rule, target: 'authorized' };
-  RULE_ITEM_NAMES[`${rule}AdminGroup`] = { rule, target: 'admin' };
-}
+const RULE_ITEM_NAMES = Object.fromEntries(
+  CHANGE_RULES.flatMap((rule) =>
+    (['authorized', 'admin'] as const).map((target) => [ruleItemName(rule, target), { rule, target }]),
+  ),
+) as Record<string, { rule: ChangeRule; target: 'authorized' | 'admin' }>;
 
 /** rs-dpp `TokenConfigurationChangeItem` JSON → the change this UI can rebuild, or null. */
 export function parseConfigChange(value: unknown): TokenConfigChange | null {
@@ -127,9 +119,11 @@ export function parseConfigChange(value: unknown): TokenConfigChange | null {
     return takers ? { item: 'rule', ...ruleItem, takers } : null;
   }
   switch (type) {
-    case 'maxSupply':
+    case 'maxSupply': {
       if (payload === null || payload === undefined) return { item: 'maxSupply', value: null };
-      return big(payload) === undefined ? null : { item: 'maxSupply', value: big(payload)! };
+      const value = big(payload);
+      return value === undefined ? null : { item: 'maxSupply', value };
+    }
     case 'newTokensDestinationIdentity':
       return { item: 'newTokensDestinationIdentity', value: payload ? (id(payload) ?? null) : null };
     case 'mintingAllowChoosingDestination':
@@ -229,4 +223,14 @@ export function cosignParameters(action: PendingGroupAction): CosignParameters |
     default:
       return null;
   }
+}
+
+/** Identities a co-signed action names, whose balances and frozen state its checks read. */
+export function cosignIdentityIds(parameters: CosignParameters | null): string[] {
+  if (!parameters) return [];
+  return [
+    'recipientId' in parameters ? parameters.recipientId : undefined,
+    'targetIdentityId' in parameters ? parameters.targetIdentityId : undefined,
+    parameters.kind === 'burn' ? parameters.burnFromId : undefined,
+  ].filter((id): id is string => !!id);
 }

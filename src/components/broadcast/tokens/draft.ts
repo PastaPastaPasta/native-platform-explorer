@@ -7,13 +7,14 @@ import { parseDecimalBigInt } from '../forms/amount';
 import { parseTokenAmount } from './amount';
 import type { CosignParameters } from './group-actions';
 import type { TokenModel } from './model';
-import type {
-  TokenConfigChange,
-  TokenDistributionKind,
-  TokenGroupAction,
-  TokenOperationKind,
-  TokenOperationOptions,
-  TokenPriceSchedule,
+import {
+  sortTiers,
+  type TokenConfigChange,
+  type TokenDistributionKind,
+  type TokenGroupAction,
+  type TokenOperationKind,
+  type TokenOperationOptions,
+  type TokenPriceSchedule,
 } from './options';
 
 export interface PriceScheduleFields {
@@ -89,8 +90,7 @@ export function parsePriceSchedule(
     if (price.error) return { error: price.error };
     tiers.push({ minAmount: amount.value, price: price.value! });
   }
-  tiers.sort((a, b) => (a.minAmount < b.minAmount ? -1 : a.minAmount > b.minAmount ? 1 : 0));
-  return { schedule: { type: 'tiers', tiers } };
+  return { schedule: { type: 'tiers', tiers: sortTiers(tiers) } };
 }
 
 export function buildTokenDraft(kind: TokenOperationKind, fields: TokenFormFields, context: DraftContext): Draft {

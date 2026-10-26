@@ -100,7 +100,8 @@ export interface TokenDirectPurchaseOptions extends TokenOperationBase {
   reviewedPrice: { first: bigint; last: bigint };
 }
 
-export type TokenDistributionKind = 'perpetual' | 'preProgrammed' | 'oncePerIdentity';
+export const DISTRIBUTION_KINDS = ['perpetual', 'preProgrammed', 'oncePerIdentity'] as const;
+export type TokenDistributionKind = (typeof DISTRIBUTION_KINDS)[number];
 
 export interface TokenClaimOptions extends TokenOperationBase {
   kind: 'claim';
@@ -123,6 +124,29 @@ export const CHANGE_RULES = [
   'emergencyAction',
 ] as const;
 export type ChangeRule = (typeof CHANGE_RULES)[number];
+
+/**
+ * Rules whose control group is set by the plain item (`ManualMintingItem`…)
+ * rather than a `…ControlGroupItem`: their only value is who may act.
+ */
+export const ACTION_ONLY_RULES: ReadonlySet<ChangeRule> = new Set([
+  'manualMinting',
+  'manualBurning',
+  'freeze',
+  'unfreeze',
+  'destroyFrozenFunds',
+  'emergencyAction',
+]);
+
+/**
+ * The `TokenConfigurationChangeItem` variant that re-assigns a rule, camelCase
+ * as in its JSON `$type` (`maxSupplyControlGroup`, `freezeAdminGroup`,
+ * `manualMinting`); the SDK builds it with `<PascalCase>Item`.
+ */
+export function ruleItemName(rule: ChangeRule, target: 'authorized' | 'admin'): string {
+  if (target === 'admin') return `${rule}AdminGroup`;
+  return ACTION_ONLY_RULES.has(rule) ? rule : `${rule}ControlGroup`;
+}
 
 export interface PerpetualDistributionInput {
   intervalType: 'block' | 'time' | 'epoch';
@@ -166,7 +190,10 @@ export type TokenOperationOptions =
   | TokenClaimOptions
   | TokenConfigUpdateOptions;
 
-export type TokenOptionsOf<K extends TokenOperationKind> = Extract<TokenOperationOptions, { kind: K }>;
+/** Price tiers in ascending order of their minimum amount. */
+export function sortTiers<T extends { minAmount: bigint }>(tiers: T[]): T[] {
+  return [...tiers].sort((a, b) => (a.minAmount < b.minAmount ? -1 : a.minAmount > b.minAmount ? 1 : 0));
+}
 
 /** Operations whose single-transition batch also accepts a TRANSFER key. */
 export const TRANSFER_KEY_OPERATIONS: ReadonlySet<TokenOperationKind> = new Set(['transfer', 'claim']);

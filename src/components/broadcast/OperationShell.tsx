@@ -56,6 +56,7 @@ import type {
   SignerKeyDescriptor,
 } from '@/signer/types';
 import { selectSigningKey } from '@/signer/keys';
+import { fingerprint } from './fingerprint';
 import type { ExecuteArgs } from './executors';
 
 export interface OperationFormProps<TOptions> {
@@ -94,24 +95,6 @@ export interface OperationDescriptor<TOptions, TResult> {
   /** Key requirements for these inputs; the review step shows the key they select. */
   signingCriteria?: (sdk: EvoSDK, options: TOptions) => Promise<KeySelectionCriteria | undefined>;
   execute: (args: ExecuteArgs<TOptions>) => Promise<TResult>;
-}
-
-// Tag every primitive so bigint credits cannot collide with a string or JSON
-// object supplied by a form. Sorting keys makes equivalent JSON edits stable.
-function fingerprint(value: unknown): string {
-  function encode(input: unknown): unknown {
-    if (input === null) return ['null'];
-    if (typeof input !== 'object') return [typeof input, String(input)];
-    if (input instanceof Uint8Array) return ['bytes', Array.from(input)];
-    if (Array.isArray(input)) return ['array', input.map(encode)];
-    return [
-      'object',
-      Object.entries(input)
-        .sort(([a], [b]) => a.localeCompare(b))
-        .map(([key, item]) => [key, encode(item)]),
-    ];
-  }
-  return JSON.stringify(encode(value));
 }
 
 /** Zero the declared secret bytes of inputs nothing uses any more (strings cannot be wiped). */

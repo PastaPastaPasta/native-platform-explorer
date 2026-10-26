@@ -7,13 +7,20 @@ import { useSdkQuery } from '@sdk/hooks';
 import { isBase58Identifier, shortId } from '@util/identifier';
 import { formatTokenAmount } from '@util/token-rules';
 import type { OperationFormProps } from '../../OperationShell';
+import { fingerprint } from '../../fingerprint';
 import { describeTokenAmount, publicNoteError } from '../../tokens/amount';
 import { claimProblem, tokenOperationProblems, tokenOperationUnavailable } from '../../tokens/checks';
 import { configChangeAuthority } from '../../tokens/config-change';
 import { cosignParameters } from '../../tokens/group-actions';
 import { operationAuthority, describeTakers, ruleFor, OPERATION_RULES, type Authority, type TokenModel } from '../../tokens/model';
 import { buildTokenDraft, EMPTY_FIELDS, type GroupChoice, type TokenFormFields } from '../../tokens/draft';
-import { GROUP_OPERATIONS, type TokenOperationKind, type TokenOperationOptions } from '../../tokens/options';
+import {
+  DISTRIBUTION_KINDS,
+  GROUP_OPERATIONS,
+  type TokenDistributionKind,
+  type TokenOperationKind,
+  type TokenOperationOptions,
+} from '../../tokens/options';
 import { loadTokenSnapshot, resolveTokenTarget, type TokenSnapshot, type TokenTarget } from '../../tokens/state';
 import { GroupActionFields } from './GroupActionFields';
 import { PriceScheduleFields } from './PriceScheduleFields';
@@ -22,11 +29,11 @@ import { Field, IdentityInput } from './fields';
 
 export type TokenOperationFormProps = OperationFormProps<TokenOperationOptions> & { kind: TokenOperationKind };
 
-const DISTRIBUTIONS = [
-  ['perpetual', 'Perpetual distribution'],
-  ['preProgrammed', 'Pre-programmed distribution'],
-  ['oncePerIdentity', 'Once-per-identity distribution'],
-] as const;
+const DISTRIBUTION_LABELS: Record<TokenDistributionKind, string> = {
+  perpetual: 'Perpetual distribution',
+  preProgrammed: 'Pre-programmed distribution',
+  oncePerIdentity: 'Once-per-identity distribution',
+};
 
 function AuthorityLine({ authority, kind, model }: { authority: Authority | null; kind: TokenOperationKind; model: TokenModel }) {
   const rule = OPERATION_RULES[kind];
@@ -119,32 +126,16 @@ export function TokenOperationForm({ kind, signer, onOptionsChange }: TokenOpera
       kind === 'directPurchase',
       effectiveMode === 'cosign' ? `${groupPosition}/${actionId}` : '',
     ],
-    async (sdk) => {
-      const cosign =
-        effectiveMode === 'cosign' && cosigning && groupPosition !== undefined
-          ? { groupPosition, actionId }
-          : undefined;
-      const first = await loadTokenSnapshot(sdk, {
+    (sdk) =>
+      loadTokenSnapshot(sdk, {
         target: target!,
         holderIds: [signerId, recipientId, targetId].filter((id): id is string => !!id),
         creditsOf: kind === 'directPurchase' ? signerId : undefined,
-        cosign,
-      });
-      const params = first.pending ? cosignParameters(first.pending) : null;
-      const extra = [
-        params && 'recipientId' in params ? params.recipientId : undefined,
-        params && 'targetIdentityId' in params ? params.targetIdentityId : undefined,
-        params?.kind === 'burn' ? params.burnFromId : undefined,
-      ].filter((id): id is string => !!id && !first.holders[id]);
-      return extra.length === 0
-        ? first
-        : loadTokenSnapshot(sdk, {
-            target: target!,
-            holderIds: [...Object.keys(first.holders), ...extra],
-            creditsOf: kind === 'directPurchase' ? signerId : undefined,
-            cosign,
-          });
-    },
+        cosign:
+          effectiveMode === 'cosign' && cosigning && groupPosition !== undefined
+            ? { groupPosition, actionId }
+            : undefined,
+      }),
     { enabled: !!target && !!model, retry: false, staleTime: 30_000, refetchOnWindowFocus: false },
   );
   const snapshot = fullQ.data ?? baseQ.data;
@@ -190,7 +181,7 @@ export function TokenOperationForm({ kind, signer, onOptionsChange }: TokenOpera
   const loaded = !!fullQ.data;
   const problems = draft?.options && fullQ.data ? tokenOperationProblems(draft.options, fullQ.data) : [];
   const ready = !!draft?.options && loaded && problems.length === 0 && !unavailable;
-  const draftKey = draft?.options ? JSON.stringify(draft.options, (_k, v: unknown) => (typeof v === 'bigint' ? `${v}n` : v)) : '';
+  const draftKey = draft?.options ? fingerprint(draft.options) : '';
 
   useEffect(() => {
     onOptionsChange(ready && draft?.options ? draft.options : null);
@@ -335,27 +326,17 @@ export function TokenOperationForm({ kind, signer, onOptionsChange }: TokenOpera
             </Field>
           ) : null}
 
-          {kind === 'mint' && !locked ? (
-            model.mintingAllowChoosingDestination ? (
-              <IdentityInput
-                label="Recipient identity"
-                value={fields.recipient}
-                onChange={(recipient) => update({ recipient })}
-                state={recipientId ? fullQ.data?.holders[recipientId] : undefined}
-                decimals={decimals}
-              />
-            ) : (
-              <Text fontSize="sm" color="gray.250">
-                Minted tokens go to the token&apos;s destination identity{' '}
-                <Text as="span" fontFamily="mono">
-                  {model.newTokensDestinationIdentity ?? 'none set'}
-                </Text>
-                ; this token does not let minters choose.
+          {kind === 'mint' && !model.mintingAllowChoosingDestination && !locked ? (
+            <Text fontSize="sm" color="gray.250">
+              Minted tokens go to the token&apos;s destination identity{' '}
+              <Text as="span" fontFamily="mono">
+                {model.newTokensDestinationIdentity ?? 'none set'}
               </Text>
-            )
+              ; this token does not let minters choose.
+            </Text>
           ) : null}
 
-          {kind === 'transfer' ? (
+          {(kind === 'transfer' || (kind === 'mint' && model.mintingAllowChoosingDestination)) && !locked ? (
             <IdentityInput
               label="Recipient identity"
               value={fields.recipient}
@@ -429,11 +410,11 @@ export function TokenOperationForm({ kind, signer, onOptionsChange }: TokenOpera
                 bg="gray.800"
                 borderColor="gray.700"
               >
-                {DISTRIBUTIONS.map(([value, label]) => {
+                {DISTRIBUTION_KINDS.map((value) => {
                   const problem = claimProblem(value, model, signerId, snapshot.nowMs);
                   return (
                     <option key={value} value={value} disabled={!!problem}>
-                      {label}
+                      {DISTRIBUTION_LABELS[value]}
                       {problem ? ` (unavailable: ${problem})` : ''}
                     </option>
                   );

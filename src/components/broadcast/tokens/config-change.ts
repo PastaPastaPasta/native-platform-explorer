@@ -6,9 +6,9 @@
 // `adminActionTakers`, subject to the rule's "to no one" and "self-changing
 // admin" flags.
 
-import { shortId } from '@util/identifier';
 import { formatTokenAmount } from '@util/token-rules';
 import { authorize, describeTakers, ruleFor, type Authority, type TokenModel } from './model';
+import { MAX_DECIMALS } from './amount';
 import type { ActionTakers, ChangeRule, TokenConfigChange } from './options';
 
 export const CHANGE_RULE_LABELS: Record<ChangeRule, string> = {
@@ -26,29 +26,6 @@ export const CHANGE_RULE_LABELS: Record<ChangeRule, string> = {
   emergencyAction: 'Emergency action (pause / resume)',
 };
 
-/**
- * Rules whose control group is set by the plain item (`ManualMintingItem`…)
- * rather than a `…ControlGroupItem`: their only value is who may act.
- */
-export const ACTION_ONLY_RULES: ReadonlySet<ChangeRule> = new Set([
-  'manualMinting',
-  'manualBurning',
-  'freeze',
-  'unfreeze',
-  'destroyFrozenFunds',
-  'emergencyAction',
-]);
-
-/** The rule whose `authorizedToMakeChange` governs a value item. */
-const VALUE_ITEM_RULES: Record<Exclude<TokenConfigChange['item'], 'rule' | 'mainControlGroup'>, ChangeRule> = {
-  conventions: 'conventions',
-  maxSupply: 'maxSupply',
-  perpetualDistribution: 'perpetualDistribution',
-  newTokensDestinationIdentity: 'newTokensDestinationIdentity',
-  mintingAllowChoosingDestination: 'mintingAllowChoosingDestination',
-  marketplaceTradeMode: 'marketplaceTradeMode',
-};
-
 const sameTakers = (a: ActionTakers | null, b: ActionTakers): boolean =>
   JSON.stringify(a) === JSON.stringify(b);
 
@@ -61,18 +38,12 @@ export function configChangeAuthority(
   const deny = (reason: string): Authority => ({ kind: 'denied', reason });
   if (change.item === 'mainControlGroup')
     return authorize(model.mainControlGroupCanBeModified, model, signerId, 'change the main control group of');
-  if (change.item !== 'rule') {
-    const rule = ruleFor(model, VALUE_ITEM_RULES[change.item]);
-    return authorize(
-      rule?.authorized ?? null,
-      model,
-      signerId,
-      `change the ${CHANGE_RULE_LABELS[VALUE_ITEM_RULES[change.item]].toLowerCase()} of`,
-    );
-  }
-  const rule = ruleFor(model, change.rule);
-  if (!rule) return deny(`The token has no ${CHANGE_RULE_LABELS[change.rule].toLowerCase()} rule.`);
-  const label = CHANGE_RULE_LABELS[change.rule].toLowerCase();
+  // A value item is governed by the rule of the same name.
+  const ruleName: ChangeRule = change.item === 'rule' ? change.rule : change.item;
+  const label = CHANGE_RULE_LABELS[ruleName].toLowerCase();
+  const rule = ruleFor(model, ruleName);
+  if (change.item !== 'rule') return authorize(rule?.authorized ?? null, model, signerId, `change the ${label} of`);
+  if (!rule) return deny(`The token has no ${label} rule.`);
   if (change.target === 'authorized') {
     if (change.takers.type === 'noOne' && !rule.authorizedToNoOneAllowed)
       return deny(`This token's rules forbid setting who may act on ${label} to no one.`);
@@ -118,8 +89,8 @@ export function configChangeProblems(
     case 'conventions':
       if (Object.keys(change.localizations).length === 0)
         problems.push('Keep at least one localization.');
-      if (!Number.isInteger(change.decimals) || change.decimals < 0 || change.decimals > 16)
-        problems.push('Decimals must be a whole number from 0 to 16.');
+      if (!Number.isInteger(change.decimals) || change.decimals < 0 || change.decimals > MAX_DECIMALS)
+        problems.push(`Decimals must be a whole number from 0 to ${MAX_DECIMALS}.`);
       break;
     case 'perpetualDistribution':
       if (change.value && (change.value.interval <= 0n || change.value.amount <= 0n))
@@ -132,24 +103,25 @@ export function configChangeProblems(
 }
 
 /**
- * Whether the change gives up control: authority handed to no one, a
- * distribution or destination removed, the main control group cleared.
+ * Whether the change may give up control or reinterpret balances: authority
+ * handed to no one, administration of a rule handed over, the main control
+ * group moved or cleared, a distribution or destination removed, or the
+ * decimals changed (`decimals` is the token's current value).
  */
-export function configChangeIsDestructive(change: TokenConfigChange): boolean {
+export function configChangeIsDestructive(change: TokenConfigChange, decimals: number): boolean {
   switch (change.item) {
     case 'rule':
-      return change.takers.type === 'noOne';
+      return change.takers.type === 'noOne' || change.target === 'admin';
+    case 'mainControlGroup':
+      return true;
     case 'perpetualDistribution':
     case 'newTokensDestinationIdentity':
-    case 'mainControlGroup':
       return change.value === null;
+    case 'conventions':
+      return change.decimals !== decimals;
     default:
       return false;
   }
-}
-
-function takersText(takers: ActionTakers): string {
-  return takers.type === 'identity' ? `identity ${takers.identityId}` : describeTakers(takers);
 }
 
 export function describeConfigChange(change: TokenConfigChange, decimals: number, name: string): string {
@@ -192,11 +164,7 @@ export function describeConfigChange(change: TokenConfigChange, decimals: number
         : `Makes group #${change.value} the main control group.`;
     case 'rule':
       return change.target === 'authorized'
-        ? `Lets ${takersText(change.takers)} act on ${CHANGE_RULE_LABELS[change.rule].toLowerCase()}.`
-        : `Makes ${takersText(change.takers)} the administrator of ${CHANGE_RULE_LABELS[change.rule].toLowerCase()}.`;
+        ? `Lets ${describeTakers(change.takers)} act on ${CHANGE_RULE_LABELS[change.rule].toLowerCase()}.`
+        : `Makes ${describeTakers(change.takers)} the administrator of ${CHANGE_RULE_LABELS[change.rule].toLowerCase()}.`;
   }
-}
-
-export function shortTakers(takers: ActionTakers): string {
-  return takers.type === 'identity' ? `identity ${shortId(takers.identityId)}` : describeTakers(takers);
 }

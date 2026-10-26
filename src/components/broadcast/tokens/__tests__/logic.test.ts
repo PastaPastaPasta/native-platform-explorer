@@ -167,13 +167,19 @@ describe('configuration changes', () => {
     expect(configChangeProblems({ item: 'rule', rule: 'freeze', target: 'authorized', takers: { type: 'contractOwner' } }, m, 0n)).toEqual(['That is already the authority.']);
   });
 
-  it('marks changes that give up control as destructive', () => {
-    expect(configChangeIsDestructive({ item: 'rule', rule: 'freeze', target: 'admin', takers: { type: 'noOne' } })).toBe(true);
-    expect(configChangeIsDestructive({ item: 'perpetualDistribution', value: null })).toBe(true);
-    expect(configChangeIsDestructive({ item: 'mainControlGroup', value: null })).toBe(true);
-    expect(configChangeIsDestructive({ item: 'newTokensDestinationIdentity', value: null })).toBe(true);
-    expect(configChangeIsDestructive({ item: 'maxSupply', value: null })).toBe(false);
-    expect(configChangeIsDestructive({ item: 'rule', rule: 'freeze', target: 'authorized', takers: { type: 'mainGroup' } })).toBe(false);
+  it('marks changes that give up control or reinterpret balances as destructive', () => {
+    const destructive = (change: Parameters<typeof configChangeIsDestructive>[0]) => configChangeIsDestructive(change, 8);
+    expect(destructive({ item: 'rule', rule: 'freeze', target: 'authorized', takers: { type: 'noOne' } })).toBe(true);
+    // Handing administration over cannot be undone by the signer.
+    expect(destructive({ item: 'rule', rule: 'freeze', target: 'admin', takers: { type: 'identity', identityId: MEMBER } })).toBe(true);
+    expect(destructive({ item: 'perpetualDistribution', value: null })).toBe(true);
+    expect(destructive({ item: 'mainControlGroup', value: null })).toBe(true);
+    expect(destructive({ item: 'mainControlGroup', value: 1 })).toBe(true);
+    expect(destructive({ item: 'newTokensDestinationIdentity', value: null })).toBe(true);
+    expect(destructive({ item: 'conventions', decimals: 2, localizations: {} })).toBe(true);
+    expect(destructive({ item: 'conventions', decimals: 8, localizations: {} })).toBe(false);
+    expect(destructive({ item: 'maxSupply', value: null })).toBe(false);
+    expect(destructive({ item: 'rule', rule: 'freeze', target: 'authorized', takers: { type: 'mainGroup' } })).toBe(false);
   });
 
   it('describes each change', () => {
@@ -203,7 +209,7 @@ describe('group actions', () => {
     [{ $type: 'unfreeze', frozenIdentifier: MEMBER }, { kind: 'unfreeze', targetIdentityId: MEMBER }],
     [{ $type: 'destroyFrozenFunds', frozenIdentifier: MEMBER, amount: 3 }, { kind: 'destroyFrozen', targetIdentityId: MEMBER }],
     [{ $type: 'emergencyAction', action: 'Pause' }, { kind: 'emergencyAction', action: 'pause' }],
-    [{ $type: 'changePriceForDirectPurchase', pricingSchedule: { $type: 'singlePrice', value: 9 } }, { kind: 'setPrice', schedule: { type: 'single', price: 9n } }],
+    [{ $type: 'changePriceForDirectPurchase', pricingSchedule: { $type: 'singlePrice', price: 9 } }, { kind: 'setPrice', schedule: { type: 'single', price: 9n } }],
   ])('rebuilds co-sign parameters of %j', (event, parameters) => {
     const pending = pendingActionFromJson(ACTION_ID, 0, { token_contract_position: 0, event: { $kind: 'tokenEvent', ...event } }, undefined);
     expect(cosignParameters(pending)).toEqual(parameters);
@@ -236,11 +242,13 @@ describe('group actions', () => {
 
   it('reads pricing schedules', () => {
     expect(parsePricingSchedule(null)).toEqual({ type: 'none' });
-    expect(parsePricingSchedule({ $type: 'setPrices', value: { 500: 1, 100: 2 } })).toEqual({
+    expect(parsePricingSchedule({ $type: 'setPrices', prices: { 500: 1, 100: 2 } })).toEqual({
       type: 'tiers',
       tiers: [{ minAmount: 100n, price: 2n }, { minAmount: 500n, price: 1n }],
     });
     expect(parsePricingSchedule({ $type: 'other' })).toBeNull();
+    // The payload is `price` / `prices`, not a generic `value`.
+    expect(parsePricingSchedule({ $type: 'singlePrice', value: 9 })).toBeNull();
   });
 });
 

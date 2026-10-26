@@ -80,6 +80,8 @@ function mockSdk(state: SdkState = {}) {
   const balances: Record<string, bigint> = { [OWNER]: 1_000_000_000n, [MEMBER]: 500_000_000n, ...state.balances };
   const write = vi.fn().mockResolvedValue({ free: vi.fn() });
   const actions = state.actions ?? { ACTIVE: [], CLOSED: [] };
+  // Every proved read is one block newer than the last.
+  let height = 100;
   const sdk = {
     contracts: { fetch: vi.fn().mockResolvedValue(contractObject(state.config)) },
     identities: {
@@ -119,6 +121,10 @@ function mockSdk(state: SdkState = {}) {
     },
     group: {
       actions: vi.fn(async ({ status }: { status: 'ACTIVE' | 'CLOSED' }) => new Map(actions[status].map(([id, json]) => [id, { toJSON: () => json }]))),
+      actionsWithProof: vi.fn(async ({ status }: { status: 'ACTIVE' | 'CLOSED' }) => ({
+        data: new Map(actions[status].map(([id, json]) => [id, { toJSON: () => json }])),
+        metadata: { height: (height += 1) },
+      })),
       actionSigners: vi.fn(async ({ status, actionId }: { status: 'ACTIVE' | 'CLOSED'; actionId: string }) =>
         actions[status].find(([id]) => id === actionId)?.[2] ?? new Map(),
       ),
@@ -313,18 +319,62 @@ describe('token executors', () => {
       expect(value.group).toMatchObject({ mode: 'propose', groupPosition: 0, requiredPower: 2 });
     });
 
-    it('confirms a proposal the SDK could not verify by a proved read of the group', async () => {
+    /** The SDK cannot verify the write; afterwards the group shows `after` (ACTIVE). */
+    function unverifiedProposal(after: Array<[string, unknown, Map<string, bigint>]>, page = 0) {
       const { sdk, write } = mockSdk();
       write.mockRejectedValue({ name: 'DriveProofError', message: 'Expected document in group action result' });
-      sdk.group.actions
-        .mockResolvedValueOnce(new Map())
-        .mockResolvedValueOnce(new Map())
-        .mockResolvedValue(new Map([[ACTION_ID, { toJSON: () => MAX_SUPPLY_ACTION }]]));
-      sdk.group.actionSigners.mockResolvedValue(new Map([[OWNER, 1n]]));
+      const filler: Array<[string, unknown]> = Array.from({ length: page }, (_, i) => [`filler-${i}`, { toJSON: () => ({ event: {} }) }]);
+      let reads = 0;
+      vi.mocked(sdk.group.actionsWithProof).mockImplementation(async ({ status }) => {
+        reads += 1;
+        const shown = reads > 2 && status === 'ACTIVE' ? after : [];
+        return {
+          data: new Map<string, { toJSON: () => unknown }>([
+            ...(filler as Array<[string, { toJSON: () => unknown }]>),
+            ...shown.map(([id, json]): [string, { toJSON: () => unknown }] => [id, { toJSON: () => json }]),
+          ]),
+          metadata: { height: 100 + reads },
+        };
+      });
+      sdk.group.actionSigners.mockImplementation(async ({ actionId }: { actionId: string }) => after.find(([id]) => id === actionId)?.[2] ?? new Map());
+      return { sdk, write };
+    }
+
+    it('confirms a proposal the SDK could not verify by a proved read of the group', async () => {
+      const { sdk } = unverifiedProposal([[ACTION_ID, MAX_SUPPLY_ACTION, new Map([[OWNER, 1n]])]]);
       const { signer } = signerFor();
       const value = await executeTokenOperation({ sdk: sdk as never, signer, options: propose });
       expect(value.group).toMatchObject({ actionId: ACTION_ID });
       expect(value.message).toMatch(/proved read of the group confirmed your signature/);
+    });
+
+    it('does not take another member’s proposal or a full page as confirmation', async () => {
+      const theirs = { ...MAX_SUPPLY_ACTION, proposer_id: MEMBER };
+      const { signer } = signerFor();
+      const other = unverifiedProposal([[ACTION_ID, theirs, new Map([[MEMBER, 1n], [OWNER, 1n]])]]);
+      await expect(executeTokenOperation({ sdk: other.sdk as never, signer, options: propose })).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
+      const full = unverifiedProposal([[ACTION_ID, MAX_SUPPLY_ACTION, new Map([[OWNER, 1n]])]], 100);
+      await expect(executeTokenOperation({ sdk: full.sdk as never, signer, options: propose })).rejects.toBeInstanceOf(BroadcastOutcomeUnknownError);
+    });
+
+    it('refuses to propose an action the signer already has pending', async () => {
+      const { result, write } = await run(propose, {
+        actions: { ACTIVE: [[ACTION_ID, MAX_SUPPLY_ACTION, new Map([[OWNER, 1n]])]], CLOSED: [] },
+      });
+      await expect(result).rejects.toBeInstanceOf(OperationNotSubmittedError);
+      await expect(result).rejects.toThrow(/already proposed this exact action/);
+      expect(write).not.toHaveBeenCalled();
+    });
+
+    it('says when the proposer alone completes the action', async () => {
+      const strong = contractObject();
+      const json = strong.toJSON() as { groups: Record<number, { members: Record<string, number> }> };
+      json.groups[0]!.members[OWNER] = 2;
+      const { sdk } = mockSdk();
+      sdk.contracts.fetch.mockResolvedValue(strong);
+      const { signer } = signerFor();
+      const value = await executeTokenOperation({ sdk: sdk as never, signer, options: propose });
+      expect(value.message).toMatch(/reached the required power, so the action executed/);
     });
 
     it('leaves an unconfirmed group write unknown', async () => {

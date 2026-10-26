@@ -11,7 +11,7 @@ export const MAX_TOKEN_SUPPLY = 9_223_372_036_854_775_807n;
 /** rs-dpp `MAX_TOKEN_NOTE_LEN`, in UTF-8 bytes. */
 export const MAX_PUBLIC_NOTE_BYTES = 2048;
 /** Larger values cannot be stored by a token's conventions. */
-const MAX_DECIMALS = 16;
+export const MAX_DECIMALS = 16;
 
 export type ParsedAmount = { value: bigint; error?: undefined } | { value?: undefined; error: string };
 

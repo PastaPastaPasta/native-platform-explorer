@@ -19,3 +19,11 @@ export function removeTrailingZeros(input: string): string {
   if (!input.includes('.')) return input;
   return input.replace(/0+$/, '').replace(/\.$/, '');
 }
+
+/** A non-negative integer from an SDK value (bigint, safe number, or digit string), else undefined. */
+export function toUnsignedBigInt(value: unknown): bigint | undefined {
+  if (typeof value === 'bigint') return value >= 0n ? value : undefined;
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) return BigInt(value);
+  if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
+  return undefined;
+}

@@ -10,21 +10,20 @@ import { extractErrorMessage } from '@sdk/errors';
 import { formatTokenAmount } from '@util/token-rules';
 import { resolveSigningCriteria } from '../capabilities';
 import { withSigningMaterial, type ExecuteArgs } from '../executors';
-import { BroadcastOutcomeUnknownError, type ReceiptEntities } from '../outcomes';
+import { BroadcastOutcomeUnknownError, receiptEntities } from '../outcomes';
 import type { SdkSigningMaterial } from '@/signer/types';
 import { actionMatches, authorityFor, holderIdsFor, tokenOperationProblems } from '../tokens/checks';
-import { cosignParameters } from '../tokens/group-actions';
+import { cosignParameters, type PendingGroupAction } from '../tokens/group-actions';
 import {
+  ruleItemName,
   tokenOperationId,
   type ActionTakers,
-  type ChangeRule,
   type TokenConfigChange,
   type TokenOperationKind,
   type TokenOperationOptions,
 } from '../tokens/options';
 import {
   loadGroupActions,
-  loadPendingAction,
   loadTokenSnapshot,
   readProvedBalances,
   resolveTokenTarget,
@@ -101,34 +100,6 @@ function takersObject(evo: Evo, takers: ActionTakers) {
   }
 }
 
-/** The SDK static that builds each (rule, target) change. */
-const RULE_ITEM_BUILDERS: Record<ChangeRule, { authorized: string; admin: string }> = {
-  conventions: { authorized: 'ConventionsControlGroupItem', admin: 'ConventionsAdminGroupItem' },
-  maxSupply: { authorized: 'MaxSupplyControlGroupItem', admin: 'MaxSupplyAdminGroupItem' },
-  perpetualDistribution: {
-    authorized: 'PerpetualDistributionControlGroupItem',
-    admin: 'PerpetualDistributionAdminGroupItem',
-  },
-  newTokensDestinationIdentity: {
-    authorized: 'NewTokensDestinationIdentityControlGroupItem',
-    admin: 'NewTokensDestinationIdentityAdminGroupItem',
-  },
-  mintingAllowChoosingDestination: {
-    authorized: 'MintingAllowChoosingDestinationControlGroupItem',
-    admin: 'MintingAllowChoosingDestinationAdminGroupItem',
-  },
-  marketplaceTradeMode: {
-    authorized: 'MarketplaceTradeModeControlGroupItem',
-    admin: 'MarketplaceTradeModeAdminGroupItem',
-  },
-  manualMinting: { authorized: 'ManualMintingItem', admin: 'ManualMintingAdminGroupItem' },
-  manualBurning: { authorized: 'ManualBurningItem', admin: 'ManualBurningAdminGroupItem' },
-  freeze: { authorized: 'FreezeItem', admin: 'FreezeAdminGroupItem' },
-  unfreeze: { authorized: 'UnfreezeItem', admin: 'UnfreezeAdminGroupItem' },
-  destroyFrozenFunds: { authorized: 'DestroyFrozenFundsItem', admin: 'DestroyFrozenFundsAdminGroupItem' },
-  emergencyAction: { authorized: 'EmergencyActionItem', admin: 'EmergencyActionAdminGroupItem' },
-};
-
 export function buildConfigChangeItem(evo: Evo, change: TokenConfigChange) {
   const { TokenConfigurationChangeItem: Item } = evo;
   switch (change.item) {
@@ -172,7 +143,9 @@ export function buildConfigChangeItem(evo: Evo, change: TokenConfigChange) {
       return Item.PerpetualDistributionConfigurationItem(new evo.TokenPerpetualDistribution(type, recipient));
     }
     case 'rule': {
-      const name = RULE_ITEM_BUILDERS[change.rule][change.target] as keyof typeof Item;
+      // ManualMintingItem, MaxSupplyControlGroupItem, FreezeAdminGroupItem…
+      const base = ruleItemName(change.rule, change.target);
+      const name = `${base.charAt(0).toUpperCase()}${base.slice(1)}Item` as keyof typeof Item;
       const build = Item[name] as unknown as (takers: unknown) => ReturnType<typeof Item.noChangeItem>;
       return build(takersObject(evo, change.takers));
     }
@@ -187,7 +160,10 @@ function tokenWrite(
   material: SdkSigningMaterial,
 ): () => Promise<unknown> {
   const { Identifier, GroupStateTransitionInfoStatus } = evo;
+  // Everything is built here, before submission starts: a failure is "not submitted".
   const signerId = Identifier.fromBase58(material.identityId);
+  const recipientId = 'recipientId' in options ? Identifier.fromBase58(options.recipientId) : undefined;
+  const targetId = 'targetIdentityId' in options ? Identifier.fromBase58(options.targetIdentityId) : undefined;
   const base = {
     dataContractId: Identifier.fromBase58(options.contractId),
     tokenPosition: options.tokenPosition,
@@ -209,7 +185,7 @@ function tokenWrite(
           amount: options.amount,
           identityId: signerId,
           // Otherwise Platform sends the tokens to the token's destination identity.
-          recipientId: options.chooseRecipient ? Identifier.fromBase58(options.recipientId) : undefined,
+          recipientId: options.chooseRecipient ? recipientId : undefined,
           groupInfo,
         });
     case 'burn':
@@ -220,14 +196,14 @@ function tokenWrite(
           ...base,
           amount: options.amount,
           senderId: signerId,
-          recipientId: Identifier.fromBase58(options.recipientId),
+          recipientId: recipientId!,
         });
     case 'freeze':
     case 'unfreeze': {
       const target = {
         ...base,
         authorityId: signerId,
-        frozenIdentityId: Identifier.fromBase58(options.targetIdentityId),
+        frozenIdentityId: targetId!,
         groupInfo,
       };
       return options.kind === 'freeze' ? () => tokens.freeze(target) : () => tokens.unfreeze(target);
@@ -237,7 +213,7 @@ function tokenWrite(
         tokens.destroyFrozen({
           ...base,
           authorityId: signerId,
-          frozenIdentityId: Identifier.fromBase58(options.targetIdentityId),
+          frozenIdentityId: targetId!,
           groupInfo,
         });
     case 'emergencyAction':
@@ -270,7 +246,8 @@ function tokenWrite(
   }
 }
 
-function readGroupOutcome(result: unknown): { power?: number; status?: string } {
+/** Read what a write result reports about its group action, then free it. */
+function consumeResult(result: unknown): { power?: number; status?: string } {
   try {
     const record = result as { groupPower?: unknown; groupActionStatus?: unknown } | null;
     const power = record?.groupPower;
@@ -281,14 +258,12 @@ function readGroupOutcome(result: unknown): { power?: number; status?: string } 
     };
   } catch {
     return {};
-  }
-}
-
-function release(value: unknown): void {
-  try {
-    (value as { free?: () => void } | null)?.free?.();
-  } catch {
-    /* already freed */
+  } finally {
+    try {
+      (result as { free?: () => void } | null)?.free?.();
+    } catch {
+      /* already freed */
+    }
   }
 }
 
@@ -306,7 +281,7 @@ const VERBS: Record<TokenOperationKind, string> = {
   configUpdate: 'Updated the configuration',
 };
 
-/** Retry policy for the post-write balance read; tests shorten it. */
+/** Retry policy for the post-write reads; tests shorten it. */
 export const POST_WRITE_READ = { attempts: 8, delayMs: 1500 };
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -340,67 +315,75 @@ async function balanceChanges(
     settled = newer && (!expectChange || moved);
   }
   const amount = (value: bigint) => formatTokenAmount(value, options.decimals);
+  const balances = affected.map((id) => {
+    const was = before[id]!;
+    const now = after?.balances[id];
+    return now === undefined
+      ? { identityId: id, before: was.toString(), display: `${amount(was)} ${options.tokenName} before` }
+      : { identityId: id, before: was.toString(), after: now.toString(), display: `${amount(was)} → ${amount(now)} ${options.tokenName}` };
+  });
   if (!after)
-    return {
-      balancesError: `The write was confirmed, but re-reading balances failed: ${extractErrorMessage(lastError)}`,
-      balances: affected.map((id) => ({
-        identityId: id,
-        before: before[id]!.toString(),
-        display: `${amount(before[id]!)} ${options.tokenName} before`,
-      })),
-    };
+    return { balances, balancesError: `The write was confirmed, but re-reading balances failed: ${extractErrorMessage(lastError)}` };
   return {
+    balances,
     balancesProvedAtHeight: after.height?.toString(),
     balancesError: settled
       ? undefined
       : 'These balances may predate the write: no node had proved a later block yet. Check the token page.',
-    balances: affected.map((id) => ({
-      identityId: id,
-      before: before[id]!.toString(),
-      after: after!.balances[id]!.toString(),
-      display: `${amount(before[id]!)} → ${amount(after!.balances[id]!)} ${options.tokenName}`,
-    })),
   };
 }
 
-/** IDs of active or closed group actions matching the inputs that the signer has signed. */
-async function signedMatchingActions(sdk: EvoSDK, options: TokenOperationOptions): Promise<Set<string>> {
+/** Matching group actions the signer has signed, from proved reads of both statuses. */
+interface SignedActions {
+  /** Proposer of each matching action the signer has signed. */
+  signed: Map<string, string | undefined>;
+  /** Of those, still-pending actions the signer proposed. */
+  ownPending: string[];
+  /** Lowest height the two reads were proved at, if both reported one. */
+  height?: bigint;
+  /** Neither page was full, so no matching action can be missing. */
+  complete: boolean;
+}
+
+async function signedMatchingActions(sdk: EvoSDK, options: TokenOperationOptions): Promise<SignedActions> {
   const group = options.group!;
-  const actions = (
-    await Promise.all(
-      (['ACTIVE', 'CLOSED'] as const).map((status) =>
-        loadGroupActions(sdk, options.contractId, group.groupPosition, status),
-      ),
-    )
-  ).flat();
-  return new Set(
-    actions
-      .filter((action) => action.signers[options.signerId] !== undefined && actionMatches(action, options, options.tokenPosition))
-      .map((action) => action.actionId),
+  const keep = (action: PendingGroupAction) => actionMatches(action, options, options.tokenPosition);
+  const [active, closed] = await Promise.all(
+    (['ACTIVE', 'CLOSED'] as const).map((status) =>
+      loadGroupActions(sdk, options.contractId, group.groupPosition, status, keep),
+    ),
   );
+  const mine = (actions: PendingGroupAction[]) => actions.filter((a) => a.signers[options.signerId] !== undefined);
+  const heights = [active!.height, closed!.height];
+  return {
+    signed: new Map([...mine(active!.actions), ...mine(closed!.actions)].map((a) => [a.actionId, a.proposerId])),
+    ownPending: mine(active!.actions).filter((a) => a.proposerId === options.signerId).map((a) => a.actionId),
+    height: heights.every((h) => h !== undefined) ? (heights[0]! < heights[1]! ? heights[0] : heights[1]) : undefined,
+    complete: active!.complete && closed!.complete,
+  };
 }
 
 /**
- * The action that now carries the signer's signature, if exactly one is new.
- * The node answering may not have the write's block yet, so retry briefly.
+ * The action that now carries the signer's signature: the reviewed action
+ * when co-signing, or exactly one new action the signer proposed. Only reads
+ * proved at a later block than `before`, on complete pages, count; a node may
+ * not have the write's block yet, so retry briefly.
  */
 async function confirmGroupSignature(
   sdk: EvoSDK,
   options: TokenOperationOptions,
-  signedBefore: Set<string>,
+  before: SignedActions,
 ): Promise<string | undefined> {
+  if (!before.complete || before.height === undefined) return undefined;
   for (let attempt = 0; attempt < POST_WRITE_READ.attempts; attempt += 1) {
     if (attempt > 0) await sleep(POST_WRITE_READ.delayMs);
-    const signed = await signedMatchingActions(sdk, options).catch(() => undefined);
-    if (!signed) continue;
-    const added = [...signed].filter((id) => !signedBefore.has(id));
-    if (options.group?.mode === 'cosign') {
-      if (added.includes(options.group.actionId)) return options.group.actionId;
-    } else if (added.length === 1) {
-      return added[0];
-    } else if (added.length > 1) {
-      return undefined;
-    }
+    const after = await signedMatchingActions(sdk, options).catch(() => undefined);
+    if (!after?.complete || after.height === undefined || after.height <= before.height) continue;
+    const added = [...after.signed].filter(([id]) => !before.signed.has(id));
+    const group = options.group;
+    if (group?.mode === 'cosign') return added.some(([id]) => id === group.actionId) ? group.actionId : undefined;
+    const proposed = added.filter(([, proposer]) => proposer === options.signerId);
+    return proposed.length === 1 ? proposed[0]![0] : undefined;
   }
   return undefined;
 }
@@ -420,50 +403,47 @@ export async function executeTokenOperation(args: ExecuteArgs<TokenOperationOpti
         contractId: options.contractId,
         position: options.tokenPosition,
       });
-      const cosign = options.group?.mode === 'cosign' ? options.group : undefined;
-      const pending = cosign
-        ? await loadPendingAction(sdk, options.contractId, cosign.groupPosition, cosign.actionId)
-        : undefined;
-      const expected = pending ? cosignParameters(pending) : null;
-      const burnFromId = expected?.kind === 'burn' ? expected.burnFromId : undefined;
       const snapshot = await loadTokenSnapshot(sdk, {
         target,
-        holderIds: holderIdsFor(options, burnFromId),
+        holderIds: holderIdsFor(options),
         creditsOf: options.kind === 'directPurchase' ? options.signerId : undefined,
-        cosign,
+        cosign: options.group?.mode === 'cosign' ? options.group : undefined,
       });
       const problems = tokenOperationProblems(options, snapshot);
       if (problems.length > 0) throw new Error(problems.join(' '));
 
-      const affected = affectedIdentities(options, burnFromId);
+      const cosigned = snapshot.pending ? cosignParameters(snapshot.pending) : null;
+      const affected = affectedIdentities(options, cosigned?.kind === 'burn' ? cosigned.burnFromId : undefined);
       const before = Object.fromEntries(affected.map((id) => [id, snapshot.holders[id]?.balance ?? 0n]));
       const authority = authorityFor(options, snapshot.model);
-      // Group actions the signer already signed, to recognise a new signature afterwards.
+      // Group actions the signer already signed, to recognise a new signature
+      // afterwards and to refuse proposing the same action twice.
       const signedBefore = options.group ? await signedMatchingActions(sdk, options) : undefined;
+      if (options.group?.mode === 'propose' && signedBefore?.ownPending.length)
+        throw new Error(
+          `You already proposed this exact action: group action ${signedBefore.ownPending[0]} is pending. ` +
+            'Wait for the other members to co-sign it instead of proposing it again.',
+        );
+      const usableBefore =
+        signedBefore && snapshot.height !== undefined && (signedBefore.height ?? -1n) >= snapshot.height
+          ? signedBefore
+          : undefined;
       const evo = await import('@dashevo/evo-sdk');
       const write = tokenWrite(evo, sdk, options, material);
-      const entities: ReceiptEntities = {
-        identityId: material.identityId,
-        contractId: options.contractId,
-        tokenId: options.tokenId,
-        ...('recipientId' in options ? { recipientId: options.recipientId } : {}),
-        ...('targetIdentityId' in options ? { targetIdentityId: options.targetIdentityId } : {}),
-      };
       let raw: unknown;
       let confirmedActionId: string | undefined;
       try {
-        raw = await submit(write, entities, args.assertCurrent);
+        raw = await submit(write, receiptEntities(options, material.identityId), args.assertCurrent);
       } catch (error) {
         // evo-sdk 5.0.0-rc.8 fails to verify some confirmed group proposals
         // ("Expected document in group action result"). A proved read showing
         // the signer's new signature on the matching action confirms the write;
         // anything less leaves the outcome unknown.
-        if (!(error instanceof BroadcastOutcomeUnknownError) || !signedBefore) throw error;
-        confirmedActionId = await confirmGroupSignature(sdk, options, signedBefore).catch(() => undefined);
+        if (!(error instanceof BroadcastOutcomeUnknownError) || !usableBefore) throw error;
+        confirmedActionId = await confirmGroupSignature(sdk, options, usableBefore).catch(() => undefined);
         if (!confirmedActionId) throw error;
       }
-      const outcome = readGroupOutcome(raw);
-      release(raw);
+      const outcome = consumeResult(raw);
 
       const result: TokenResult = {
         kind: 'token',
@@ -476,17 +456,25 @@ export async function executeTokenOperation(args: ExecuteArgs<TokenOperationOpti
         message: `${VERBS[options.kind]} (${snapshot.model.name}).`,
       };
       if (options.group && authority?.kind === 'group') {
+        const required = authority.group.requiredPower;
         result.group = {
           mode: options.group.mode,
           groupPosition: options.group.groupPosition,
           actionId: options.group.mode === 'cosign' ? options.group.actionId : confirmedActionId,
-          requiredPower: authority.group.requiredPower,
+          requiredPower: required,
           ...outcome,
         };
-        result.message =
+        const completes =
           options.group.mode === 'propose'
-            ? `Proposed to group #${options.group.groupPosition}. It takes effect once members with ${authority.group.requiredPower} power have signed.`
-            : `Co-signed group action ${options.group.actionId}.`;
+            ? authority.signerPower >= required
+            : (snapshot.pending?.signedPower ?? 0) + authority.signerPower >= required;
+        result.message =
+          (options.group.mode === 'propose'
+            ? `Proposed to group #${options.group.groupPosition}.`
+            : `Co-signed group action ${options.group.actionId}.`) +
+          (completes
+            ? ' The signatures reached the required power, so the action executed.'
+            : ` It takes effect once members with ${required} power have signed.`);
         if (confirmedActionId)
           result.message +=
             ' The SDK could not verify the result proof, so a proved read of the group confirmed your signature on ' +

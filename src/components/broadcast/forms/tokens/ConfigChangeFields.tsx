@@ -8,14 +8,14 @@ import { formatTokenAmount } from '@util/token-rules';
 import { parseDecimalBigInt } from '../amount';
 import { MAX_TOKEN_SUPPLY, parseTokenAmount } from '../../tokens/amount';
 import {
-  ACTION_ONLY_RULES,
   CHANGE_RULE_LABELS,
   configChangeAuthority,
   describeConfigChange,
 } from '../../tokens/config-change';
 import type { CosignParameters } from '../../tokens/group-actions';
 import { describeTakers, ruleFor, type TokenModel } from '../../tokens/model';
-import { CHANGE_RULES, type ActionTakers, type ChangeRule, type TokenConfigChange } from '../../tokens/options';
+import { ACTION_ONLY_RULES, CHANGE_RULES, type ActionTakers, type ChangeRule, type TokenConfigChange } from '../../tokens/options';
+import { fingerprint } from '../../fingerprint';
 import { Field } from './fields';
 
 type ItemKey =
@@ -184,7 +184,7 @@ export function ConfigChangeFields({
   const set = (patch: Partial<State>) => setState((current) => ({ ...current, ...patch }));
   const lockedChange = locked?.kind === 'configUpdate' ? locked.change : null;
   const change = useMemo(() => lockedChange ?? buildChange(state, model), [lockedChange, state, model]);
-  const key = JSON.stringify(change, (_k, v: unknown) => (typeof v === 'bigint' ? `${v}n` : v));
+  const key = fingerprint(change);
   useEffect(() => {
     onChange(change);
     // eslint-disable-next-line react-hooks/exhaustive-deps

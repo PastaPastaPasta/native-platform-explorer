@@ -63,7 +63,10 @@ describe('token operation checks', () => {
 
     it('checks the recipient and the max supply', () => {
       expect(problems({ ...mint, recipientId: STRANGER })).toContain(`Recipient ${shortId(STRANGER)} does not exist.`);
-      expect(problems(mint, { holders: { [MEMBER]: { exists: true, balance: 0n, frozen: true } } })[0]).toMatch(/frozen balance/);
+      const frozenRecipient = { holders: { [MEMBER]: { exists: true, balance: 0n, frozen: true } } };
+      // Platform refuses a frozen recipient only when the token disallows transfers to frozen balances.
+      expect(problems(mint, frozenRecipient)).toEqual([]);
+      expect(problems(mint, frozenRecipient, tokenConfig({ allowTransferToFrozenBalance: false }))[0]).toMatch(/frozen balance/);
       expect(problems({ ...mint, amount: 100_000_000_000_000n })[0]).toMatch(/would exceed the max supply of 1,000,000/);
     });
 
@@ -97,6 +100,13 @@ describe('token operation checks', () => {
   it('allows only the emergency action that changes the state', () => {
     expect(problems({ ...base, kind: 'emergencyAction', action: 'pause' }, { paused: true })).toEqual(['The token is already paused.']);
     expect(problems({ ...base, kind: 'emergencyAction', action: 'resume' })).toEqual(['The token is not paused.']);
+  });
+
+  it('requires identities a configuration change names to exist', () => {
+    expect(problems({ ...base, kind: 'configUpdate', change: { item: 'newTokensDestinationIdentity', value: STRANGER } })).toEqual([
+      `Identity ${shortId(STRANGER)} does not exist.`,
+    ]);
+    expect(problems({ ...base, kind: 'configUpdate', change: { item: 'rule', rule: 'freeze', target: 'authorized', takers: { type: 'identity', identityId: MEMBER } } })).toEqual([]);
   });
 
   it('validates price schedules', () => {
@@ -175,7 +185,8 @@ describe('token operation checks', () => {
 
   it('lists the identities an operation depends on', () => {
     expect(holderIdsFor({ ...base, kind: 'transfer', amount: 1n, recipientId: MEMBER })).toEqual([OWNER, MEMBER]);
-    expect(holderIdsFor({ ...base, kind: 'burn', amount: 1n }, STRANGER)).toEqual([OWNER, STRANGER]);
+    expect(holderIdsFor({ ...base, kind: 'configUpdate', change: { item: 'newTokensDestinationIdentity', value: STRANGER } })).toEqual([OWNER, STRANGER]);
+    expect(holderIdsFor({ ...base, kind: 'configUpdate', change: { item: 'rule', rule: 'freeze', target: 'admin', takers: { type: 'identity', identityId: MEMBER } } })).toEqual([OWNER, MEMBER]);
   });
 
   it('explains when an operation is unavailable before any input', () => {

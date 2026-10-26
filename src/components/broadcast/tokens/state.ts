@@ -6,8 +6,14 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import { toPlain, toRecord } from '@util/contract';
 import { idToString, readProp } from '@util/sdk-shape';
 import { isBase58Identifier } from '@util/identifier';
+import { toUnsignedBigInt } from '@util/numbers';
 import { tokenModelFromContract, type TokenModel } from './model';
-import { pendingActionFromJson, type PendingGroupAction } from './group-actions';
+import {
+  cosignIdentityIds,
+  cosignParameters,
+  pendingActionFromJson,
+  type PendingGroupAction,
+} from './group-actions';
 
 export interface TokenTarget {
   tokenId: string;
@@ -78,13 +84,6 @@ export interface SnapshotRequest {
   cosign?: { groupPosition: number; actionId: string };
 }
 
-const big = (value: unknown): bigint | undefined => {
-  if (typeof value === 'bigint') return value;
-  if (typeof value === 'number' && Number.isSafeInteger(value)) return BigInt(value);
-  if (typeof value === 'string' && /^\d+$/.test(value)) return BigInt(value);
-  return undefined;
-};
-
 async function loadHolders(sdk: EvoSDK, tokenId: string, ids: string[]): Promise<Record<string, HolderState>> {
   const unique = [...new Set(ids.filter(isBase58Identifier))];
   if (unique.length === 0) return {};
@@ -141,22 +140,25 @@ export async function loadTokenSnapshot(sdk: EvoSDK, request: SnapshotRequest): 
   ]);
   if (!contract) throw new Error(`Contract ${target.contractId} not found.`);
   const model = tokenModelFromContract(contract, target);
+  // A co-signed action names identities (recipient, target, burn account) the inputs may not.
+  const named = cosignIdentityIds(pending ? cosignParameters(pending) : null).filter((id) => !holders[id]);
+  const allHolders = named.length > 0 ? { ...holders, ...(await loadHolders(sdk, target.tokenId, named)) } : holders;
   const priceInfo = prices.get(target.tokenId);
-  const first = big(readProp<unknown>(priceInfo, 'basePrice'));
-  const last = big(readProp<unknown>(priceInfo, 'currentPrice'));
+  const first = toUnsignedBigInt(readProp<unknown>(priceInfo, 'basePrice'));
+  const last = toUnsignedBigInt(readProp<unknown>(priceInfo, 'currentPrice'));
   const supplyData = readProp<unknown>(supply, 'data');
-  const totalSupply = big(readProp<unknown>(supplyData, 'totalSupply'));
+  const totalSupply = toUnsignedBigInt(readProp<unknown>(supplyData, 'totalSupply'));
   if (totalSupply === undefined) throw new Error(`Token ${target.tokenId} has no total supply record.`);
   const metadata = toRecord(readProp<unknown>(supply, 'metadata'));
   const blockTime = Number(metadata?.timeMs);
-  const height = big(metadata?.height);
+  const height = toUnsignedBigInt(metadata?.height);
   return {
     model,
     // A token with no status record is active.
     paused: readProp<boolean>(statuses.get(target.tokenId), 'isPaused') === true,
     totalSupply,
     price: first !== undefined || last !== undefined ? { first: first ?? last!, last: last ?? first! } : undefined,
-    holders,
+    holders: allHolders,
     credits,
     pending,
     nowMs: Number.isFinite(blockTime) && blockTime > 0 ? blockTime : Date.now(),
@@ -164,22 +166,36 @@ export async function loadTokenSnapshot(sdk: EvoSDK, request: SnapshotRequest): 
   };
 }
 
-/** A group's actions in one status, with each action's signers. */
+/** Drive returns at most this many group actions per query. */
+export const GROUP_ACTIONS_PAGE = 100;
+
+/**
+ * A group's actions in one status, proved, with the height of the proof and
+ * whether the page could have been cut short. Signers are loaded only for
+ * the actions `keep` selects.
+ */
 export async function loadGroupActions(
   sdk: EvoSDK,
   contractId: string,
   groupPosition: number,
   status: 'ACTIVE' | 'CLOSED',
-): Promise<PendingGroupAction[]> {
+  keep: (action: PendingGroupAction) => boolean,
+): Promise<{ actions: PendingGroupAction[]; height?: bigint; complete: boolean }> {
   const query = { dataContractId: contractId, groupContractPosition: groupPosition, status } as const;
-  const actions = await sdk.group.actions(query);
-  return Promise.all(
-    [...actions.entries()].map(async ([id, action]) => {
-      const actionId = String(id);
-      const signers = await sdk.group.actionSigners({ ...query, actionId });
-      return pendingActionFromJson(actionId, groupPosition, toPlain(action), signers);
+  const response = await sdk.group.actionsWithProof({ ...query, limit: GROUP_ACTIONS_PAGE });
+  const data = readProp<unknown>(response, 'data');
+  const entries = data instanceof Map ? [...data.entries()] : [];
+  const candidates = entries
+    .map(([id, action]) => pendingActionFromJson(String(id), groupPosition, toPlain(action), undefined))
+    .filter(keep);
+  const actions = await Promise.all(
+    candidates.map(async (action) => {
+      const signers = await sdk.group.actionSigners({ ...query, actionId: action.actionId });
+      return pendingActionFromJson(action.actionId, groupPosition, toPlain(entries.find(([id]) => String(id) === action.actionId)?.[1]), signers);
     }),
   );
+  const metadata = toRecord(readProp<unknown>(response, 'metadata'));
+  return { actions, height: toUnsignedBigInt(metadata?.height), complete: entries.length < GROUP_ACTIONS_PAGE };
 }
 
 /** Proved balances after a transition, with the height they were proved at. */
@@ -193,5 +209,5 @@ export async function readProvedBalances(
   const metadata = toRecord(readProp<unknown>(response, 'metadata'));
   const balances: Record<string, bigint> = {};
   for (const id of ids) balances[id] = (data instanceof Map ? (data.get(id) as bigint | undefined) : undefined) ?? 0n;
-  return { balances, height: big(metadata?.height) };
+  return { balances, height: toUnsignedBigInt(metadata?.height) };
 }
