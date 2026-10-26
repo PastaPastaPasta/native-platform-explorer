@@ -804,7 +804,11 @@ export async function executeDpnsRegister(
       { identityId: material.identityId, contractId: DPNS_CONTRACT_ID, documentType: 'domain' },
       args.assertCurrent,
     );
-    const name = registered.fullDomainName || `${options.label}.${DPNS_TLD}`;
+    // The SDK reports the homograph-safe form (o → 0, i/l → 1); the label is
+    // stored as entered, so name that and add the normalized form when it differs.
+    const entered = `${options.label}.${DPNS_TLD}`;
+    const normalized = registered.fullDomainName;
+    const name = normalized && normalized !== entered ? `${entered} (normalized ${normalized})` : entered;
     return {
       kind: 'identity' as const,
       identityId: material.identityId,

@@ -614,6 +614,14 @@ describe('broadcast executors', () => {
       options: { label: 'alice', contested },
     });
     expect(registerName).toHaveBeenCalledWith(expect.objectContaining({ label: 'alice', identity }));
+    // Live testnet: the SDK reported "npeqa-exp10rer-….dash" for the stored label "npeqa-explorer-…".
+    registerName.mockResolvedValueOnce({ preorderDocumentId: 'p', domainDocumentId: 'd', fullDomainName: 'b0b.dash' });
+    const normalized = await executeDpnsRegister({
+      sdk: { identities: { fetch: vi.fn().mockResolvedValue(identity) }, dpns: { registerName } } as never,
+      signer: createMockSigner(),
+      options: { label: 'bob', contested },
+    });
+    expect(normalized.message).toContain('bob.dash (normalized b0b.dash)');
     expect(result).toEqual({
       kind: 'identity',
       identityId: 'identity-1',
