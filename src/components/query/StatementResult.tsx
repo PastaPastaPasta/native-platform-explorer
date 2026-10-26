@@ -25,8 +25,10 @@ import { resolveContractId, toDocumentsQuery, type ParsedQuery } from '@util/sql
 import { toError } from '@util/errors';
 import { describeQueryError, documentPageCursor } from '@util/query-workspace';
 import { useSdk } from '@sdk/hooks';
+import { usePlatformProtocolVersion } from '@sdk/health';
 import { ResultActions } from './ResultActions';
 import {
+  aggregateGroupBound,
   checkAggregateAgainstIndices,
   checkQueryAgainstIndices,
   RANGE_OPERATORS,
@@ -39,9 +41,6 @@ import {
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { QueryResults } from './QueryResults';
 import { AggregateResults, type AggregateResultMap } from './AggregateResults';
-
-/** Drive's DEFAULT_QUERY_LIMIT, which caps per-group aggregate entries when LIMIT is omitted. */
-const DEFAULT_GROUP_LIMIT = 100;
 
 /** The GROUP BY field that also carries the range filter (RangeDistinct mode). */
 function rangeGroupField(parsed: ParsedQuery): string | undefined {
@@ -76,6 +75,7 @@ export function StatementResult({
     retrievedAt: number;
   } | null>(null);
   const { network } = useSdk();
+  const protocolVersion = usePlatformProtocolVersion();
   const stateChangeRef = useRef(onStateChange);
   stateChangeRef.current = onStateChange;
 
@@ -105,9 +105,9 @@ export function StatementResult({
   const indexCheck = useMemo(() => {
     if (!docSchema) return undefined;
     return parsed.select === 'documents'
-      ? checkQueryAgainstIndices(parsed, indices)
+      ? checkQueryAgainstIndices(parsed, indices, { protocolVersion })
       : checkAggregateAgainstIndices(parsed, parsed.select, parsed.aggregateField, indices, getDocumentTypeAggregates(docSchema));
-  }, [parsed, indices, docSchema]);
+  }, [parsed, indices, docSchema, protocolVersion]);
 
   const startAfter = cursorStack[cursorStack.length - 1];
 
@@ -312,7 +312,7 @@ export function StatementResult({
           kind={parsed.select as 'count' | 'sum' | 'avg'}
           aggregateField={parsed.aggregateField}
           groupBy={parsed.groupBy}
-          groupLimit={parsed.limit ?? DEFAULT_GROUP_LIMIT}
+          groupBound={aggregateGroupBound(parsed)}
           rangeGroupField={rangeGroupField(parsed)}
           descending={parsed.orderBy[0]?.direction === 'desc'}
           groupBySchemas={groupBySchemas}

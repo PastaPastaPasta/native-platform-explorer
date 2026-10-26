@@ -25,7 +25,7 @@ describe('AggregateResults', () => {
         {...base}
         groupBy={['semester']}
         groupBySchemas={[{ type: 'integer' }]}
-        groupLimit={2}
+        groupBound={{ limit: 2, entriesPerGroup: 1 }}
         rangeGroupField="semester"
         data={data}
       />,
@@ -40,13 +40,13 @@ describe('AggregateResults', () => {
   it('does not flag results below the limit, and suggests < for descending order', () => {
     const data = new Map([[intKey(5), 1n]]);
     const { unmount } = renderWithProviders(
-      <AggregateResults {...base} groupBy={['n']} groupBySchemas={[{ type: 'integer' }]} groupLimit={100} rangeGroupField="n" data={data} />,
+      <AggregateResults {...base} groupBy={['n']} groupBySchemas={[{ type: 'integer' }]} groupBound={{ limit: 100, entriesPerGroup: 1 }} rangeGroupField="n" data={data} />,
     );
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
     expect(screen.getByText('1 group')).toBeInTheDocument();
     unmount();
     renderWithProviders(
-      <AggregateResults {...base} groupBy={['n']} groupBySchemas={[{ type: 'integer' }]} groupLimit={1} rangeGroupField="n" descending data={data} />,
+      <AggregateResults {...base} groupBy={['n']} groupBySchemas={[{ type: 'integer' }]} groupBound={{ limit: 1, entriesPerGroup: 1 }} rangeGroupField="n" descending data={data} />,
     );
     expect(screen.getByRole('status')).toHaveTextContent('filter on n < 5 instead of the current upper bound');
   });
@@ -70,5 +70,25 @@ describe('AggregateResults', () => {
     );
     expect(screen.getByText('CS101')).toBeInTheDocument();
     expect(screen.getByText('90')).toBeInTheDocument();
+  });
+
+  it('never flags IN groups, which the IN list bounds', () => {
+    const data = new Map(['CS101', 'CS202', 'MATH150', 'MATH250', 'PHYS200', 'BIO110', 'ENG101'].map((c) => [Buffer.from(c).toString('hex'), 3n]));
+    renderWithProviders(<AggregateResults {...base} groupBy={['class']} groupBySchemas={[{ type: 'string' }]} data={data} />);
+    expect(screen.getByText('7 groups')).toBeInTheDocument();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
+  });
+
+  it('flags merged compound groups when the IN values can fill the pair limit', () => {
+    const data = new Map([[intKey(20251), 4n], [intKey(20252), 7n]]);
+    const props = { ...base, groupBy: ['class', 'semester'], groupBySchemas: [{ type: 'string' }, { type: 'integer' }], rangeGroupField: 'semester', data };
+    const { unmount } = renderWithProviders(<AggregateResults {...props} groupBound={{ limit: 5, entriesPerGroup: 3 }} />);
+    expect(screen.getByText('2+ groups')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'Platform returns at most 5 (class, semester) pairs before the SDK merges them, so these 2 groups may be incomplete. Aggregates have no page cursor. Narrow the WHERE filter to see the rest.',
+    );
+    unmount();
+    renderWithProviders(<AggregateResults {...props} groupBound={{ limit: 7, entriesPerGroup: 3 }} />);
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

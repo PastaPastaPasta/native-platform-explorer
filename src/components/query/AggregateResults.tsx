@@ -34,8 +34,8 @@ export interface AggregateResultsProps {
   aggregateField?: string;
   groupBy?: string[];
   groupBySchemas?: GroupByPropertySchemas;
-  /** Most per-group entries the request can return (LIMIT, or the server default). */
-  groupLimit?: number;
+  /** Most entries the server returns, when that can truncate the groups (see `aggregateGroupBound`). */
+  groupBound?: { limit: number; entriesPerGroup: number };
   /** GROUP BY field that also carries the range filter, when groups are distinct range values. */
   rangeGroupField?: string;
   /** Groups are walked in descending order (first ORDER BY is DESC). */
@@ -163,7 +163,7 @@ export function AggregateResults({
   aggregateField,
   groupBy,
   groupBySchemas,
-  groupLimit,
+  groupBound,
   rangeGroupField,
   descending,
   data,
@@ -197,9 +197,11 @@ export function AggregateResults({
     return data.get('');
   }, [data]);
 
-  // Per-group entries stop at the limit; a full result may be truncated.
-  const truncated = grouped && groupLimit !== undefined && rows.length >= groupLimit;
-  const lastLiteral = truncated && rangeGroupField === groupField && rows.length
+  // Server entries stop at the limit. Compound rows each merge up to one entry
+  // per IN value, so they may be truncated before the row count reaches it.
+  const truncated = grouped && !!groupBound && rows.length * groupBound.entriesPerGroup >= groupBound.limit;
+  const merged = !!groupBound && groupBound.entriesPerGroup > 1;
+  const lastLiteral = truncated && !merged && rangeGroupField === groupField && rows.length
     ? decodeGroupKey(rows[rows.length - 1]!.key, groupByPrimarySchema).literal
     : undefined;
 
@@ -234,8 +236,10 @@ export function AggregateResults({
           )}
           {truncated && (
             <Text role="status" fontSize="xs" color="orange.300">
-              Showing the first {rows.length} groups: the limit of {groupLimit} was reached, so more groups
-              may exist. Aggregates have no page cursor.{' '}
+              {merged
+                ? `Platform returns at most ${groupBound!.limit} (${mergedFields.join(', ')}, ${groupField}) pairs before the SDK merges them, so these ${rows.length} groups may be incomplete. `
+                : `Showing the first ${rows.length} groups: the limit of ${groupBound!.limit} was reached, so more groups may exist. `}
+              Aggregates have no page cursor.{' '}
               {lastLiteral ? (
                 <>
                   To continue, filter on{' '}

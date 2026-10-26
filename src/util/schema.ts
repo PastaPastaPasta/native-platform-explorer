@@ -173,18 +173,29 @@ export function validateWhereAgainstIndices(
 
 // ── Query workspace index checks ───────────────────────────────────────
 //
-// Mirrors Drive's index selection for document queries at protocol version 14
-// (rs-dpp `Index::matches_contiguous`, rs-drive `select_best_index` and the
-// path-query builders). Confirmed against testnet: a two-sided range on one
-// field is accepted; range and `in` fields need a matching ORDER BY; ordering
-// by a later index property without filtering the earlier ones is rejected.
+// Mirrors Drive's index selection for document queries. Up to protocol
+// version 13 (Platform 4.x, which the pinned SDK 4.0.0-rc.2 is built from,
+// and mainnet as of 2026-10) Drive uses rs-dpp `Index::matches`: after the
+// index is trimmed to end with the ORDER BY run, every field the query names
+// must sit inside it, an IN must be on one of the last two properties, and at
+// most two properties may go unused. Unfiltered middle properties are walked
+// by subqueries, so `status == 1 ORDER BY $updatedAt` on
+// [status, pooling, coreFeePerByte, $updatedAt] is accepted (Drive's own
+// withdrawal pooling issues it). Protocol version 14 (Platform 5.x, on
+// testnet since 2026-10) adds `Index::matches_contiguous`: equality filters
+// must cover the leading properties, the range/IN field must follow them, and
+// no unused property may precede a named one. On testnet DPNS,
+// `ORDER BY normalizedLabel` without a parent filter is rejected, while
+// mainnet returns documents. Range and IN fields need ORDER BY on both.
 // These are warnings — the Platform remains the authority.
 
 export type QueryOperator = '==' | '>' | '>=' | '<' | '<=' | 'between' | 'in' | 'startsWith';
 
 export interface QueryShape {
-  where: Array<{ field: string; operator: QueryOperator }>;
+  where: Array<{ field: string; operator: QueryOperator; value?: unknown }>;
   orderBy: Array<{ field: string }>;
+  groupBy?: string[];
+  limit?: number;
 }
 
 export interface IndexCheck {
@@ -194,33 +205,48 @@ export interface IndexCheck {
   warnings: string[];
 }
 
+export interface IndexCheckOptions {
+  /** The network's current Platform protocol version; unknown means the SDK's own (13). */
+  protocolVersion?: number;
+}
+
+/** First protocol version whose document queries need a contiguous index prefix. */
+export const CONTIGUOUS_INDEX_PROTOCOL_VERSION = 14;
+
 export const RANGE_OPERATORS: ReadonlySet<QueryOperator> = new Set<QueryOperator>(['>', '>=', '<', '<=', 'between', 'startsWith']);
-/** Drive's MAX_INDEX_DIFFERENCE: at most two unused trailing index properties. */
+/** Drive's MAX_INDEX_DIFFERENCE: at most two unused index properties. */
 const MAX_INDEX_DIFFERENCE = 2;
+/** Drive's DEFAULT_QUERY_LIMIT, which also caps per-group aggregate entries. */
+export const DEFAULT_AGGREGATE_GROUP_LIMIT = 100;
+/** MAX_CARRIER_AGGREGATE_OUTER_RANGE_LIMIT: default outer walk of a two-range GROUP BY. */
+const CARRIER_OUTER_RANGE_LIMIT = 10;
 
 const list = (fields: string[]) => fields.map((f) => `\`${f}\``).join(', ');
 const describeIndex = (idx: SchemaIndex) => `${idx.name} (${idx.properties.map((p) => p.field).join(', ')})`;
 
 interface Roles {
   equality: string[];
-  rangeField?: string;
+  rangeFields: string[];
   inFields: string[];
   orderBy: string[];
 }
 
-function queryRoles(shape: QueryShape, requireOrderBy: boolean): { roles: Roles; warnings: string[] } {
-  const warnings: string[] = [];
-  const equality = unique(shape.where.filter((w) => w.operator === '==').map((w) => w.field));
-  const inFields = unique(shape.where.filter((w) => w.operator === 'in').map((w) => w.field));
-  const rangeFields = unique(shape.where.filter((w) => RANGE_OPERATORS.has(w.operator)).map((w) => w.field));
-  const orderBy = shape.orderBy.map((o) => o.field);
+function queryRoles(shape: QueryShape): Roles {
+  return {
+    equality: unique(shape.where.filter((w) => w.operator === '==').map((w) => w.field)),
+    inFields: unique(shape.where.filter((w) => w.operator === 'in').map((w) => w.field)),
+    rangeFields: unique(shape.where.filter((w) => RANGE_OPERATORS.has(w.operator)).map((w) => w.field)),
+    orderBy: shape.orderBy.map((o) => o.field),
+  };
+}
 
-  if (rangeFields.length > 1) {
-    warnings.push(
-      `Only one field can use range filters (<, <=, >, >=, BETWEEN, STARTS WITH); this query uses ${list(rangeFields)}.`,
-    );
+/** WhereClause::group_clauses: per-field clause rules shared by every query kind. */
+function clauseWarnings(shape: QueryShape, roles: Roles, checkInCount: boolean): string[] {
+  const warnings: string[] = [];
+  if (checkInCount && shape.where.filter((w) => w.operator === 'in').length > 1) {
+    warnings.push(`Only one IN filter is allowed per query; this query has IN on ${list(roles.inFields)}.`);
   }
-  for (const field of rangeFields) {
+  for (const field of roles.rangeFields) {
     const ops = shape.where.filter((w) => w.field === field && RANGE_OPERATORS.has(w.operator)).map((w) => w.operator);
     const lower = ops.filter((op) => op === '>' || op === '>=').length;
     const upper = ops.filter((op) => op === '<' || op === '<=').length;
@@ -231,80 +257,115 @@ function queryRoles(shape: QueryShape, requireOrderBy: boolean): { roles: Roles;
       );
     }
   }
-  if (requireOrderBy) {
-    for (const field of [...rangeFields, ...inFields]) {
-      // `$id` is served by the primary key tree, which needs no ORDER BY.
-      if (field === '$id' || orderBy.includes(field)) continue;
-      const kind = rangeFields.includes(field) ? 'range filter' : 'IN filter';
-      warnings.push(`The ${kind} on \`${field}\` needs ORDER BY ${field}; Platform requires ordering on every range and IN field.`);
-    }
-  }
-  for (const field of equality) {
-    if (rangeFields.includes(field) || inFields.includes(field)) {
+  for (const field of roles.equality) {
+    if (roles.rangeFields.includes(field) || roles.inFields.includes(field)) {
       warnings.push(`\`${field}\` is filtered with = and with another operator; use one filter per field.`);
+    } else if (shape.where.filter((w) => w.field === field && w.operator === '==').length > 1) {
+      warnings.push(`\`${field}\` has more than one = filter; use one filter per field.`);
     }
   }
-  return { roles: { equality, rangeField: rangeFields[0], inFields, orderBy }, warnings };
+  return warnings;
 }
 
 function unique(fields: string[]): string[] {
   return Array.from(new Set(fields));
 }
 
-/** Why `index` cannot serve the query, or null when it can. */
-function indexMismatch(index: SchemaIndex, roles: Roles): string | null {
-  const props = index.properties.map((p) => p.field);
-  const { equality, rangeField, inFields, orderBy } = roles;
-  const named = unique([...equality, ...(rangeField ? [rangeField] : []), ...inFields, ...orderBy]);
-  const missing = named.filter((f) => !props.includes(f));
-  if (missing.length) return `it does not include ${list(missing)}`;
+/** Fields in the order Drive's `find_best_index` collects them. */
+function namedFields({ equality, rangeFields, inFields, orderBy }: Roles): string[] {
+  return unique([...equality, ...rangeFields.slice(0, 1), ...inFields.slice(0, 1), ...orderBy]);
+}
 
+/**
+ * rs-dpp `Index::matches` (protocol ≤ 13): the number of unused properties,
+ * or why the index cannot serve the query.
+ */
+function indexDifference(index: SchemaIndex, roles: Roles): number | string {
+  const props = index.properties.map((p) => p.field);
+  const names = namedFields(roles);
+  const inField = roles.inFields[0];
+  const missing = names.filter((f) => !props.includes(f));
+  if (missing.length) return `it does not include ${list(missing)}`;
+  // Trim trailing properties until the index ends with the ORDER BY run.
+  let reduced = props;
+  if (roles.orderBy.length) {
+    let k = props.length;
+    while (k >= roles.orderBy.length && !roles.orderBy.every((f, j) => props[k - roles.orderBy.length + j] === f)) k--;
+    if (k < roles.orderBy.length) return `ORDER BY must list consecutive properties in index order (${list(props)})`;
+    reduced = props.slice(0, k);
+  }
+  if (inField && !props.slice(-2).includes(inField)) {
+    return `IN is only allowed on its last two properties (${list(props.slice(-2))})`;
+  }
+  const after = names.filter((f) => !reduced.includes(f));
+  if (after.length) return `ORDER BY must continue through ${list(after)}, which the query also uses`;
+  return props.length - names.length;
+}
+
+/** rs-dpp `Index::matches_contiguous` (protocol ≥ 14): extra placement rules, or null. */
+function contiguityMismatch(index: SchemaIndex, roles: Roles): string | null {
+  const props = index.properties.map((p) => p.field);
+  const { equality, rangeFields, inFields } = roles;
+  const names = namedFields(roles);
   const leading = props.slice(0, equality.length);
   if (!leading.every((f) => equality.includes(f))) {
     return `equality filters must cover its first ${equality.length === 1 ? 'property' : `${equality.length} properties`} (${list(leading)})`;
   }
-  const next = [rangeField, inFields.length === 1 ? inFields[0] : undefined].filter((f): f is string => !!f);
+  const next = [rangeFields[0], inFields[0]].filter((f): f is string => !!f);
   const positions = next.map((f) => props.indexOf(f)).sort((a, b) => a - b);
   if (positions.some((pos, i) => pos !== equality.length + i)) {
     return `${list(next)} must be the ${next.length === 1 ? 'property' : 'properties'} right after the equality-filtered ones (${list(props.slice(equality.length, equality.length + next.length))})`;
   }
-  if (inFields.length === 1 && !props.slice(-2).includes(inFields[0]!)) {
-    return `IN is only allowed on its last two properties (${list(props.slice(-2))})`;
-  }
-  if (orderBy.length) {
-    // Drive trims trailing properties until the index ends with the ORDER BY
-    // run; every field the query names must sit inside what remains.
-    let end = -1;
-    for (let k = props.length; k >= orderBy.length && end === -1; k--) {
-      if (orderBy.every((f, j) => props[k - orderBy.length + j] === f)) end = k - 1;
-    }
-    if (end === -1) return `ORDER BY must list consecutive properties in index order (${list(props)})`;
-    const after = named.filter((f) => props.indexOf(f) > end);
-    if (after.length) return `ORDER BY must continue through ${list(after)}, which the query also uses`;
-  }
-  const prefix = props.slice(0, named.length);
-  if (!prefix.every((f) => named.includes(f))) {
-    const gap = prefix.find((f) => !named.includes(f))!;
-    return `\`${gap}\` comes before ${list(named.filter((f) => props.indexOf(f) > props.indexOf(gap)))} and must be filtered first`;
-  }
-  if (props.length - named.length > MAX_INDEX_DIFFERENCE) {
-    return `the query uses ${named.length} of its ${props.length} properties; at most ${MAX_INDEX_DIFFERENCE} may be left unused`;
+  const prefix = props.slice(0, names.length);
+  const gap = prefix.find((f) => !names.includes(f));
+  if (gap) {
+    return `\`${gap}\` comes before ${list(names.filter((f) => props.indexOf(f) > props.indexOf(gap)))} and must be filtered first`;
   }
   return null;
 }
 
 /** Check a SELECT * query against the document type's indices. */
-export function checkQueryAgainstIndices(shape: QueryShape, indices: SchemaIndex[]): IndexCheck {
-  const { roles, warnings } = queryRoles(shape, true);
+export function checkQueryAgainstIndices(shape: QueryShape, indices: SchemaIndex[], options: IndexCheckOptions = {}): IndexCheck {
+  const contiguous = (options.protocolVersion ?? 0) >= CONTIGUOUS_INDEX_PROTOCOL_VERSION;
+  const roles = queryRoles(shape);
+  // Protocol 14 groups several IN clauses and decides in the path lowering.
+  const warnings = clauseWarnings(shape, roles, !contiguous);
+  if (roles.rangeFields.length > 1) {
+    warnings.push(
+      `Only one field can use range filters (<, <=, >, >=, BETWEEN, STARTS WITH); this query uses ${list(roles.rangeFields)}.`,
+    );
+  }
+  for (const field of [...roles.rangeFields, ...roles.inFields]) {
+    // `$id` is served by the primary key tree, which needs no ORDER BY.
+    if (field === '$id' || roles.orderBy.includes(field)) continue;
+    const kind = roles.rangeFields.includes(field) ? 'range filter' : 'IN filter';
+    warnings.push(`The ${kind} on \`${field}\` needs ORDER BY ${field}; Platform requires ordering on every range and IN field.`);
+  }
   const fields = unique([...shape.where.map((w) => w.field), ...roles.orderBy]);
   // Unfiltered queries and `$id` lookups use the primary key tree.
-  if (fields.every((f) => f === '$id') && !roles.rangeField) return { warnings };
-
-  const candidates = indices.map((index) => ({ index, reason: indexMismatch(index, roles) }));
-  const match = candidates.find((c) => c.reason === null);
-  if (match) return { matchedIndex: match.index.name, warnings };
+  if (fields.every((f) => f === '$id') && !roles.rangeFields.length) return { warnings };
   if (indices.length === 0) {
     return { warnings: [...warnings, 'This document type declares no indices, so it can only be listed by $id.'] };
+  }
+
+  const candidates = indices.map((index) => {
+    const difference = indexDifference(index, roles);
+    const reason = typeof difference === 'string' ? difference : contiguous ? contiguityMismatch(index, roles) : null;
+    return { index, difference: reason === null ? (difference as number) : Infinity, reason };
+  });
+  // `index_for_types`: the fitting index with the fewest unused properties.
+  const best = candidates.reduce<(typeof candidates)[number] | undefined>(
+    (found, c) => (c.reason === null && (!found || c.difference < found.difference) ? c : found),
+    undefined,
+  );
+  if (best && best.difference <= MAX_INDEX_DIFFERENCE) return { matchedIndex: best.index.name, warnings };
+  if (best) {
+    return {
+      warnings: [
+        ...warnings,
+        `The closest index, ${describeIndex(best.index)}, leaves ${best.difference} properties unused; at most ${MAX_INDEX_DIFFERENCE} may be.`,
+      ],
+    };
   }
   const related = candidates.filter((c) => c.index.properties.some((p) => fields.includes(p.field)));
   const shown = (related.length ? related : candidates).slice(0, 3);
@@ -318,12 +379,59 @@ export function checkQueryAgainstIndices(shape: QueryShape, indices: SchemaIndex
 
 export type AggregateSelect = 'count' | 'sum' | 'avg';
 
+/** How Drive serves a GROUP BY (rs-drive-abci `compute_aggregate_mode_and_check_limit`). */
+export type AggregateGroupMode = 'aggregate' | 'perIn' | 'range' | 'compound';
+
+/** The GROUP BY mode, or why Platform does not support the GROUP BY. */
+export function aggregateGroupMode(shape: QueryShape): AggregateGroupMode | { unsupported: string } {
+  const groupBy = shape.groupBy ?? [];
+  const isIn = (f: string) => shape.where.some((w) => w.field === f && w.operator === 'in');
+  const isRange = (f: string) => shape.where.some((w) => w.field === f && RANGE_OPERATORS.has(w.operator));
+  if (groupBy.length === 0) return 'aggregate';
+  if (groupBy.length === 1) {
+    const [field] = groupBy as [string];
+    if (isIn(field)) return 'perIn';
+    if (isRange(field)) return 'range';
+    return { unsupported: `GROUP BY \`${field}\` needs an IN or range filter on \`${field}\`; Platform groups only by filtered values.` };
+  }
+  if (groupBy.length === 2) {
+    const [first, second] = groupBy as [string, string];
+    if (isIn(first) && isRange(second)) return 'compound';
+    return { unsupported: 'A two-field GROUP BY must name an IN-filtered field, then a range-filtered field.' };
+  }
+  return { unsupported: 'GROUP BY supports at most two fields.' };
+}
+
 /**
- * Check an aggregate against the count/sum index flags. Drive needs a
- * `countable` index whose properties are exactly the filtered fields, a
- * `rangeCountable` index whose last property carries the range, or the
- * document-type flag for an unfiltered total. SUM uses `summable: "<field>"`
- * the same way, and AVG needs both.
+ * The most per-group entries Platform returns for a GROUP BY, when that bound
+ * can truncate the result. `entriesPerGroup` is how many server entries one
+ * displayed row can stand for: the SDK merges a compound GROUP BY (in, range)
+ * by its range value after the server applied the limit to (in, range) pairs.
+ * IN groups are bounded by the IN list instead (Drive ignores LIMIT there).
+ */
+export function aggregateGroupBound(shape: QueryShape): { limit: number; entriesPerGroup: number } | undefined {
+  const mode = aggregateGroupMode(shape);
+  if (mode === 'range') {
+    const ranges = unique(shape.where.filter((w) => RANGE_OPERATORS.has(w.operator)).map((w) => w.field));
+    // Two ranges on different fields: the carrier walk stops after 10 outer values by default.
+    return { limit: shape.limit ?? (ranges.length === 2 ? CARRIER_OUTER_RANGE_LIMIT : DEFAULT_AGGREGATE_GROUP_LIMIT), entriesPerGroup: 1 };
+  }
+  if (mode === 'compound') {
+    const inValues = shape.where.find((w) => w.operator === 'in')?.value;
+    const count = Array.isArray(inValues) ? new Set(inValues.map((v) => JSON.stringify(v))).size : 1;
+    return { limit: shape.limit ?? DEFAULT_AGGREGATE_GROUP_LIMIT, entriesPerGroup: Math.max(1, count) };
+  }
+  return undefined;
+}
+
+/**
+ * Check an aggregate against Drive 4.0's aggregate rules (rs-drive
+ * `detect_mode`, the count/sum index pickers and the abci GROUP BY/LIMIT
+ * checks). The SDK requests proofs for every aggregate call, so the prove-path
+ * rules apply. Point lookups need a `countable` index whose properties are
+ * exactly the filtered fields, ranges a `rangeCountable` index ending in the
+ * range field, and unfiltered totals the document-type flag. SUM uses
+ * `summable: "<field>"` the same way, and AVG needs both.
  */
 export function checkAggregateAgainstIndices(
   shape: QueryShape,
@@ -332,48 +440,83 @@ export function checkAggregateAgainstIndices(
   indices: SchemaIndex[],
   docType: DocumentTypeAggregates,
 ): IndexCheck {
-  // Aggregates walk in ascending order when ORDER BY is omitted.
-  const { roles, warnings } = queryRoles(shape, false);
+  const roles = queryRoles(shape);
+  const warnings = clauseWarnings(shape, roles, true);
+  const fn = select.toUpperCase();
+  const mode = aggregateGroupMode(shape);
+  if (typeof mode === 'object') warnings.push(mode.unsupported);
+  if (shape.limit !== undefined && (mode === 'aggregate' || mode === 'perIn')) {
+    warnings.push(
+      mode === 'aggregate'
+        ? `LIMIT is not allowed on ${fn} without GROUP BY; the result is a single row.`
+        : `LIMIT is not allowed with GROUP BY on an IN field; the IN list already bounds the result, so shorten it instead.`,
+    );
+  }
+  const ranges = roles.rangeFields;
+  const hasIn = roles.inFields.length > 0;
+  const carrier = ranges.length === 2 && mode === 'range' && !hasIn;
+  if (ranges.length > 1 && !carrier) {
+    warnings.push(
+      `Only one field can use range filters in an aggregate; this query uses ${list(ranges)}. Two ranges on different fields work only with GROUP BY the first one and no IN filter.`,
+    );
+  }
+  if (ranges.length === 1 && hasIn && mode === 'aggregate') {
+    warnings.push(`An IN filter with a range filter needs GROUP BY ${roles.inFields[0]} (or GROUP BY ${roles.inFields[0]}, ${ranges[0]}) when proofs are requested.`);
+  }
+  if (select !== 'count' && docType.summable && field !== docType.summable) {
+    warnings.push(`This document type sums \`${docType.summable}\`, so ${fn}(${field ?? '?'}) is rejected.`);
+  }
+
   const needsCount = select !== 'sum';
   const needsSum = select !== 'count';
   const requirement = [needsCount ? 'countable' : '', needsSum ? `summable: "${field ?? '?'}"` : ''].filter(Boolean).join(' and ');
   const pointFields = unique([...roles.equality, ...roles.inFields]);
+  const rangeField = carrier ? undefined : ranges[0];
 
-  if (pointFields.length === 0 && !roles.rangeField) {
+  if (pointFields.length === 0 && ranges.length === 0) {
     const ok = (!needsCount || docType.countable) && (!needsSum || docType.summable === field);
     if (ok) return { warnings };
     const flag = select === 'count' ? 'documentsCountable: true' : select === 'sum' ? `documentsSummable: "${field}"` : `documentsAverageable: "${field}"`;
-    return { warnings: [...warnings, `An unfiltered ${select.toUpperCase()} needs \`${flag}\` on the document type, which it does not declare.`] };
+    return { warnings: [...warnings, `An unfiltered ${fn} needs \`${flag}\` on the document type, which it does not declare.`] };
   }
 
   const fits = (idx: SchemaIndex, range: boolean) =>
-    (!needsCount || (range ? idx.rangeCountable : idx.countable)) && (!needsSum || (idx.summable === field && (!range || idx.rangeSummable)));
+    (!needsCount || (idx.countable && (!range || idx.rangeCountable))) && (!needsSum || (idx.summable === field && (!range || idx.rangeSummable)));
   const props = (idx: SchemaIndex) => idx.properties.map((p) => p.field);
-  const match = roles.rangeField
-    ? indices.find((idx) => {
+  const outer = shape.groupBy?.[0];
+  const match = carrier
+    ? // `find_range_countable_index`: the GROUP BY range first, the other range last, filtered fields between.
+      indices.find((idx) => {
         const p = props(idx);
-        return fits(idx, true) && p[p.length - 1] === roles.rangeField && p.length - 1 === pointFields.length && pointFields.every((f) => p.slice(0, -1).includes(f));
+        const inner = ranges.find((f) => f !== outer);
+        return fits(idx, true) && p.length >= 2 && p[0] === outer && p[p.length - 1] === inner && p.slice(1, -1).every((f) => pointFields.includes(f));
       })
-    : indices.find((idx) => {
-        // Exactly the filtered fields, or a range index with one more trailing property.
-        const p = props(idx);
-        const covers = (n: number) => p.slice(0, n).every((f) => pointFields.includes(f));
-        return (fits(idx, false) && p.length === pointFields.length && covers(p.length))
-          || (fits(idx, true) && p.length === pointFields.length + 1 && covers(pointFields.length));
-      });
+    : rangeField
+      ? indices.find((idx) => {
+          const p = props(idx);
+          return fits(idx, true) && p.length === pointFields.length + 1 && p[p.length - 1] === rangeField && p.slice(0, -1).every((f) => pointFields.includes(f));
+        })
+      : // `find_countable_index`: properties exactly the filtered fields.
+        indices.find((idx) => {
+          const p = props(idx);
+          return fits(idx, false) && p.length === pointFields.length && p.every((f) => pointFields.includes(f));
+        });
   if (match) return { matchedIndex: match.name, warnings };
 
-  const flagged = indices.filter((idx) => fits(idx, !!roles.rangeField));
-  const where = list([...pointFields, ...(roles.rangeField ? [roles.rangeField] : [])]);
+  const range = carrier || !!rangeField;
+  const flagged = indices.filter((idx) => fits(idx, range));
+  const where = list([...pointFields, ...ranges]);
   const hint = flagged.length
     ? ` Indices with those flags: ${flagged.map(describeIndex).join('; ')}.`
-    : ` This document type has no ${roles.rangeField ? `range ${requirement}` : requirement} index.`;
+    : ` This document type has no ${range ? `range ${requirement}` : requirement} index.`;
   return {
     warnings: [
       ...warnings,
-      roles.rangeField
-        ? `A ${select.toUpperCase()} with a range on \`${roles.rangeField}\` needs a range ${requirement} index whose last property is \`${roles.rangeField}\` and whose other properties are the filtered fields (${where}).${hint}`
-        : `A filtered ${select.toUpperCase()} needs a ${requirement} index whose properties are exactly the filtered fields (${where}).${hint}`,
+      carrier
+        ? `A ${fn} with ranges on ${list(ranges)} grouped by \`${outer}\` needs a range ${requirement} index that starts with \`${outer}\`, ends with ${list(ranges.filter((f) => f !== outer))} and has only filtered fields in between.${hint}`
+        : rangeField
+          ? `A ${fn} with a range on \`${rangeField}\` needs a range ${requirement} index whose last property is \`${rangeField}\` and whose other properties are the filtered fields (${where}).${hint}`
+          : `A filtered ${fn} needs a ${requirement} index whose properties are exactly the filtered fields (${where}).${hint}`,
     ],
   };
 }

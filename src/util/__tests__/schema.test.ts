@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  aggregateGroupBound,
   checkAggregateAgainstIndices,
   checkQueryAgainstIndices,
   getDocumentTypeAggregates,
@@ -105,6 +106,8 @@ const P = 'normalizedParentDomainName';
 const L = 'normalizedLabel';
 const q = (where: QueryShape['where'], orderBy: string[] = []): QueryShape => ({ where, orderBy: orderBy.map((field) => ({ field })) });
 
+const V14 = { protocolVersion: 14 };
+
 describe('checkQueryAgainstIndices', () => {
   // Each case was run against testnet DPNS (protocol version 14) with documents.queryWithProof.
   it.each([
@@ -114,6 +117,7 @@ describe('checkQueryAgainstIndices', () => {
     ['ORDER BY both properties', q([], [P, L])],
     ['prefix search', q([{ field: P, operator: '==' }, { field: L, operator: 'startsWith' }], [L])],
   ])('accepts %s', (_, shape) => {
+    expect(checkQueryAgainstIndices(shape, DPNS, V14)).toEqual({ matchedIndex: 'parentNameAndLabel', warnings: [] });
     expect(checkQueryAgainstIndices(shape, DPNS)).toEqual({ matchedIndex: 'parentNameAndLabel', warnings: [] });
   });
 
@@ -131,11 +135,31 @@ describe('checkQueryAgainstIndices', () => {
     ]);
   });
 
-  it('explains why no index fits', () => {
-    expect(checkQueryAgainstIndices(q([], [L]), DPNS).warnings).toEqual([
+  it('accepts ORDER BY on a later property without filtering earlier ones up to protocol 13', () => {
+    // Mainnet (protocol 13) returns documents for this; testnet (protocol 14) rejects it.
+    expect(checkQueryAgainstIndices(q([], [L]), DPNS)).toEqual({ matchedIndex: 'parentNameAndLabel', warnings: [] });
+    expect(checkQueryAgainstIndices(q([], [L]), DPNS, V14).warnings).toEqual([
       `No index supports this filter and ORDER BY combination. parentNameAndLabel (${P}, ${L}): \`${P}\` comes before \`${L}\` and must be filtered first.`,
     ]);
-    expect(checkQueryAgainstIndices(q([{ field: L, operator: '==' }]), DPNS).warnings).toEqual([
+  });
+
+  it('accepts the withdrawal pooling query Drive issues itself', () => {
+    // fetch_oldest_withdrawal_documents_by_status_v0 in rs-drive 4.0.0-rc.2.
+    const pooling: SchemaIndex[] = [
+      { name: 'pooling', properties: ['status', 'pooling', 'coreFeePerByte', '$updatedAt'].map((field) => ({ field, order: 'asc' as const })) },
+    ];
+    const shape = q([{ field: 'status', operator: '==' }], ['$updatedAt']);
+    expect(checkQueryAgainstIndices(shape, pooling)).toEqual({ matchedIndex: 'pooling', warnings: [] });
+    // Protocol 14 needs the whole tail in ORDER BY, as Drive 5.0 now sends.
+    expect(checkQueryAgainstIndices(shape, pooling, V14).warnings[0]).toMatch(/`pooling` comes before `\$updatedAt` and must be filtered first/);
+    expect(checkQueryAgainstIndices(q([{ field: 'status', operator: '==' }], ['pooling', 'coreFeePerByte', '$updatedAt']), pooling, V14)).toEqual({
+      matchedIndex: 'pooling',
+      warnings: [],
+    });
+  });
+
+  it('explains why no index fits', () => {
+    expect(checkQueryAgainstIndices(q([{ field: L, operator: '==' }]), DPNS, V14).warnings).toEqual([
       `No index supports this filter and ORDER BY combination. parentNameAndLabel (${P}, ${L}): equality filters must cover its first property (\`${P}\`).`,
     ]);
     expect(checkQueryAgainstIndices(q([{ field: P, operator: '==' }], ['$createdAt']), DPNS).warnings[0]).toBe(
@@ -146,16 +170,26 @@ describe('checkQueryAgainstIndices', () => {
 
   it('checks range position, IN placement and unused properties', () => {
     const abcd: SchemaIndex[] = [{ name: 'abcd', properties: ['a', 'b', 'c', 'd'].map((field) => ({ field, order: 'asc' as const })) }];
-    expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }, { field: 'c', operator: '>' }], ['c']), abcd).warnings[0]).toMatch(
+    const gapped = q([{ field: 'a', operator: '==' }, { field: 'c', operator: '>' }], ['c']);
+    expect(checkQueryAgainstIndices(gapped, abcd, V14).warnings[0]).toMatch(
       /abcd \(a, b, c, d\): `c` must be the property right after the equality-filtered ones \(`b`\)/,
     );
+    expect(checkQueryAgainstIndices(gapped, abcd)).toEqual({ matchedIndex: 'abcd', warnings: [] });
     expect(checkQueryAgainstIndices(q([{ field: 'a', operator: 'in' }], ['a']), abcd).warnings[0]).toMatch(
       /IN is only allowed on its last two properties \(`c`, `d`\)/,
     );
-    expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }]), abcd).warnings[0]).toMatch(
-      /the query uses 1 of its 4 properties; at most 2 may be left unused/,
-    );
+    expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }]), abcd).warnings).toEqual([
+      'The closest index, abcd (a, b, c, d), leaves 3 properties unused; at most 2 may be.',
+    ]);
     expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }, { field: 'b', operator: '==' }]), abcd)).toEqual({ matchedIndex: 'abcd', warnings: [] });
+  });
+
+  it('picks the index with the fewest unused properties', () => {
+    const indices: SchemaIndex[] = [
+      { name: 'abc', properties: ['a', 'b', 'c'].map((field) => ({ field, order: 'asc' as const })) },
+      { name: 'ab', properties: ['a', 'b'].map((field) => ({ field, order: 'asc' as const })) },
+    ];
+    expect(checkQueryAgainstIndices(q([{ field: 'a', operator: '==' }]), indices).matchedIndex).toBe('ab');
   });
 
   it('requires ORDER BY to reach every other field the query uses', () => {
@@ -170,7 +204,7 @@ describe('checkQueryAgainstIndices', () => {
     expect(checkQueryAgainstIndices(q([{ field: '$id', operator: 'in' }]), DPNS)).toEqual({ warnings: [] });
   });
 
-  it('flags conflicting or multiple range fields', () => {
+  it('flags conflicting or multiple range fields, and several IN filters before protocol 14', () => {
     const both = q([{ field: P, operator: '>' }, { field: L, operator: '<' }], [P, L]);
     expect(checkQueryAgainstIndices(both, DPNS).warnings[0]).toBe(
       `Only one field can use range filters (<, <=, >, >=, BETWEEN, STARTS WITH); this query uses \`${P}\`, \`${L}\`.`,
@@ -181,8 +215,16 @@ describe('checkQueryAgainstIndices', () => {
     ]);
     const between = q([{ field: P, operator: '==' }, { field: L, operator: 'between' }, { field: L, operator: '<' }], [L]);
     expect(checkQueryAgainstIndices(between, DPNS).warnings[0]).toMatch(/conflicting range filters/);
+    const twoIn = q([{ field: P, operator: 'in' }, { field: L, operator: 'in' }], [P, L]);
+    expect(checkQueryAgainstIndices(twoIn, DPNS).warnings[0]).toBe(`Only one IN filter is allowed per query; this query has IN on \`${P}\`, \`${L}\`.`);
+    expect(checkQueryAgainstIndices(twoIn, DPNS, V14).warnings.join(' ')).not.toMatch(/Only one IN/);
+    expect(checkQueryAgainstIndices(q([{ field: P, operator: '==' }, { field: P, operator: '==' }]), DPNS).warnings[0]).toBe(
+      `\`${P}\` has more than one = filter; use one filter per field.`,
+    );
   });
 });
+
+const g = (where: QueryShape['where'], groupBy?: string[], limit?: number): QueryShape => ({ where, orderBy: [], groupBy, limit });
 
 describe('aggregate index flags', () => {
   const grade = {
@@ -224,7 +266,8 @@ describe('aggregate index flags', () => {
     const rangeAb = getIndicesForType({ indices: [{ name: 'ab', properties: [{ a: 'asc' }, { b: 'asc' }], countable: true, rangeCountable: true }] });
     const onA = q([{ field: 'a', operator: '==' }]);
     expect(checkAggregateAgainstIndices(onA, 'count', undefined, ab, { countable: false }).warnings[0]).toMatch(/^A filtered COUNT needs a countable index whose properties are exactly the filtered fields \(`a`\)/);
-    expect(checkAggregateAgainstIndices(onA, 'count', undefined, rangeAb, { countable: false })).toEqual({ matchedIndex: 'ab', warnings: [] });
+    // `find_countable_index_for_where_clauses` needs the exact property count, even on a range index.
+    expect(checkAggregateAgainstIndices(onA, 'count', undefined, rangeAb, { countable: false }).warnings[0]).toMatch(/^A filtered COUNT needs a countable index/);
     expect(checkAggregateAgainstIndices(q([{ field: 'a', operator: '==' }, { field: 'b', operator: 'in' }]), 'count', undefined, ab, { countable: false })).toEqual({ matchedIndex: 'ab', warnings: [] });
   });
 
@@ -242,5 +285,77 @@ describe('aggregate index flags', () => {
     expect(checkAggregateAgainstIndices(q([{ field: 'student', operator: '>' }]), 'count', undefined, indices, docType).warnings[0]).toBe(
       'A COUNT with a range on `student` needs a range countable index whose last property is `student` and whose other properties are the filtered fields (`student`). Indices with those flags: byClassSemester (class, semester).',
     );
+  });
+
+  it('accepts the Drive 4.0 GROUP BY shapes', () => {
+    const classes = ['CS101', 'CS202', 'MATH150'];
+    expect(checkAggregateAgainstIndices(g([{ field: 'class', operator: 'in', value: classes }], ['class']), 'avg', 'score', indices, docType)).toEqual({ matchedIndex: 'byClass', warnings: [] });
+    const rolling = g([{ field: 'class', operator: '==' }, { field: 'semester', operator: 'between' }], ['semester']);
+    expect(checkAggregateAgainstIndices(rolling, 'avg', 'score', indices, docType)).toEqual({ matchedIndex: 'byClassSemester', warnings: [] });
+    const compound = g([{ field: 'class', operator: 'in' }, { field: 'semester', operator: '>' }], ['class', 'semester'], 5);
+    expect(checkAggregateAgainstIndices(compound, 'count', undefined, indices, docType)).toEqual({ matchedIndex: 'byClassSemester', warnings: [] });
+    // In + range grouped by the IN field: the carrier per-IN proof.
+    const perIn = g([{ field: 'class', operator: 'in' }, { field: 'semester', operator: '>' }], ['class']);
+    expect(checkAggregateAgainstIndices(perIn, 'count', undefined, indices, docType)).toEqual({ matchedIndex: 'byClassSemester', warnings: [] });
+  });
+
+  it('accepts two ranges on different fields grouped by the outer one (carrier aggregate)', () => {
+    const shape = g([{ field: 'class', operator: '>' }, { field: 'semester', operator: '>' }], ['class']);
+    expect(checkAggregateAgainstIndices(shape, 'count', undefined, indices, docType)).toEqual({ matchedIndex: 'byClassSemester', warnings: [] });
+    expect(checkAggregateAgainstIndices(g(shape.where, ['semester']), 'count', undefined, indices, docType).warnings).toEqual([
+      'A COUNT with ranges on `class`, `semester` grouped by `semester` needs a range countable index that starts with `semester`, ends with `class` and has only filtered fields in between. Indices with those flags: byClassSemester (class, semester).',
+    ]);
+    expect(checkAggregateAgainstIndices(g(shape.where), 'count', undefined, indices, docType).warnings[0]).toBe(
+      'Only one field can use range filters in an aggregate; this query uses `class`, `semester`. Two ranges on different fields work only with GROUP BY the first one and no IN filter.',
+    );
+  });
+
+  it('rejects the shapes Drive 4.0 rejects under proof', () => {
+    const rangeAndIn = g([{ field: 'class', operator: 'in' }, { field: 'semester', operator: '>' }]);
+    expect(checkAggregateAgainstIndices(rangeAndIn, 'count', undefined, indices, docType).warnings[0]).toBe(
+      'An IN filter with a range filter needs GROUP BY class (or GROUP BY class, semester) when proofs are requested.',
+    );
+    const twoIn = g([{ field: 'class', operator: 'in' }, { field: 'semester', operator: 'in' }]);
+    expect(checkAggregateAgainstIndices(twoIn, 'count', undefined, indices, docType).warnings[0]).toBe(
+      'Only one IN filter is allowed per query; this query has IN on `class`, `semester`.',
+    );
+    expect(checkAggregateAgainstIndices(g([{ field: 'class', operator: '==' }], ['class']), 'count', undefined, indices, docType).warnings[0]).toBe(
+      'GROUP BY `class` needs an IN or range filter on `class`; Platform groups only by filtered values.',
+    );
+    expect(checkAggregateAgainstIndices(g([{ field: 'class', operator: 'in' }, { field: 'semester', operator: '>' }], ['semester', 'class']), 'count', undefined, indices, docType).warnings[0]).toBe(
+      'A two-field GROUP BY must name an IN-filtered field, then a range-filtered field.',
+    );
+  });
+
+  it('rejects LIMIT where Drive 4.0 does', () => {
+    expect(checkAggregateAgainstIndices(g([], undefined, 5), 'count', undefined, indices, docType).warnings).toEqual([
+      'LIMIT is not allowed on COUNT without GROUP BY; the result is a single row.',
+    ]);
+    const perIn = g([{ field: 'class', operator: 'in' }, { field: 'semester', operator: '>' }], ['class'], 5);
+    expect(checkAggregateAgainstIndices(perIn, 'count', undefined, indices, docType).warnings).toEqual([
+      'LIMIT is not allowed with GROUP BY on an IN field; the IN list already bounds the result, so shorten it instead.',
+    ]);
+  });
+
+  it('rejects SUM and AVG of a field other than the document type sum', () => {
+    expect(checkAggregateAgainstIndices(g([]), 'sum', 'credits', indices, docType).warnings[0]).toBe(
+      'This document type sums `score`, so SUM(credits) is rejected.',
+    );
+  });
+});
+
+describe('aggregateGroupBound', () => {
+  it('bounds range groups by LIMIT or the default, and not IN groups', () => {
+    const range = [{ field: 'semester', operator: '>' as const }];
+    expect(aggregateGroupBound(g(range, ['semester']))).toEqual({ limit: 100, entriesPerGroup: 1 });
+    expect(aggregateGroupBound(g(range, ['semester'], 5))).toEqual({ limit: 5, entriesPerGroup: 1 });
+    expect(aggregateGroupBound(g([{ field: 'class', operator: 'in', value: ['a', 'b'] }], ['class'], 5))).toBeUndefined();
+    expect(aggregateGroupBound(g([]))).toBeUndefined();
+  });
+
+  it('counts compound pairs per merged row, and caps the carrier walk at 10', () => {
+    const compound = g([{ field: 'class', operator: 'in', value: ['a', 'b', 'b', 'c'] }, { field: 'semester', operator: '>' }], ['class', 'semester'], 20);
+    expect(aggregateGroupBound(compound)).toEqual({ limit: 20, entriesPerGroup: 3 });
+    expect(aggregateGroupBound(g([{ field: 'class', operator: '>' }, { field: 'semester', operator: '>' }], ['class']))).toEqual({ limit: 10, entriesPerGroup: 1 });
   });
 });

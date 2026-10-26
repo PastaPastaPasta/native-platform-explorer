@@ -309,6 +309,24 @@ describe('Query workspace index guidance', () => {
     expect(await screen.findByText(/The range filter on `normalizedLabel` needs ORDER BY normalizedLabel/)).toBeInTheDocument();
   });
 
+  it('applies the index rules of the network protocol version', async () => {
+    const query = vi.fn().mockResolvedValue({ data: [] });
+    const status = (current: number) => vi.fn().mockResolvedValue({ version: { protocol: { drive: { latest: current, current } } } });
+    const sql = 'SELECT * FROM domain ORDER BY normalizedLabel';
+    const sdk13 = dpnsSdk({ query, queryWithProof: query });
+    (sdk13 as unknown as { system: { status: unknown } }).system.status = status(13);
+    const { unmount } = renderWithProviders(<QueryPage />, { sdk: { sdk: sdk13 } });
+    runSql(sql);
+    await screen.findByText('0 documents returned');
+    expect(screen.queryByText(/will probably reject/)).not.toBeInTheDocument();
+    unmount();
+    const sdk14 = dpnsSdk({ query, queryWithProof: query });
+    (sdk14 as unknown as { system: { status: unknown } }).system.status = status(14);
+    renderWithProviders(<QueryPage />, { sdk: { sdk: sdk14 } });
+    runSql(sql);
+    expect(await screen.findByText(/`normalizedParentDomainName` comes before `normalizedLabel` and must be filtered first/)).toBeInTheDocument();
+  });
+
   it('warns before an aggregate without a countable index and explains the Platform error', async () => {
     const count = vi.fn().mockRejectedValue(new Error(COUNT_ERROR));
     renderWithProviders(<QueryPage />, { sdk: { sdk: dpnsSdk({ count, countWithProof: count }) } });
