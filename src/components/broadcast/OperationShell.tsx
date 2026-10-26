@@ -1,6 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useReducer,
+  useRef,
+  useState,
+} from 'react';
 import NextLink from 'next/link';
 import {
   Badge,
@@ -100,7 +108,10 @@ function fingerprint(value: unknown): string {
 }
 
 /** Zero the declared secret bytes of inputs nothing uses any more (strings cannot be wiped). */
-function wipeSecretBytes<TOptions>(secrets: SecretInputs<TOptions>, inputs: (TOptions | null)[]) {
+function wipeSecretBytes<TOptions>(
+  secrets: SecretInputs<TOptions>,
+  inputs: (TOptions | null)[],
+): void {
   if (secrets === 'none' || !secrets.secretBytes) return;
   for (const input of inputs) {
     if (input === null) continue;
@@ -167,7 +178,7 @@ export function OperationShell<TOptions, TResult>({
   const [notice, setNotice] = useState<string | null>(null);
   const [keyRefresh, setKeyRefresh] = useState(0);
   const [purges, setPurges] = useState(0);
-  const [, setFlushedPurges] = useState(0);
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
   const [keyState, setKeyState] = useState<{
     binding: object;
     keys: SignerKeyDescriptor[];
@@ -283,6 +294,8 @@ export function OperationShell<TOptions, TResult>({
     const signingCriteria = review?.descriptor.signingCriteria;
     if (!review || !signingCriteria || !currentKeys) return;
     let cancelled = false;
+    const confirmed = (previous: typeof reviewKey) =>
+      previous?.review === review ? previous.confirmed : undefined;
     void signingCriteria(review.sdk, review.options)
       .then((criteria) => selectSigningKey(currentKeys, criteria))
       .then(
@@ -291,8 +304,7 @@ export function OperationShell<TOptions, TResult>({
             setReviewKey((previous) => ({
               review,
               key,
-              confirmed:
-                (previous?.review === review ? previous.confirmed : undefined) ?? describeKey(key),
+              confirmed: confirmed(previous) ?? describeKey(key),
             }));
         },
         (error: unknown) => {
@@ -300,7 +312,7 @@ export function OperationShell<TOptions, TResult>({
             setReviewKey((previous) => ({
               review,
               error: normalizeError(error).message,
-              confirmed: previous?.review === review ? previous.confirmed : undefined,
+              confirmed: confirmed(previous),
             }));
         },
       );
@@ -325,7 +337,7 @@ export function OperationShell<TOptions, TResult>({
   // after a purge or reset so that copy no longer holds the dropped inputs. A
   // layout effect re-renders synchronously, before anything else can run.
   useLayoutEffect(() => {
-    if (purges) setFlushedPurges(purges);
+    if (purges) rerender();
   }, [purges]);
 
   const reset = useCallback(() => {

@@ -37,6 +37,16 @@ beforeAll(async () => {
   pair.free();
 });
 
+/** Public key bytes the test mnemonic derives at a path. */
+async function publicData(path: string) {
+  const derived = await wallet.deriveKeyFromSeedWithPath({ mnemonic: PHRASE, path, network: 'testnet' });
+  try {
+    return Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
+  } finally {
+    derived.free();
+  }
+}
+
 function fixture(initial: Partial<IdentityPublicKeyOptions> = {}) {
   let options: IdentityPublicKeyOptions[] = [
     {
@@ -134,14 +144,6 @@ describe('SDK-compatible signers', () => {
   it('derives DIP-13 identity keys for the identity index and keeps every matching key', async () => {
     expect(identityKeyPath('testnet', 0, 0)).toBe("m/9'/1'/5'/0'/0'/0'/0'");
     expect(identityKeyPath('mainnet', 3, 7)).toBe("m/9'/5'/5'/0'/0'/3'/7'");
-    const publicData = async (path: string) => {
-      const derived = await wallet.deriveKeyFromSeedWithPath({ mnemonic: PHRASE, path, network: 'testnet' });
-      try {
-        return Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
-      } finally {
-        derived.free();
-      }
-    };
     const { sdk, changeKeys } = fixture();
     changeKeys([
       { keyId: 0, purpose: 0, securityLevel: 0, keyType: 0, data: await publicData(identityKeyPath('testnet', 0, 0)) },
@@ -243,24 +245,12 @@ describe('SDK-compatible signers', () => {
   });
 
   it('never swaps a pinned key disabled on-chain for another eligible key', async () => {
-    const publicData = async (key: number) => {
-      const derived = await wallet.deriveKeyFromSeedWithPath({
-        mnemonic: PHRASE,
-        path: identityKeyPath('testnet', 0, key),
-        network: 'testnet',
-      });
-      try {
-        return Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
-      } finally {
-        derived.free();
-      }
-    };
     const high = async (keyId: number, disabledAt?: number) => ({
       keyId,
       purpose: 0,
       securityLevel: 2,
       keyType: 0,
-      data: await publicData(keyId),
+      data: await publicData(identityKeyPath('testnet', 0, keyId)),
       ...(disabledAt === undefined ? {} : { disabledAt }),
     });
     const { sdk, changeKeys } = fixture();

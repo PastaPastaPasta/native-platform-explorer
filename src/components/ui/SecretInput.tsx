@@ -15,7 +15,6 @@ const SECRET_FIELD_ATTRIBUTES = {
   'data-1p-ignore': true,
   'data-lpignore': 'true',
   'data-form-type': 'other',
-  'data-secret-input': true,
 } as const;
 
 type SecretInputProps =
@@ -23,7 +22,7 @@ type SecretInputProps =
   | ({ multiline: true; 'aria-label': string } & TextareaProps);
 
 /** A text field for private key material: masked, with a show/hide toggle. */
-export function SecretInput({ multiline, ...props }: SecretInputProps) {
+export function SecretInput({ multiline, mt, ...props }: SecretInputProps) {
   const [revealed, setRevealed] = useState(false);
   const field = {
     ...props,
@@ -32,11 +31,11 @@ export function SecretInput({ multiline, ...props }: SecretInputProps) {
     sx: { WebkitTextSecurity: revealed ? 'none' : 'disc' },
   };
   return (
-    <Box position="relative" mt={props.mt}>
+    <Box position="relative" mt={mt}>
       {multiline ? (
-        <Textarea {...(field as TextareaProps)} mt={0} />
+        <Textarea {...(field as TextareaProps)} />
       ) : (
-        <Input {...(field as InputProps)} type="text" mt={0} />
+        <Input {...(field as InputProps)} type="text" />
       )}
       <Button
         position="absolute"
