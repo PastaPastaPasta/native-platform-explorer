@@ -174,11 +174,10 @@ export function validateWhereAgainstIndices(
 // ── Query workspace index checks ───────────────────────────────────────
 //
 // Mirrors Drive's index selection for document queries. Up to protocol
-// version 13 (Platform 4.x, which the pinned SDK 4.0.0-rc.2 is built from,
-// and mainnet as of 2026-10) Drive uses rs-dpp `Index::matches`: after the
-// index is trimmed to end with the ORDER BY run, every field the query names
-// must sit inside it, an IN must be on one of the last two properties, and at
-// most two properties may go unused. Unfiltered middle properties are walked
+// version 13 (Platform 4.x, mainnet as of 2026-10) Drive uses rs-dpp
+// `Index::matches`: after the index is trimmed to end with the ORDER BY run,
+// every field the query names must sit inside it, an IN must be on one of the
+// last two properties, and at most two properties may go unused. Unfiltered middle properties are walked
 // by subqueries, so `status == 1 ORDER BY $updatedAt` on
 // [status, pooling, coreFeePerByte, $updatedAt] is accepted (Drive's own
 // withdrawal pooling issues it). Protocol version 14 (Platform 5.x, on
@@ -206,7 +205,7 @@ export interface IndexCheck {
 }
 
 export interface IndexCheckOptions {
-  /** The network's current Platform protocol version; unknown means the SDK's own (13). */
+  /** The network's current Platform protocol version; unknown applies the protocol 13 rules. */
   protocolVersion?: number;
 }
 

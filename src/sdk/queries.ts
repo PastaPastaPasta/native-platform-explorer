@@ -1043,17 +1043,9 @@ export function useAllProtocolVotes() {
 }
 
 // ----- voting polls -----
-// NOTE: VotePollsByEndDateQuery is currently un-callable from JS in
-// @dashevo/wasm-sdk 3.1.0-dev.* because of a deserializer/validator
-// Catch-22 in packages/wasm-sdk/src/queries/voting/polls.rs:
-//   - the Rust field is `start_time_ms: Option<f64>`, and serde-wasm-bindgen
-//     routes a fractionless JS Number through the integer visitor, which
-//     the f64 deserializer rejects with `invalid type: integer …, expected f64`;
-//   - any fractional Number that passes the deserializer is then rejected
-//     downstream by `if raw.fract() != 0.0 { … "must be an integer value" }`.
-// There is no JS value (integer Number, BigInt, string, Float64Array,
-// Math.fround, etc.) that the SDK accepts. Track the upstream fix; until
-// then this hook is expected to error.
+// Older wasm-sdk builds rejected every JS timestamp for VotePollsByEndDateQuery
+// (an f64 field that refused integers, then refused fractions). evo-sdk 5.0
+// reads whole-number and BigInt millisecond timestamps (platform #5139).
 export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number, enabled = true) {
   const query = { startTimeMs: startDateMs, endTimeMs: endDateMs };
   return useSdkQuery(

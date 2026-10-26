@@ -23,7 +23,8 @@ for Next.js 15, so staying on that major would not avoid the React migration.
 - Development and production explicitly use Webpack (`next dev --webpack` and
   `next build --webpack`). This preserves the existing asynchronous WASM and raw
   Markdown handling instead of silently switching to Next.js 16's Turbopack
-  default. The SDK remains pinned to `@dashevo/evo-sdk` 4.0.0-rc.2.
+  default. The SDK remained pinned to `@dashevo/evo-sdk` 4.0.0-rc.2 at the time
+  (it has since moved to 5.0.0-rc.8).
 - Static export, trailing slashes, unoptimized images, and
   `NEXT_PUBLIC_BASE_PATH` remain supported. The migration adds no server runtime,
   API routes, or broadcasting behavior.

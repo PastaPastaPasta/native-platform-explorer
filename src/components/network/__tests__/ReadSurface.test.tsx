@@ -144,7 +144,7 @@ describe('protocol page', () => {
     expect(screen.getByText(/Denominator: 4 known evonodes/)).toBeVisible();
     expect(screen.getByText('no vote yet:')).toBeVisible();
     expect(screen.getByText('v13 (current):')).toBeVisible();
-    // The SDK's stale currentProtocolVersion is reported, not displayed as current.
+    // A disagreeing SDK currentProtocolVersion (rc.2 reported its own) is noted, not displayed as current.
     expect(screen.getByText(/reports currentProtocolVersion v12/)).toBeVisible();
     // The SDK's nextProtocolVersion (13) is the current version here, not a pending one.
     expect(screen.getByText('none voted')).toBeVisible();
@@ -154,8 +154,8 @@ describe('protocol page', () => {
   });
 
   it('reads the next version from the tally, not the SDK’s v12 basis', () => {
-    // Network on v11 voting for v12: rc.2 reports no next version because it
-    // compares against its own v12.
+    // Network on v11 voting for v12: rc.2 reported no next version because it
+    // compared against its own v12.
     state.hooks.useCurrentEpoch = ok({ index: 86, protocolVersion: 11, firstBlockTime: 1 });
     state.hooks.useProtocolVersionUpgradeState = ok({ currentProtocolVersion: 12, nextProtocolVersion: undefined });
     state.hooks.useAllProtocolVotes = ok(new Map([[hash(1), 12], [hash(2), 12], [hash(3), 11]]));

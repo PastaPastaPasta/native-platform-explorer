@@ -21,8 +21,9 @@ import { normaliseQuorums, quorumBreakdown, type QuorumGroup } from '@util/quoru
 
 const UNKNOWN_TYPE = 'LLMQ_TYPE_UNKNOWN';
 
-/** rc.2 does not read the type or threshold from Platform: it maps the member
- *  count to a type and takes a fixed fraction of the count as threshold. */
+/** The SDK (rc.2 through 5.0.0-rc.8) does not read the type or threshold from
+ *  Platform: it maps the member count to a type and takes a fixed fraction of
+ *  the count as threshold. */
 export const INFERRED_NOTE =
   'Type and threshold are inferred by the SDK from the member count ' +
   '(50–70 → LLMQ_60_75, 90–110 → LLMQ_100_67, 350–450 → LLMQ_400_60, otherwise ' +

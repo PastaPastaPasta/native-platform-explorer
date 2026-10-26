@@ -39,10 +39,12 @@ while keeping the rest of the explorer identical.
 Every session is trusted: the SDK fetches quorum public keys and the DAPI
 masternode list from a quorum service when it connects, then verifies
 proof-capable responses in the browser. There is no untrusted mode. With the
-pinned `@dashevo/evo-sdk` 4.0.0-rc.2, an untrusted SDK fails every
-proof-capable query ("Non-trusted mode is not supported in WASM") and
-`proofs: false` aborts the WASM module, so `NEXT_PUBLIC_TRUSTED_MODE` was
-removed and a saved `npe:trusted` preference is discarded.
+pinned `@dashevo/evo-sdk` (4.0.0-rc.2, and still 5.0.0-rc.8), an untrusted
+SDK fails every proof-capable query ("Non-trusted mode is not supported in
+WASM"), and `proofs: false` aborted the WASM module in rc.2 and is refused
+("unproved queries are not supported for this query") in 5.0, so
+`NEXT_PUBLIC_TRUSTED_MODE` was removed and a saved `npe:trusted` preference
+is discarded.
 
 Settings → Connection (stored in the browser) controls the startup timeout,
 the SDK's DAPI connect timeout, request timeout, retries, `banFailedAddress`
