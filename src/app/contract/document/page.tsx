@@ -18,6 +18,7 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { NotFoundCard } from '@ui/NotFoundCard';
 import { ErrorCard } from '@ui/ErrorCard';
+import { ParamsLanding } from '@ui/ParamsLanding';
 import { Identifier } from '@components/data/Identifier';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { CodeBlock } from '@components/data/CodeBlock';
@@ -30,7 +31,7 @@ import { DocumentHistorySection } from '@components/contract/DocumentHistorySect
 import { useTabParam } from '@hooks/useTabParam';
 import { documentTypeKeepsHistory, normaliseContract } from '@util/contract';
 import { WriteActions } from '@components/broadcast/WriteActions';
-import { shortId } from '@util/identifier';
+import { identifierError, shortId } from '@util/identifier';
 import { idToString, readProp } from '@util/sdk-shape';
 import { ShareLinkButton } from '@components/exploration/EntityActions';
 import { useSdk } from '@sdk/hooks';
@@ -67,14 +68,26 @@ function Content() {
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
 
   if (!id || !type || !docId) {
+    let parent = { label: 'Open a contract', href: '/contract/' };
+    if (id && type) {
+      parent = { label: `${type} documents`, href: `/contract/documents/?id=${encodeURIComponent(id)}&type=${encodeURIComponent(type)}` };
+    } else if (id) {
+      parent = { label: 'Open a contract', href: `/contract/?id=${encodeURIComponent(id)}` };
+    }
     return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide <code>?id=…&amp;type=…&amp;docId=…</code> in the URL.
-          </Text>
-        </InfoBlock>
-      </Container>
+      <ParamsLanding
+        title="Document"
+        description="One document of a data contract: its fields, system metadata and, for types that keep history, its revisions. Pick one from a contract's document list, or enter it below."
+        parent={parent}
+        fields={[
+          { name: 'id', label: 'Contract ID', placeholder: '43–44 char base58 Identifier', initial: id, validate: identifierError },
+          { name: 'type', label: 'Document type', placeholder: 'e.g. domain', initial: type },
+          { name: 'docId', label: 'Document ID', placeholder: '43–44 char base58 Identifier', initial: docId, validate: identifierError },
+        ]}
+        buildHref={(v) =>
+          `/contract/document/?id=${encodeURIComponent(v.id!)}&type=${encodeURIComponent(v.type!)}&docId=${encodeURIComponent(v.docId!)}`
+        }
+      />
     );
   }
 

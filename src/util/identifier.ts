@@ -12,6 +12,16 @@ export function isBase58Identifier(input: string): boolean {
   return (s.length === 43 || s.length === 44) && BASE58_RE.test(s);
 }
 
+/** Form validator for an Identifier input: null when valid. */
+export function identifierError(input: string): string | null {
+  return isBase58Identifier(input) ? null : 'Expected a 43–44 char base58 string.';
+}
+
+/** Form validator for a token or group position (a u16): null when valid. */
+export function positionError(input: string): string | null {
+  return /^\d{1,5}$/.test(input) && Number(input) <= 65_535 ? null : 'Expected a whole number from 0 to 65535.';
+}
+
 /** A 64-char hex string (e.g. tx hash or proTxHash). */
 export function isHex64(input: string): boolean {
   const s = input.trim();

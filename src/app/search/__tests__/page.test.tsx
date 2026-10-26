@@ -149,6 +149,18 @@ describe('search resolution states', () => {
     expect(screen.getByRole('link', { name: 'All results →' }).getAttribute('href')).toMatch(/\/dpns\/search\/?\?q=Alic&network=testnet/);
   });
 
+  it('never lists an inline DPNS name outside the prefix', () => {
+    state.q = 'Alic';
+    state.prefix.data = new Map([
+      ['doc1', { id: 'doc1', properties: { label: 'Alice', normalizedLabel: 'a11ce' } }],
+      ['doc2', { id: 'doc2', properties: { label: 'bob', normalizedLabel: 'b0b' } }],
+    ]);
+    render(<SearchPage />);
+    expect(screen.getByRole('link', { name: 'Alice.dash' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'bob.dash' })).not.toBeInTheDocument();
+    expect(screen.getByText(/Hid 1 returned name not starting with/)).toHaveTextContent('a11c');
+  });
+
   it('keeps the DPNS prefix query off identifier searches', () => {
     state.q = 'GWRSAVFMjXx8HpQFaNJMqBV7MBgMK4br5UESsB4S31Ec';
     state.prefixArgs = [];

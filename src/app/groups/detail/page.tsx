@@ -25,6 +25,7 @@ import {
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
+import { ParamsLanding } from '@ui/ParamsLanding';
 import { ErrorCard } from '@ui/ErrorCard';
 import { NotFoundCard } from '@ui/NotFoundCard';
 import { Identifier } from '@components/data/Identifier';
@@ -33,7 +34,7 @@ import { InfoLine } from '@components/data/InfoLine';
 import { GroupActionCard } from '@components/governance/GroupActionCard';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useGroupActions, useGroupInfo, useGroupMembers } from '@sdk/queries';
-import { shortId } from '@util/identifier';
+import { identifierError, positionError, shortId } from '@util/identifier';
 import { readProp } from '@util/sdk-shape';
 import { usePageTitle } from '@hooks/usePageTitle';
 
@@ -43,7 +44,7 @@ function Content() {
   const positionStr = params.get('position') ?? '';
   usePageTitle(positionStr ? `Group #${positionStr}` : 'Group');
   const position = Number(positionStr);
-  const valid = contractId && Number.isFinite(position);
+  const valid = !!contractId && positionError(positionStr) === null;
 
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
@@ -62,13 +63,19 @@ function Content() {
 
   if (!valid) {
     return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide <code>?contractId=…&amp;position=…</code>.
-          </Text>
-        </InfoBlock>
-      </Container>
+      <ParamsLanding
+        title="Group"
+        description="One group of a data contract: the power its actions need, its members and their power, and its active or closed actions. A contract's groups are listed on the groups page."
+        parent={{
+          label: contractId ? 'Groups of this contract' : 'Groups',
+          href: contractId ? `/groups/?contractId=${encodeURIComponent(contractId)}` : '/groups/',
+        }}
+        fields={[
+          { name: 'contractId', label: 'Contract ID', placeholder: '43–44 char base58 Identifier', initial: contractId, validate: identifierError },
+          { name: 'position', label: 'Group position', placeholder: '0', initial: positionStr, validate: positionError },
+        ]}
+        buildHref={(v) => `/groups/detail/?contractId=${encodeURIComponent(v.contractId!)}&position=${v.position}`}
+      />
     );
   }
 

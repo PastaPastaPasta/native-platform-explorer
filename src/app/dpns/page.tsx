@@ -27,20 +27,8 @@ import {
   useDpnsIsValid,
   useDpnsResolve,
 } from '@sdk/queries';
-import { convertToHomographSafeChars, normaliseDpnsName } from '@util/dpns';
+import { dpnsContestHref, normaliseDpnsName } from '@util/dpns';
 import { looksLikeDpnsName } from '@util/identifier';
-import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
-
-function contestedLink(label: string): string | null {
-  const dpns = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns');
-  if (!dpns?.testnetId) return null;
-  const safe = convertToHomographSafeChars(label);
-  const values = JSON.stringify(['dash', safe]);
-  return (
-    `/governance/contested/detail/?contract=${encodeURIComponent(dpns.testnetId)}` +
-    `&docType=domain&indexName=parentNameAndLabel&indexValues=${encodeURIComponent(values)}`
-  );
-}
 
 function Content() {
   const params = useSearchParams();
@@ -88,7 +76,7 @@ function Content() {
   const contested = contestedQ.data as boolean | undefined;
   const valid = validQ.data as boolean | undefined;
   const bareLabel = name.endsWith('.dash') ? name.slice(0, -5) : name;
-  const contestedUrl = contested ? contestedLink(bareLabel) : null;
+  const contestedUrl = contested ? dpnsContestHref(bareLabel) : null;
 
   return (
     <Container py={{ base: 4, md: 6 }}>

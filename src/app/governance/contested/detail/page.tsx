@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation';
 import { Badge, Heading, HStack, Text, VStack, Wrap, WrapItem } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
+import { LookupInput } from '@ui/LookupInput';
+import { ParamsLanding } from '@ui/ParamsLanding';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { Identifier } from '@components/data/Identifier';
@@ -22,6 +24,7 @@ import { readProp, idToString } from '@util/sdk-shape';
 import { toPlain } from '@util/contract';
 import { safeStringify } from '@util/wasm-json';
 import { usePageTitle } from '@hooks/usePageTitle';
+import { dpnsContestHref, validateLabel } from '@util/dpns';
 
 function parseIndexValues(raw: string): unknown[] | null {
   try {
@@ -32,6 +35,8 @@ function parseIndexValues(raw: string): unknown[] | null {
     return null;
   }
 }
+
+const bareLabel = (name: string) => name.replace(/\.dash$/i, '');
 
 function Content() {
   const params = useSearchParams();
@@ -89,14 +94,19 @@ function Content() {
 
   if (!contractId || !docType || !indexName || !indexValues) {
     return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide <code>?contract=…&amp;docType=…&amp;indexName=…&amp;indexValues=…</code>.
-            <code>indexValues</code> must be a URL-encoded JSON array.
-          </Text>
-        </InfoBlock>
-      </Container>
+      <ParamsLanding
+        title="Contested resource"
+        description="One contested unique value, such as a premium DPNS name: its contenders, the vote tallies for each and for abstain or lock, and the outcome once voting ends. Contests are listed on the contested page."
+        parent={{ label: 'Contested resources', href: '/governance/contested/' }}
+      >
+        <LookupInput
+          label="DPNS name"
+          placeholder="e.g. alice"
+          description="Opens the contest for a .dash name; the label is matched in its homograph-safe form."
+          validate={(v) => validateLabel(bareLabel(v)).reason ?? null}
+          buildHref={(v) => dpnsContestHref(bareLabel(v))}
+        />
+      </ParamsLanding>
     );
   }
 
