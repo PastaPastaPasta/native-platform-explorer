@@ -1,7 +1,7 @@
 'use client';
 
-import { Suspense, useMemo, useState } from 'react';
-import { useSearchParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { parseAsString, useQueryStates } from 'nuqs';
 import {
   Box,
   Button,
@@ -26,38 +26,37 @@ import { IdentityLink } from '@components/data/IdentityLink';
 import { CursorPagination } from '@components/pagination/CursorPagination';
 import { DpnsDirectoryPanel } from '@components/identity/DpnsDirectoryPanel';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
+import { usePrefetchProps } from '@hooks/usePrefetch';
 import { useDpnsPrefixSearch } from '@sdk/queries';
 import { useSdk } from '@sdk/hooks';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
-import { convertToHomographSafeChars } from '@util/dpns';
-import { idToString, readProp } from '@util/sdk-shape';
+import { convertToHomographSafeChars, dpnsDomainRows } from '@util/dpns';
+import { cursorStackParser, sanitizeCursorStack } from '@util/url-state';
 
 const LIMIT = 25;
 
-function extractRows(data: unknown): Array<Record<string, unknown>> {
-  if (!data) return [];
-  if (data instanceof Map) {
-    const out: Array<Record<string, unknown>> = [];
-    for (const [, doc] of data) if (doc && typeof doc === 'object') out.push(doc as Record<string, unknown>);
-    return out;
-  }
-  if (Array.isArray(data)) {
-    return data.filter((x) => x && typeof x === 'object') as Array<Record<string, unknown>>;
-  }
-  return [];
-}
-
-function docIdOf(row: Record<string, unknown>): string | undefined {
-  return idToString(readProp(row, 'id')) ?? idToString(readProp(row, '$id'));
+function NameLink({ fqdn, normalizedFqdn }: { fqdn: string; normalizedFqdn: string }) {
+  const prefetch = usePrefetchProps({ kind: 'dpns', name: normalizedFqdn });
+  return (
+    <span {...prefetch}>
+      <Alias name={fqdn} href={`/dpns/?name=${encodeURIComponent(normalizedFqdn)}`} />
+    </span>
+  );
 }
 
 function Content() {
-  const params = useSearchParams();
-  const router = useRouter();
-  const q = (params.get('q') ?? '').trim();
+  // The prefix and the page cursors live in the URL (?q=…&after=id1,id2), so
+  // a results page can be shared, reloaded, and stepped with back/forward.
+  const [url, setUrl] = useQueryStates(
+    { q: parseAsString.withDefault(''), after: cursorStackParser },
+    { history: 'push' },
+  );
+  const q = url.q.trim();
+  const cursors = sanitizeCursorStack(url.after);
   const [input, setInput] = useState(q);
-  const [cursorStack, setCursorStack] = useState<Array<string | undefined>>([undefined]);
-  const startAfter = cursorStack[cursorStack.length - 1];
+  useEffect(() => setInput(q), [q]);
+  const startAfter = cursors[cursors.length - 1];
 
   const { network } = useSdk();
   const dpns = SYSTEM_DATA_CONTRACTS.find((c) => c.key === 'dpns');
@@ -68,6 +67,7 @@ function Content() {
     { label: 'DPNS' },
     { label: 'Search' },
   ]);
+  usePageTitle(q ? `DPNS names starting with “${q}”` : 'DPNS search');
 
   // DPNS indices key off the homograph-safe form (o→0, i/l→1) and are
   // always lowercased. Normalise the prefix the same way before querying.
@@ -79,11 +79,10 @@ function Content() {
     LIMIT,
     startAfter,
   );
-  const rows = useMemo(() => extractRows(searchQ.data), [searchQ.data]);
+  const rows = useMemo(() => dpnsDomainRows(searchQ.data), [searchQ.data]);
 
   const submit = () => {
-    setCursorStack([undefined]);
-    router.push(`/dpns/search/?q=${encodeURIComponent(input.trim())}`);
+    void setUrl({ q: input.trim() || null, after: null });
   };
 
   return (
@@ -157,53 +156,29 @@ function Content() {
                   </Tr>
                 </Thead>
                 <Tbody>
-                  {rows.map((row, i) => {
-                    const props =
-                      (readProp<Record<string, unknown>>(row, 'properties') as
-                        | Record<string, unknown>
-                        | undefined) ?? {};
-                    const label =
-                      (props.label as string | undefined) ??
-                      (props.normalizedLabel as string | undefined) ??
-                      '';
-                    const records = props.records as Record<string, unknown> | undefined;
-                    const ownerId =
-                      idToString(records?.identity) ??
-                      idToString(readProp(row, 'ownerId'));
-                    const key = docIdOf(row) ?? `${label}-${i}`;
-                    if (!label) return null;
-                    const fqdn = `${label}.dash`;
-                    const normalizedFqdn =
-                      ((props.normalizedLabel as string | undefined) ??
-                        label.toLowerCase()) + '.dash';
-                    return (
-                      <Tr key={key} _hover={{ bg: 'gray.800' }}>
-                        <Td borderColor="gray.750">
-                          <Alias
-                            name={fqdn}
-                            href={`/dpns/?name=${encodeURIComponent(normalizedFqdn)}`}
-                          />
-                        </Td>
-                        <Td borderColor="gray.750">
-                          {ownerId ? <IdentityLink id={ownerId} dense /> : '—'}
-                        </Td>
-                      </Tr>
-                    );
-                  })}
+                  {rows.map((row) => (
+                    <Tr key={row.docId ?? row.fqdn} _hover={{ bg: 'gray.800' }}>
+                      <Td borderColor="gray.750">
+                        <NameLink fqdn={row.fqdn} normalizedFqdn={row.normalizedFqdn} />
+                      </Td>
+                      <Td borderColor="gray.750">
+                        {row.ownerId ? <IdentityLink id={row.ownerId} dense /> : '—'}
+                      </Td>
+                    </Tr>
+                  ))}
                 </Tbody>
               </Table>
             </Box>
           )}
             <HStack justify="flex-end" mt={3}>
               <CursorPagination
-                pageIndex={cursorStack.length - 1}
-                hasPrev={cursorStack.length > 1}
+                pageIndex={cursors.length}
+                hasPrev={cursors.length > 0}
                 hasNext={rows.length === LIMIT}
-                onPrev={() => setCursorStack((s) => s.slice(0, -1))}
+                onPrev={() => void setUrl({ after: cursors.length > 1 ? cursors.slice(0, -1) : null })}
                 onNext={() => {
-                  const last = rows[rows.length - 1];
-                  const lastId = last ? docIdOf(last) : undefined;
-                  if (lastId) setCursorStack((s) => [...s, lastId]);
+                  const lastId = rows[rows.length - 1]?.docId;
+                  if (lastId) void setUrl({ after: [...cursors, lastId] });
                 }}
               />
             </HStack>

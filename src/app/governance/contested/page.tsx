@@ -1,7 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { parseAsString, useQueryStates } from 'nuqs';
 import NextLink from 'next/link';
 import {
   Button,
@@ -25,22 +25,32 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import { useSdk } from '@sdk/hooks';
 import { useContestedResources, useContract } from '@sdk/queries';
 import { WELL_KNOWN, findWellKnown } from '@constants/well-known';
 import { normaliseContract, contestedIndexes } from '@util/contract';
 import { readProp } from '@util/sdk-shape';
 import { safeStringify } from '@util/wasm-json';
+import { isBase58Identifier } from '@util/identifier';
 
 
 function Content() {
-  const router = useRouter();
-  const params = useSearchParams();
   const { network } = useSdk();
-  const contractFromUrl = params.get('contract') ?? '';
-  const docTypeFromUrl = params.get('docType') ?? '';
+  // The selection (contract, document type, index) lives in the URL via nuqs,
+  // which keeps ?network= and the deployment base path on every update.
+  const [selection, setSelection] = useQueryStates(
+    { contract: parseAsString, docType: parseAsString, index: parseAsString },
+    { history: 'push' },
+  );
+  const contractFromUrl = selection.contract ?? '';
+  const docTypeFromUrl = selection.docType ?? '';
 
   const [contractInput, setContractInput] = useState(contractFromUrl);
+  useEffect(() => setContractInput(contractFromUrl), [contractFromUrl]);
+  const contractInputError = contractInput.trim() && !isBase58Identifier(contractInput.trim())
+    ? 'Expected a 43–44 character base58 contract ID.'
+    : null;
   const wellKnown = contractFromUrl ? findWellKnown(contractFromUrl) : undefined;
 
   usePageBreadcrumbs([
@@ -48,6 +58,7 @@ function Content() {
     { label: 'Governance' },
     { label: 'Contested' },
   ]);
+  usePageTitle(wellKnown ? `Contested · ${wellKnown.name}` : 'Contested resources');
 
   const contractQ = useContract(contractFromUrl || undefined);
   const contract = contractQ.data ? normaliseContract(contractQ.data) : null;
@@ -59,13 +70,12 @@ function Content() {
   const autoIndexName = autoContested?.indexName;
   useEffect(() => {
     if (autoDocType && autoIndexName && contractFromUrl && !docTypeFromUrl) {
-      const qp = new URLSearchParams({ contract: contractFromUrl, docType: autoDocType, index: autoIndexName });
-      router.replace(`/governance/contested/?${qp.toString()}`);
+      void setSelection({ docType: autoDocType, index: autoIndexName }, { history: 'replace' });
     }
-  }, [autoDocType, autoIndexName, contractFromUrl, docTypeFromUrl, router]);
+  }, [autoDocType, autoIndexName, contractFromUrl, docTypeFromUrl, setSelection]);
 
   // Resolve effective index name: URL param > auto-detected from schema > well-known > fallback
-  const effectiveIndex = params.get('index')
+  const effectiveIndex = selection.index
     ?? contested.find((c) => c.docType === docTypeFromUrl)?.indexName
     ?? wellKnown?.contested?.indexName
     ?? 'parentNameAndLabel';
@@ -87,11 +97,9 @@ function Content() {
     return raw;
   }, [resourcesQ.data]);
 
-  const pushUrl = (contract: string, docType?: string) => {
-    const qp = new URLSearchParams();
-    qp.set('contract', contract);
-    if (docType) qp.set('docType', docType);
-    router.push(`/governance/contested/?${qp.toString()}`);
+  const pushUrl = (contract: string) => {
+    // A new contract starts a new selection.
+    void setSelection({ contract, docType: null, index: null });
   };
 
   return (
@@ -106,25 +114,36 @@ function Content() {
               Pick a contract (DPNS or any other that declares contested resources) and a
               document type.
             </Text>
-            <HStack spacing={2}>
+            <HStack
+              as="form"
+              spacing={2}
+              width="100%"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (!contractInputError && contractInput.trim()) pushUrl(contractInput.trim());
+              }}
+            >
               <Input
                 size="sm"
+                aria-label="Contract ID"
                 placeholder="Contract ID"
                 value={contractInput}
                 onChange={(e) => setContractInput(e.target.value)}
+                isInvalid={!!contractInputError}
                 fontFamily="mono"
                 bg="gray.800"
                 borderColor="gray.700"
               />
               <Button
+                type="submit"
                 size="sm"
                 colorScheme="blue"
-                onClick={() => pushUrl(contractInput.trim(), docTypeFromUrl || undefined)}
-                isDisabled={contractInput.trim().length === 0}
+                isDisabled={contractInput.trim().length === 0 || !!contractInputError}
               >
                 Use
               </Button>
             </HStack>
+            {contractInputError ? <Text role="alert" fontSize="xs" color="red.300">{contractInputError}</Text> : null}
             <HStack spacing={2} flexWrap="wrap">
               <Text fontSize="xs" color="gray.400">
                 Quick-pick:
@@ -199,10 +218,7 @@ function Content() {
                             key={`${c.docType}/${c.indexName}`}
                             bg="transparent"
                             _hover={{ bg: 'gray.750' }}
-                            onClick={() => {
-                              const qp = new URLSearchParams({ contract: contractFromUrl, docType: c.docType, index: c.indexName });
-                              router.push(`/governance/contested/?${qp.toString()}`);
-                            }}
+                            onClick={() => void setSelection({ docType: c.docType, index: c.indexName })}
                           >
                             {c.docType} / {c.indexName}
                           </MenuItem>

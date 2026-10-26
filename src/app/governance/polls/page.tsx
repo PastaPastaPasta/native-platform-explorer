@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
+import { useQueryStates } from 'nuqs';
 import {
   Box,
   Button,
@@ -17,10 +18,15 @@ import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { VotePollsList } from '@components/governance/VotePollsList';
+import { Pagination } from '@components/pagination/Pagination';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
+import { usePageTitle } from '@hooks/usePageTitle';
 import { useVotePollsByEndDate } from '@sdk/queries';
+import { readProp } from '@util/sdk-shape';
+import { isoDayParser, pageParser, pollWindowParser, type PollWindow } from '@util/url-state';
 
-type PresetKey = '24h' | '7d' | '30d' | '90d' | 'all-upcoming' | 'custom';
+type PresetKey = PollWindow;
+const PAGE_SIZE = 20;
 
 const PRESETS: Array<{ key: PresetKey; label: string; days: number | null }> = [
   { key: '24h', label: 'Next 24 h', days: 1 },
@@ -45,26 +51,37 @@ function bucketHour(ms: number | undefined): number | undefined {
   return ms === undefined ? undefined : Math.floor(ms / 3_600_000) * 3_600_000;
 }
 
-export default function Page() {
+function endMs(entry: unknown): number {
+  const ms = readProp<bigint | number>(entry, 'timestampMs');
+  return ms === undefined ? 0 : Number(ms);
+}
+
+function Content() {
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
     { label: 'Governance' },
     { label: 'Polls' },
   ]);
+  usePageTitle('Vote polls');
 
-  const [preset, setPreset] = useState<PresetKey>('all-upcoming');
+  // Window, custom dates and page live in the URL so a view can be shared and
+  // back/forward restores it. Custom dates default to the next 30 days.
+  const [url, setUrl] = useQueryStates(
+    { window: pollWindowParser, from: isoDayParser, to: isoDayParser, page: pageParser },
+    { history: 'push' },
+  );
+  const preset: PresetKey = url.window ?? 'all-upcoming';
+  const page = url.page ?? 1;
+  const [order, setOrder] = useState<'asc' | 'desc'>('asc');
   // The export's build time and locale differ from the visitor's. Initialize
   // dates after hydration, then keep them stable for the query cache key.
   const [nowMs, setNowMs] = useState<number>();
-  const [customStart, setCustomStart] = useState('');
-  const [customEnd, setCustomEnd] = useState('');
   useEffect(() => {
-    const now = Date.now();
-    setNowMs(now);
-    setCustomStart(isoDate(now));
-    setCustomEnd(isoDate(now + 30 * 86_400_000));
+    setNowMs(Date.now());
   }, []);
-  const custom = useDisclosure({ defaultIsOpen: false });
+  const customStart = url.from ?? (nowMs === undefined ? '' : isoDate(nowMs));
+  const customEnd = url.to ?? (nowMs === undefined ? '' : isoDate(nowMs + 30 * 86_400_000));
+  const custom = useDisclosure({ isOpen: preset === 'custom' });
 
   const range = useMemo(() => {
     if (nowMs === undefined) return { start: undefined, end: undefined };
@@ -83,7 +100,14 @@ export default function Page() {
 
   // Don't query until the visitor's clock is known; an unfiltered first request would be wasted.
   const q = useVotePollsByEndDate(range.start, range.end, nowMs !== undefined);
-  const polls = (q.data as unknown[] | undefined) ?? [];
+  const polls = useMemo(() => {
+    const list = Array.isArray(q.data) ? [...(q.data as unknown[])] : [];
+    list.sort((a, b) => (order === 'asc' ? endMs(a) - endMs(b) : endMs(b) - endMs(a)));
+    return list;
+  }, [q.data, order]);
+  const pageCount = Math.max(1, Math.ceil(polls.length / PAGE_SIZE));
+  const pageIndex = Math.min(page, pageCount) - 1;
+  const shown = polls.slice(pageIndex * PAGE_SIZE, (pageIndex + 1) * PAGE_SIZE);
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -105,10 +129,11 @@ export default function Page() {
                   size="xs"
                   variant={preset === p.key ? 'solid' : 'outline'}
                   colorScheme="blue"
+                  aria-pressed={preset === p.key}
                   onClick={() => {
-                    setPreset(p.key);
-                    if (p.key === 'custom') custom.onOpen();
-                    else custom.onClose();
+                    void setUrl(p.key === 'custom'
+                      ? { window: 'custom', from: customStart || null, to: customEnd || null, page: null }
+                      : { window: p.key === 'all-upcoming' ? null : p.key, from: null, to: null, page: null });
                   }}
                 >
                   {p.label}
@@ -121,8 +146,9 @@ export default function Page() {
                   <Input
                     type="date"
                     size="sm"
+                    aria-label="Polls ending from"
                     value={customStart}
-                    onChange={(e) => setCustomStart(e.target.value)}
+                    onChange={(e) => void setUrl({ from: isoDayParser.parse(e.target.value), page: null }, { history: 'replace' })}
                     bg="gray.800"
                     borderColor="gray.700"
                     width="180px"
@@ -133,8 +159,9 @@ export default function Page() {
                   <Input
                     type="date"
                     size="sm"
+                    aria-label="Polls ending until"
                     value={customEnd}
-                    onChange={(e) => setCustomEnd(e.target.value)}
+                    onChange={(e) => void setUrl({ to: isoDayParser.parse(e.target.value), page: null }, { history: 'replace' })}
                     bg="gray.800"
                     borderColor="gray.700"
                     width="180px"
@@ -161,10 +188,40 @@ export default function Page() {
           ) : q.isError ? (
             <ErrorCard error={q.error} onRetry={() => q.refetch()} />
           ) : (
-            <VotePollsList entries={polls} />
+            <VStack align="stretch" spacing={3}>
+              {polls.length > 1 ? (
+                <HStack justify="space-between" flexWrap="wrap">
+                  <Text fontSize="xs" color="muted">
+                    {polls.length} end time{polls.length === 1 ? '' : 's'}
+                  </Text>
+                  <Button
+                    size="xs"
+                    variant="ghost"
+                    aria-label={`Sort by end time, ${order === 'asc' ? 'soonest' : 'latest'} first`}
+                    onClick={() => setOrder((o) => (o === 'asc' ? 'desc' : 'asc'))}
+                  >
+                    Ends {order === 'asc' ? '↑ soonest first' : '↓ latest first'}
+                  </Button>
+                </HStack>
+              ) : null}
+              <VotePollsList entries={shown} />
+              <Pagination
+                pageIndex={pageIndex}
+                pageCount={pageCount}
+                onChange={(next) => void setUrl({ page: next === 0 ? null : next + 1 })}
+              />
+            </VStack>
           )}
         </InfoBlock>
       </VStack>
     </Container>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<LoadingCard lines={4} />}>
+      <Content />
+    </Suspense>
   );
 }

@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
+import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import SavedPage from '../page';
 import { getSavedEntities, saveEntity } from '@util/exploration';
 
@@ -12,7 +13,7 @@ describe('saved collection page', () => {
   it('filters by network, opens the saved context, and supports removal and clearing', () => {
     saveEntity({ kind: 'identity', id, network: 'testnet' });
     saveEntity({ kind: 'contract', id, network: 'mainnet' });
-    render(<SavedPage />);
+    render(<NuqsTestingAdapter hasMemory><SavedPage /></NuqsTestingAdapter>);
     expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1);
     fireEvent.change(screen.getByLabelText('Network scope'), { target: { value: 'all' } });
     const contract = screen.getByRole('link', { name: `Open contract ${id} on mainnet` });
@@ -29,10 +30,20 @@ describe('saved collection page', () => {
 
   it('requires custom network configuration before opening an unknown saved network', () => {
     saveEntity({ kind: 'token', id, network: 'devnet-custom' });
-    render(<SavedPage />);
+    render(<NuqsTestingAdapter hasMemory><SavedPage /></NuqsTestingAdapter>);
     fireEvent.change(screen.getByLabelText('Network scope'), { target: { value: 'all' } });
     expect(screen.getByText(/Configure this custom devnet/)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /^Open / })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Settings' })).toBeInTheDocument();
+  });
+
+  it('restores the filters from a shared URL', () => {
+    saveEntity({ kind: 'identity', id, network: 'testnet' });
+    saveEntity({ kind: 'token', id, network: 'mainnet' });
+    render(<NuqsTestingAdapter searchParams="?scope=all&kind=token"><SavedPage /></NuqsTestingAdapter>);
+    expect(screen.getByLabelText('Network scope')).toHaveValue('all');
+    expect(screen.getByLabelText('Entity type')).toHaveValue('token');
+    expect(screen.getByRole('link', { name: `Open token ${id} on mainnet` })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /^Open / })).toHaveLength(1);
   });
 });
