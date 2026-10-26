@@ -13,6 +13,9 @@ import {
   type OperationFormProps,
 } from '../OperationShell';
 import { BroadcastOutcomeUnknownError, OperationNotSubmittedError } from '../outcomes';
+import { findOperationById } from '../operations';
+import type { IdentityUpdateKeysOptions } from '../forms/IdentityUpdateKeys';
+import { wallet } from '@dashevo/evo-sdk';
 import type * as SdkHooksModule from '@sdk/hooks';
 import type * as SignerProviderModule from '@/signer/SignerProvider';
 
@@ -569,7 +572,7 @@ describe('OperationShell', () => {
      * Paths in the mounted tree's hook state, refs, props and effect deps that
      * hold the secret, in both the current and the alternate (previous) fibers.
      */
-    function secretsHeldByReact(container: HTMLElement): string[] {
+    function secretsHeldByReact(container: HTMLElement, secret = WIF): string[] {
       const rootKey = Object.keys(container).find((key) => key.startsWith('__reactContainer$'))!;
       type Fiber = Record<string, unknown> & {
         child?: Fiber;
@@ -584,7 +587,7 @@ describe('OperationShell', () => {
       const seen = new Set<object>();
       const search = (value: unknown, path: string): void => {
         if (typeof value === 'string') {
-          if (value.includes(WIF)) found.push(path);
+          if (value.includes(secret)) found.push(path);
           return;
         }
         if (!value || typeof value !== 'object' || seen.has(value) || value instanceof Node) return;
@@ -697,6 +700,67 @@ describe('OperationShell', () => {
       expect(secretsHeldByReact(container)).toEqual([]);
       expect(Array.from(initialOptions.secretBytes!)).toEqual([0, 0, 0]);
     });
+
+    it.each([
+      [
+        'success',
+        () => Promise.resolve({ kind: 'identity', identityId: 'identity-1', message: 'ok' }),
+      ],
+      [
+        'outcome unknown',
+        () => Promise.reject(new BroadcastOutcomeUnknownError(new Error('timeout'))),
+      ],
+    ])(
+      'carries a new key from the real identity-key form to settle without keeping it (%s)',
+      async (_, outcome) => {
+        const pair = await wallet.keyPairFromHex('0'.repeat(63) + '5', 'testnet');
+        const newKeyWif = pair.privateKeyWif;
+        pair.free();
+        useSignerMock.mockReturnValue({
+          ...useSignerMock(),
+          signer: createMockSigner({
+            availableKeys: vi
+              .fn()
+              .mockResolvedValue([{ id: 0, purpose: 'AUTHENTICATION', securityLevel: 'MASTER' }]),
+          }),
+        });
+        const execute = vi.fn(
+          (args: { options: IdentityUpdateKeysOptions; signingKeyId?: number }) => {
+            expect(args.options.addKeys?.[0]?.privateKeyWif).toBe(newKeyWif);
+            expect(args.signingKeyId).toBe(0);
+            return outcome();
+          },
+        );
+        const descriptor = {
+          ...findOperationById('identity.updateKeys')!.descriptor,
+          execute,
+        } as OperationDescriptor<unknown, unknown>;
+        const { container } = renderWithProviders(<OperationShell descriptor={descriptor} />, {
+          queryClient: createTestQueryClient(),
+        });
+
+        fireEvent.click(screen.getByRole('button', { name: 'Add a key' }));
+        fireEvent.change(screen.getByLabelText('New key 1 private key (WIF)'), {
+          target: { value: newKeyWif },
+        });
+        await waitFor(() => expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled());
+        review();
+        expect(await screen.findByText(/Signing key: #0/)).toBeInTheDocument();
+        // The review shows the key's metadata only; the hidden Build form, kept
+        // for Back, is the one place that still holds it.
+        expect(screen.getByText(/provided \(hidden\)/)).not.toHaveTextContent(newKeyWif);
+        expect(secretsHeldByReact(container, newKeyWif)).not.toEqual([]);
+        fireEvent.click(
+          screen.getByRole('checkbox', { name: 'I understand this is not reversible.' }),
+        );
+        broadcast();
+
+        await screen.findByText(/Broadcast succeeded|Outcome unknown\./);
+        expect(execute).toHaveBeenCalledOnce();
+        expect(secretsHeldByReact(container, newKeyWif)).toEqual([]);
+        expect(container.innerHTML).not.toContain(newKeyWif);
+      },
+    );
 
     it.each([
       [
