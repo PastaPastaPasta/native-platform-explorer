@@ -19,10 +19,13 @@ import { LoadingCard } from '@ui/LoadingCard';
 import { NotFoundCard } from '@ui/NotFoundCard';
 import { ErrorCard } from '@ui/ErrorCard';
 import { TokenDigestCard } from './TokenDigestCard';
-import { CodeBlock } from '@components/data/CodeBlock';
+import { TokenOverview } from './TokenOverview';
+import { TokenBalanceLookup } from './TokenBalanceLookup';
+import { TokenPausedBadge, TokenPrice, readTokenPrice } from './TokenPrice';
 import { IdentityLink } from '@components/data/IdentityLink';
+import { InfoLine } from '@components/data/InfoLine';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
-import type { TokenFlags } from './TokenFlagsPills';
+import { useTabParam } from '@hooks/useTabParam';
 import {
   useContract,
   useTokenContractInfo,
@@ -32,22 +35,13 @@ import {
   type TokenContractInfoShape,
 } from '@sdk/queries';
 import { shortId } from '@util/identifier';
-import { idToString, readProp } from '@util/sdk-shape';
-import { normaliseContract, tokenConfigAt, type TokenConfigShape } from '@util/contract';
+import { idToString } from '@util/sdk-shape';
+import { normaliseContract, toPlain, tokenConfigAt, type TokenConfigShape } from '@util/contract';
+import { tokenFlagsFromConfig } from '@util/token-rules';
 import { useSdk } from '@sdk/hooks';
 import { withNetwork } from '@util/exploration';
 
-function flagsFromStatus(status: unknown): TokenFlags {
-  const s = status as Record<string, unknown> | undefined;
-  return {
-    mintable: Boolean(s?.mintable),
-    burnable: Boolean(s?.burnable),
-    freezable: Boolean(s?.freezable),
-    unfreezable: Boolean(s?.unfreezable),
-    destroyable: Boolean(s?.destroyable),
-    emergencyAction: Boolean(s?.emergencyAction ?? s?.emergencyActionEnabled),
-  };
-}
+const TABS = ['overview', 'definition', 'status', 'holders', 'balance'] as const;
 
 function localizationsBlock(config: TokenConfigShape | null): React.ReactNode {
   if (!config?.localizations || Object.keys(config.localizations).length === 0) {
@@ -70,6 +64,7 @@ function localizationsBlock(config: TokenConfigShape | null): React.ReactNode {
 
 export function TokenView({ tokenId }: { tokenId: string }) {
   const { network } = useSdk();
+  const tabs = useTabParam(TABS);
   usePageBreadcrumbs([
     { label: 'Home', href: '/' },
     { label: 'Token' },
@@ -105,10 +100,11 @@ export function TokenView({ tokenId }: { tokenId: string }) {
   const statusForToken = statusMap?.get(tokenId);
 
   const pricesMap = pricesQ.data as Map<string, unknown> | null | undefined;
-  const priceForToken = pricesMap?.get(tokenId) as
-    | { price?: bigint | number; baseCurrencyPrice?: bigint | number }
-    | null
-    | undefined;
+  const priceForToken = pricesMap?.get(tokenId);
+  const price = readTokenPrice(priceForToken);
+  const configPlain = tokenConfig ? toPlain(tokenConfig.raw) : undefined;
+  const perpetual = (configPlain as { distributionRules?: { perpetualDistribution?: unknown } } | undefined)
+    ?.distributionRules?.perpetualDistribution;
 
   const notFound = !isLoading && supplyQ.isSuccess && !supply;
 
@@ -133,35 +129,37 @@ export function TokenView({ tokenId }: { tokenId: string }) {
               totalSupply={supply?.totalSupply ?? null}
               maxSupply={supply?.maxSupply ?? (tokenConfig?.maxSupply as bigint | number | string | null) ?? null}
               baseSupply={supply?.baseSupply ?? (tokenConfig?.baseSupply as bigint | number | string | null) ?? null}
-              price={
-                priceForToken
-                  ? String(
-                      readProp<bigint | number>(priceForToken, 'price') ??
-                        readProp<bigint | number>(priceForToken, 'baseCurrencyPrice') ??
-                        '—',
-                    )
-                  : null
-              }
-              flags={flagsFromStatus(statusForToken)}
+              price={price ? <TokenPrice info={priceForToken} /> : null}
+              flags={tokenFlagsFromConfig(configPlain)}
               ownerContractId={ownerContractId}
               tokenContractPosition={position}
             />
 
-            <Tabs variant="soft-rounded" colorScheme="blue" isLazy>
+            <Tabs variant="soft-rounded" colorScheme="blue" isLazy index={tabs.index} onChange={tabs.onChange}>
               <TabList flexWrap="wrap" gap={2} borderBottom="none">
                 <Tab fontSize="sm">Overview</Tab>
                 <Tab fontSize="sm">Definition</Tab>
                 <Tab fontSize="sm">Status</Tab>
                 <Tab fontSize="sm">Holders</Tab>
+                <Tab fontSize="sm">Balance lookup</Tab>
               </TabList>
               <TabPanels>
                 <TabPanel px={0}>
-                  <InfoBlock>
-                    <Heading size="sm" mb={3} color="gray.100">
-                      Supply
-                    </Heading>
-                    <CodeBlock value={supply ?? 'No supply data.'} />
-                  </InfoBlock>
+                  {contractQ.isLoading || contractInfoQ.isLoading ? (
+                    <LoadingCard lines={4} />
+                  ) : contractQ.isError ? (
+                    <ErrorCard error={contractQ.error} onRetry={() => contractQ.refetch()} />
+                  ) : tokenConfig ? (
+                    <TokenOverview config={tokenConfig.raw} decimals={tokenConfig.decimals} totalSupply={supply?.totalSupply ?? null} />
+                  ) : (
+                    <InfoBlock>
+                      <Text fontSize="sm" color="gray.400">
+                        {ownerContractId
+                          ? 'Contract loaded but no token configuration at this position.'
+                          : 'No owning contract recorded for this token ID, so its rules cannot be shown.'}
+                      </Text>
+                    </InfoBlock>
+                  )}
                 </TabPanel>
                 <TabPanel px={0}>
                   <VStack align="stretch" spacing={3}>
@@ -235,24 +233,6 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                       </InfoBlock>
                     ) : null}
 
-                    <InfoBlock>
-                      <Heading size="sm" mb={3} color="gray.100">
-                        Full configuration
-                      </Heading>
-                      {contractQ.isLoading && !tokenConfig ? (
-                        <LoadingCard lines={3} />
-                      ) : contractQ.isError ? (
-                        <ErrorCard error={contractQ.error} onRetry={() => contractQ.refetch()} />
-                      ) : tokenConfig ? (
-                        <CodeBlock value={tokenConfig.raw ?? tokenConfig} />
-                      ) : (
-                        <Text fontSize="sm" color="gray.400">
-                          {ownerContractId
-                            ? 'Contract loaded but no token configuration at this position.'
-                            : 'Awaiting owning-contract resolution.'}
-                        </Text>
-                      )}
-                    </InfoBlock>
                   </VStack>
                 </TabPanel>
                 <TabPanel px={0}>
@@ -260,10 +240,18 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                     <Heading size="sm" mb={3} color="gray.100">
                       Status
                     </Heading>
-                    {statusesQ.isLoading ? (
-                      <LoadingCard lines={2} />
+                    {statusesQ.isError ? (
+                      <ErrorCard error={statusesQ.error} onRetry={() => statusesQ.refetch()} />
                     ) : (
-                      <CodeBlock value={statusForToken ?? 'No status reported.'} />
+                      <HStack spacing={8} flexWrap="wrap" align="flex-start">
+                        <InfoLine label="Trading status" value={<TokenPausedBadge status={statusForToken} loading={statusesQ.isLoading} />} />
+                        <InfoLine
+                          label="Direct-purchase price"
+                          value={pricesQ.isError
+                            ? <ErrorCard error={pricesQ.error} onRetry={() => pricesQ.refetch()} />
+                            : pricesQ.isLoading ? <Text color="gray.400">…</Text> : <TokenPrice info={priceForToken} />}
+                        />
+                      </HStack>
                     )}
                   </InfoBlock>
                 </TabPanel>
@@ -283,6 +271,13 @@ export function TokenView({ tokenId }: { tokenId: string }) {
                       form to look up balances for identities you supply.
                     </Text>
                   </InfoBlock>
+                </TabPanel>
+                <TabPanel px={0}>
+                  <TokenBalanceLookup
+                    tokenId={tokenId}
+                    decimals={tokenConfig?.decimals}
+                    hasPerpetualDistribution={perpetual !== null && perpetual !== undefined}
+                  />
                 </TabPanel>
               </TabPanels>
             </Tabs>

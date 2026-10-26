@@ -11,6 +11,7 @@ import { TokenFlagsPills, type TokenFlags } from './TokenFlagsPills';
 import { EntityActions } from '@components/exploration/EntityActions';
 import { useSdk } from '@sdk/hooks';
 import { withNetwork } from '@util/exploration';
+import { formatTokenAmount } from '@util/token-rules';
 
 export interface TokenDigestCardProps {
   id: string;
@@ -20,11 +21,18 @@ export interface TokenDigestCardProps {
   totalSupply?: bigint | number | string | null;
   maxSupply?: bigint | number | string | null;
   baseSupply?: bigint | number | string | null;
-  price?: string | null;
+  price?: React.ReactNode;
   flags: TokenFlags;
   /** Owning contract (resolved from the token ID via tokens.contractInfo). */
   ownerContractId?: string | null;
   tokenContractPosition?: number | null;
+}
+
+/** Raw on-chain amounts, scaled by the token's decimals once they are known. */
+function Supply({ value, decimals }: { value: bigint | number | string | null | undefined; decimals?: number | null }) {
+  if (value === null || value === undefined) return <NotActive />;
+  if (decimals === null || decimals === undefined) return <BigNumberDisplay value={value} />;
+  return <Text as="span" fontFamily="mono" fontSize="md" color="gray.100">{formatTokenAmount(String(value), decimals)}</Text>;
 }
 
 export function TokenDigestCard({
@@ -71,19 +79,19 @@ export function TokenDigestCard({
           <WrapItem>
             <InfoLine
               label="Total supply"
-              value={<BigNumberDisplay value={totalSupply ?? null} />}
+              value={<Supply value={totalSupply} decimals={decimals} />}
             />
           </WrapItem>
           <WrapItem>
             <InfoLine
               label="Max supply"
-              value={<BigNumberDisplay value={maxSupply ?? null} />}
+              value={<Supply value={maxSupply} decimals={decimals} />}
             />
           </WrapItem>
           <WrapItem>
             <InfoLine
               label="Base supply"
-              value={<BigNumberDisplay value={baseSupply ?? null} />}
+              value={<Supply value={baseSupply} decimals={decimals} />}
             />
           </WrapItem>
           <WrapItem>
