@@ -1,9 +1,11 @@
 'use client';
 
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Box,
+  Button,
+  ButtonGroup,
   Heading,
   HStack,
   Tab,
@@ -28,7 +30,7 @@ import { NotFoundCard } from '@ui/NotFoundCard';
 import { Identifier } from '@components/data/Identifier';
 import { IdentityLink } from '@components/data/IdentityLink';
 import { InfoLine } from '@components/data/InfoLine';
-import { CodeBlock } from '@components/data/CodeBlock';
+import { GroupActionCard } from '@components/governance/GroupActionCard';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useGroupActions, useGroupInfo, useGroupMembers } from '@sdk/queries';
 import { shortId } from '@util/identifier';
@@ -53,7 +55,8 @@ function Content() {
 
   const infoQ = useGroupInfo(valid ? contractId : undefined, valid ? position : undefined);
   const membersQ = useGroupMembers(valid ? contractId : undefined, valid ? position : undefined);
-  const actionsQ = useGroupActions(valid ? contractId : undefined, valid ? position : undefined);
+  const [status, setStatus] = useState<'ACTIVE' | 'CLOSED'>('ACTIVE');
+  const actionsQ = useGroupActions(valid ? contractId : undefined, valid ? position : undefined, status);
 
   if (!valid) {
     return (
@@ -172,6 +175,13 @@ function Content() {
                 </TabPanel>
 
                 <TabPanel px={0}>
+                  <ButtonGroup size="xs" isAttached variant="outline" mb={3} role="group" aria-label="Action status">
+                    {(['ACTIVE', 'CLOSED'] as const).map((s) => (
+                      <Button key={s} onClick={() => setStatus(s)} aria-pressed={status === s} variant={status === s ? 'solid' : 'outline'} colorScheme="blue">
+                        {s === 'ACTIVE' ? 'Active' : 'Closed'}
+                      </Button>
+                    ))}
+                  </ButtonGroup>
                   <InfoBlock>
                     {actionsQ.isLoading ? (
                       <LoadingCard lines={3} />
@@ -179,17 +189,20 @@ function Content() {
                       <ErrorCard error={actionsQ.error} onRetry={() => actionsQ.refetch()} />
                     ) : actionsEntries.length === 0 ? (
                       <Text color="gray.400" fontSize="sm">
-                        No actions recorded for this group.
+                        No {status === 'ACTIVE' ? 'active' : 'closed'} actions for this group.
                       </Text>
                     ) : (
                       <VStack align="stretch" spacing={2}>
                         {actionsEntries.map((a) => (
-                          <InfoBlock key={a.id}>
-                            <VStack align="stretch" spacing={2}>
-                              <Identifier value={a.id} avatar copy dense />
-                              <CodeBlock value={a.action ?? {}} />
-                            </VStack>
-                          </InfoBlock>
+                          <GroupActionCard
+                            key={a.id}
+                            contractId={contractId}
+                            position={position}
+                            status={status}
+                            actionId={a.id}
+                            action={a.action}
+                            requiredPower={threshold !== undefined ? Number(threshold) : undefined}
+                          />
                         ))}
                       </VStack>
                     )}
