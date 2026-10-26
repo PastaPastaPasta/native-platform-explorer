@@ -437,7 +437,8 @@ token ID alone. Tabs:
    Inspector entry).
 5. **Balance lookup**: balance, frozen flag and last perpetual claim for an
    entered identity (`?holder=`). Without one it shows the identity last
-   connected on `/wallet` in this tab (the public reconnect hint).
+   connected on `/wallet` in this tab on this network (the public reconnect
+   hint).
 
 An **Actions** row offers the token writes the connected or remembered
 identity could plausibly perform under the token's rules (§13.3).
@@ -691,7 +692,9 @@ field, so browsers don't offer to save a key), with fallbacks where masking is
 unsupported. Local signers keep keys in tab memory only and clear them on
 disconnect, after ten minutes without input (visible or hidden tab), when
 leaving `/wallet` and `/broadcast`, and on unload. An automatic clear keeps only
-the signer kind and public identity ID in sessionStorage as a reconnect hint.
+the signer kind, public identity ID and network in sessionStorage as a
+reconnect hint, used only on that network (it also marks owner shortcuts and
+defaults the token balance lookup).
 JavaScript strings and SDK-internal copies cannot be reliably zeroed; the app
 zeroes byte arrays it owns.
 

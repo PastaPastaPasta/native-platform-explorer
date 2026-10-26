@@ -4,7 +4,6 @@ import { NuqsTestingAdapter } from 'nuqs/adapters/testing';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { useSigner } from '@/signer/SignerProvider';
 import { renderWithProviders } from '@/test/render';
-import { writeModeEnabled } from '@/config';
 import { SidebarNavBody } from '@components/layout/SidebarRail';
 import { ContractLanding } from '@components/contract/ContractLanding';
 import { TokenWriteActions } from '@components/token/TokenWriteActions';
@@ -45,7 +44,7 @@ vi.mocked(useSigner).mockReturnValue({
   disconnect: vi.fn(),
   clearStash: vi.fn(),
   signer: null,
-  stash: { kind: 'mnemonic', identityId: OWNER },
+  stash: { kind: 'mnemonic', identityId: OWNER, network: 'testnet' },
 });
 
 function writeLinks() {
@@ -56,13 +55,11 @@ describe.each([
   ['enabled', 'false', true],
   ['disabled', 'true', false],
 ])('write mode %s', (_, flag, enabled) => {
-  afterEach(() => vi.unstubAllEnvs());
-  const setFlag = () => vi.stubEnv('NEXT_PUBLIC_DISABLE_WRITE_MODE', flag);
-
-  it(enabled ? 'reports write mode on' : 'reports write mode off', () => {
-    setFlag();
-    expect(writeModeEnabled()).toBe(enabled);
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    nav.params = '';
   });
+  const setFlag = () => vi.stubEnv('NEXT_PUBLIC_DISABLE_WRITE_MODE', flag);
 
   it(enabled ? 'links the Write group in the sidebar' : 'drops the Write group from the sidebar', () => {
     setFlag();
@@ -104,7 +101,6 @@ describe.each([
     renderWithProviders(<NuqsTestingAdapter searchParams={nav.params}><ContractPage /></NuqsTestingAdapter>);
     const labels = writeLinks().map((l) => l.textContent);
     expect(labels).toEqual(enabled ? ['Create a document', 'Update contract', '+ new'] : []);
-    nav.params = '';
   });
 
   it(enabled ? 'links the write pages in the SDK reference' : 'lists the write pages in the SDK reference without links', () => {

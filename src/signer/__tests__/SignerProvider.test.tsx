@@ -65,13 +65,13 @@ describe('SignerProvider', () => {
     expect(screen.getByTestId('signer')).toHaveTextContent('identity-a');
     expect(screen.getByTestId('stash')).toHaveTextContent('wif:identity-a');
     expect(window.sessionStorage.getItem('npe:signer-kind')).toBe(
-      JSON.stringify({ kind: 'wif', identityId: 'identity-a' }),
+      JSON.stringify({ kind: 'wif', identityId: 'identity-a', network: 'testnet' }),
     );
   });
 
   it('hydrates a previous-session stash without restoring private signer material', async () => {
     installStorageMock('sessionStorage', {
-      'npe:signer-kind': JSON.stringify({ kind: 'mnemonic', identityId: 'identity-b' }),
+      'npe:signer-kind': JSON.stringify({ kind: 'mnemonic', identityId: 'identity-b', network: 'testnet' }),
     });
 
     render(
@@ -84,6 +84,23 @@ describe('SignerProvider', () => {
       expect(screen.getByTestId('stash')).toHaveTextContent('mnemonic:identity-b');
     });
     expect(screen.getByTestId('signer')).toHaveTextContent('none');
+  });
+
+  it('hides a reconnect hint from another network or without one', async () => {
+    for (const stash of [
+      { kind: 'mnemonic', identityId: 'identity-b', network: 'mainnet' },
+      { kind: 'mnemonic', identityId: 'identity-b' },
+    ]) {
+      installStorageMock('sessionStorage', { 'npe:signer-kind': JSON.stringify(stash) });
+      const view = render(
+        <SignerProvider>
+          <Harness />
+        </SignerProvider>,
+      );
+      await act(async () => {});
+      expect(screen.getByTestId('stash')).toHaveTextContent('none');
+      view.unmount();
+    }
   });
 
   it('destroys replaced and disconnected signer instances', () => {
@@ -220,7 +237,7 @@ describe('SignerProvider', () => {
 
   it('hydrates backup stashes and wipes live secrets on unload', () => {
     installStorageMock('sessionStorage', {
-      'npe:signer-kind': JSON.stringify({ kind: 'backup', identityId: 'identity-a' }),
+      'npe:signer-kind': JSON.stringify({ kind: 'backup', identityId: 'identity-a', network: 'testnet' }),
     });
     render(
       <SignerProvider>
@@ -235,7 +252,7 @@ describe('SignerProvider', () => {
 
   it('preserves the reconnect hint while the first SDK session initializes', () => {
     installStorageMock('sessionStorage', {
-      'npe:signer-kind': JSON.stringify({ kind: 'backup', identityId: 'identity-a' }),
+      'npe:signer-kind': JSON.stringify({ kind: 'backup', identityId: 'identity-a', network: 'testnet' }),
     });
     const context = useSdkMock();
     const view = render(

@@ -141,8 +141,8 @@ voting key with its ProTxHash, or none for an already-signed transition.
 - Nothing secret is persisted. Local signers keep keys in tab memory and wipe
   owned byte arrays on disconnect, after ten minutes without user input
   (visible or hidden tab), when leaving `/wallet` and `/broadcast`, and on
-  unload. Automatic clears keep only the signer kind and public identity ID as
-  a reconnect hint. JavaScript strings and SDK-internal copies cannot be
+  unload. Automatic clears keep only the signer kind, public identity ID and
+  network as a reconnect hint, shown only on that network. JavaScript strings and SDK-internal copies cannot be
   reliably zeroed.
 - Secret fields are masked text fields, so browsers don't offer to save them,
   and Review never shows them.
