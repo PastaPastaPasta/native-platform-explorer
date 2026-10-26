@@ -40,7 +40,7 @@ describe('SdkSessionNotice', () => {
       sdk: null, status: 'error', network: 'devnet-oldnet',
       error: new SdkSessionError('unreachable', 'Failed to prefetch quorums: HTTP request error'),
     } });
-    expect(screen.getByRole('alert')).toHaveTextContent('no quorum service URL saved, so the explorer used https://quorums.oldnet.networks.dash.org');
+    expect(screen.getByRole('alert')).toHaveTextContent('The explorer used the default, https://quorums.oldnet.networks.dash.org');
     view.unmount();
     saveCustomDevnet(createCustomDevnetConfig({ name: 'devnet-newnet', quorumUrl: 'https://quorums.example.test' }));
     renderWithProviders(<SdkSessionNotice />, { sdk: {
@@ -48,8 +48,26 @@ describe('SdkSessionNotice', () => {
       error: new SdkSessionError('unreachable', 'Failed to prefetch quorums: HTTP request error'),
     } });
     expect(screen.getByRole('alert')).not.toHaveTextContent('no quorum service URL saved');
-    removeCustomDevnet('devnet-oldnet');
     removeCustomDevnet('devnet-newnet');
+  });
+
+  it('keeps the devnet quorum hint to failed connects and names underivable defaults', () => {
+    saveCustomDevnet(createCustomDevnetConfig({ name: 'devnet-oldnet', dapiAddresses: ['https://10.0.0.1:1443'] }));
+    // A ready session already prefetched from the derived service.
+    const view = renderWithProviders(<SdkSessionNotice />, { sdk: {
+      network: 'devnet-oldnet', unreachable: new SdkSessionError('unreachable', 'No DAPI endpoint answered: no available addresses to retry'),
+    } });
+    expect(screen.getByRole('alert')).not.toHaveTextContent('no quorum service URL saved');
+    view.unmount();
+    removeCustomDevnet('devnet-oldnet');
+    saveCustomDevnet(createCustomDevnetConfig({ name: 'devnet-mainnet', dapiAddresses: ['https://10.0.0.1:1443'] }));
+    renderWithProviders(<SdkSessionNotice />, { sdk: {
+      sdk: null, status: 'error', network: 'devnet-mainnet',
+      error: new SdkSessionError('unreachable', 'Devnet name \'mainnet\' is reserved'),
+    } });
+    expect(screen.getByRole('alert')).toHaveTextContent('No default can be derived from its name ("mainnet" is reserved)');
+    expect(screen.getByRole('alert')).not.toHaveTextContent('quorums.mainnet.networks.dash.org');
+    removeCustomDevnet('devnet-mainnet');
   });
 
   it('shows the unreachable state over a ready session whose endpoints all failed', () => {

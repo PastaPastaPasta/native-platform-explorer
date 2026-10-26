@@ -20,6 +20,16 @@ describe('CustomDevnetModal', () => {
     expect(getNetwork('devnet-blank').dapiAddresses).toBeUndefined();
   });
 
+  it.each([['devnet-mainnet', '"mainnet" is reserved'], ['devnet-', 'is empty'], ['devnet-bad-', 'hyphen']])(
+    'requires a quorum service URL when %s cannot derive one', (name, reason) => {
+      renderWithProviders(<CustomDevnetModal isOpen onClose={() => {}} />);
+      fireEvent.change(screen.getByPlaceholderText('devnet-mycoolnet'), { target: { value: name } });
+      fireEvent.click(screen.getByRole('button', { name: 'Save & connect' }));
+      expect(screen.getByText(new RegExp(`Required for this name.*${reason}`))).toBeInTheDocument();
+      expect(hasNetwork(name)).toBe(false);
+    },
+  );
+
   it('still rejects malformed DAPI addresses', () => {
     renderWithProviders(<CustomDevnetModal isOpen onClose={() => {}} />);
     fireEvent.change(screen.getByPlaceholderText('devnet-mycoolnet'), { target: { value: 'devnet-bad' } });

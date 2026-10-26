@@ -21,6 +21,7 @@ import {
 } from '@chakra-ui/react';
 import {
   createCustomDevnetConfig,
+  derivedQuorumNameError,
   hasNetwork,
   isBuiltInNetwork,
   saveCustomDevnet,
@@ -94,6 +95,9 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
     const trimmedQuorum = quorumUrl.trim();
     if (trimmedQuorum && !isValidUrl(trimmedQuorum)) {
       next.quorum = 'Not a valid HTTP(S) URL';
+    } else if (!trimmedQuorum && trimmedName && !next.name) {
+      const reason = derivedQuorumNameError(trimmedName.replace(/^devnet-/, ''));
+      if (reason) next.quorum = `Required for this name: no default can be derived (${reason}).`;
     }
 
     // Every session prefetches from the quorum service (explicit or derived

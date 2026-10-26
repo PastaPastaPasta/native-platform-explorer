@@ -35,6 +35,16 @@ export function devnetShortName(cfg: NetworkConfig): string {
   return cfg.devnetName ?? cfg.name.replace(/^devnet-/, '');
 }
 
+/** Why the SDK cannot derive `https://quorums.<short>.networks.dash.org` from
+ *  a devnet short name (rc.2 trusted-context `get_quorum_base_url`), or null. */
+export function derivedQuorumNameError(short: string): string | null {
+  if (!short) return 'the name without "devnet-" is empty';
+  if (!/^[a-z0-9-]+$/i.test(short)) return 'it may use only letters, digits and hyphens';
+  if (short.startsWith('-') || short.endsWith('-')) return 'it cannot start or end with a hyphen';
+  if (['mainnet', 'testnet', 'devnet', 'local', 'regtest'].includes(short.toLowerCase())) return `"${short}" is reserved`;
+  return null;
+}
+
 export const TESTNET: NetworkConfig = {
   type: 'testnet',
   name: 'testnet',
