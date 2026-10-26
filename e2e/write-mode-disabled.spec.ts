@@ -26,7 +26,8 @@ test('a read-only build links nowhere into write mode', async ({ page }) => {
   await expect(nav.getByText('Write', { exact: true })).toHaveCount(0);
 
   await page.goto('contract/?network=testnet');
-  await expect(page.getByLabel('Contract ID')).toBeVisible();
+  await expect(page.getByRole('textbox', { name: 'Contract ID' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Well-known system contracts' })).toBeVisible();
   await expect(page.locator(writeLinks)).toHaveCount(0);
 
   await page.goto('sdk-reference/?network=testnet');
