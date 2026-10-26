@@ -383,6 +383,12 @@ export const GROUPS: { id: OperationGroup; label: string; blurb: string }[] = [
   },
 ];
 
+/** Picker marker for operations that cannot be signed here, or null when they can. */
+export function operationStatusLabel(entry: OperationEntry): 'Bridge' | 'Unavailable' | null {
+  const status = entry.descriptor.capability?.status;
+  return status === 'external-bridge' ? 'Bridge' : status === 'unsupported' ? 'Unavailable' : null;
+}
+
 export function findOperationById(id: string | null | undefined): OperationEntry | undefined {
   if (!id) return undefined;
   return OPERATIONS.find((o) => o.id === id);

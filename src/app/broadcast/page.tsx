@@ -3,15 +3,7 @@
 import { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import NextLink from 'next/link';
-import {
-  Box,
-  Button,
-  Grid,
-  Heading,
-  HStack,
-  Text,
-  VStack,
-} from '@chakra-ui/react';
+import { Badge, Box, Button, Grid, Heading, HStack, Text, VStack } from '@chakra-ui/react';
 import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
@@ -22,6 +14,7 @@ import {
   findOperationById,
   GROUPS,
   operationsInGroup,
+  operationStatusLabel,
   type OperationEntry,
   type OperationGroup,
 } from '@components/broadcast/operations';
@@ -48,26 +41,40 @@ function GroupCard({
           </Text>
         </Box>
         <VStack align="stretch" spacing={2}>
-          {ops.map((o) => (
-            <Box
-              key={o.id}
-              as="button"
-              textAlign="left"
-              borderRadius="md"
-              border="1px solid"
-              borderColor="gray.700"
-              p={3}
-              _hover={{ borderColor: 'brand.light', bg: 'rgba(0,141,228,0.05)' }}
-              onClick={() => onPick(o)}
-            >
-              <Text fontSize="sm" color="gray.100" fontWeight={500}>
-                {o.label}
-              </Text>
-              <Text fontSize="xs" color="gray.400" mt={0.5}>
-                {o.blurb}
-              </Text>
-            </Box>
-          ))}
+          {ops.map((o) => {
+            const status = operationStatusLabel(o);
+            return (
+              <Box
+                key={o.id}
+                as="button"
+                textAlign="left"
+                borderRadius="md"
+                border="1px solid"
+                borderColor="gray.700"
+                p={3}
+                _hover={{ borderColor: 'brand.light', bg: 'rgba(0,141,228,0.05)' }}
+                onClick={() => onPick(o)}
+              >
+                <HStack justify="space-between" align="flex-start" spacing={2}>
+                  <Text fontSize="sm" color="gray.100" fontWeight={500}>
+                    {o.label}
+                  </Text>
+                  {status ? (
+                    <Badge
+                      flexShrink={0}
+                      variant="subtle"
+                      colorScheme={status === 'Bridge' ? 'blue' : 'orange'}
+                    >
+                      {status}
+                    </Badge>
+                  ) : null}
+                </HStack>
+                <Text fontSize="xs" color="gray.400" mt={0.5}>
+                  {o.blurb}
+                </Text>
+              </Box>
+            );
+          })}
         </VStack>
       </VStack>
     </InfoBlock>
@@ -128,9 +135,9 @@ function Hub() {
               Broadcast console
             </Heading>
             <Text fontSize="sm" color="gray.250">
-              Pick an operation. Every form runs through the same Build → Review
-              → Sign → Broadcast → Result flow with mainnet guardrails. Leaving the
-              wallet and broadcast pages clears the connected signer.
+              Pick an operation. Every form runs through the same Build → Review → Sign → Broadcast
+              → Result flow with mainnet guardrails. Leaving the wallet and broadcast pages clears
+              the connected signer.
             </Text>
             <HStack pt={2} spacing={2}>
               <Button as={NextLink} href="/wallet/" size="sm" variant="outline">
@@ -140,10 +147,7 @@ function Hub() {
           </VStack>
         </InfoBlock>
         <SignerStatusCard />
-        <Grid
-          templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', xl: 'repeat(3, 1fr)' }}
-          gap={4}
-        >
+        <Grid templateColumns={{ base: '1fr', md: 'repeat(2, 1fr)', xl: 'repeat(3, 1fr)' }} gap={4}>
           {GROUPS.map((g) => (
             <GroupCard key={g.id} group={g} onPick={pickOp} />
           ))}
