@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import NextLink from 'next/link';
 import {
   Badge,
   Heading,
   HStack,
+  Link,
   SimpleGrid,
   Text,
   Tooltip,
@@ -19,6 +21,8 @@ import { CodeBlock } from '@components/data/CodeBlock';
 import { Identifier } from '@components/data/Identifier';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useCurrentQuorumsInfo, useSystemStatus } from '@sdk/queries';
+import { useSdk } from '@sdk/hooks';
+import { withNetwork } from '@util/exploration';
 import { QuorumsTable } from '@components/network/QuorumsTable';
 import { SdkVersionNotice } from '@components/layout/SdkNotices';
 import {
@@ -116,6 +120,7 @@ function HealthBanner({ health }: { health: NetworkHealth }) {
 
 export default function Page() {
   usePageBreadcrumbs([{ label: 'Home', href: '/' }, { label: 'Network' }, { label: 'Status' }]);
+  const { network } = useSdk();
 
   const statusQ = useSystemStatus();
   const quorumsQ = useCurrentQuorumsInfo();
@@ -164,6 +169,13 @@ export default function Page() {
         </InfoBlock>
 
         <HealthBanner health={health} />
+
+        <Text fontSize="sm" color="gray.250">
+          Shielded (Orchard) pool balance, anchors, notes and nullifiers:{' '}
+          <Link as={NextLink} href={withNetwork('/network/shielded/', network)} color="brand.light">
+            Shielded pool
+          </Link>
+        </Text>
 
         {statusQ.isLoading ? (
           <LoadingCard />
