@@ -1,3 +1,5 @@
+import { execFileSync } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +21,20 @@ function readEvoSdkVersion() {
 }
 const evoSdkVersion = readEvoSdkVersion();
 
+// Next's default build ID is random, which was the only difference between two
+// builds of the same commit. The commit makes the export reproducible (see
+// /about and scripts/verify-integrity.mjs). NPE_BUILD_ID overrides it, e.g.
+// to simulate a deploy in tests; without git the ID stays random.
+function readGitCommit() {
+  try {
+    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: __dirname, encoding: 'utf8' }).trim();
+  } catch {
+    return '';
+  }
+}
+const gitCommit = readGitCommit();
+const buildId = process.env.NPE_BUILD_ID || gitCommit || randomBytes(12).toString('base64url');
+
 // GitHub Pages serves project sites from /<repo-name>/. The deploy workflow
 // sets NEXT_PUBLIC_BASE_PATH to the repo name (e.g. '/native-platform-explorer')
 // so internal links and Next's asset prefix resolve correctly. Local dev
@@ -32,9 +48,11 @@ const nextConfig = {
   reactStrictMode: true,
   basePath,
   assetPrefix: basePath || undefined,
+  generateBuildId: () => buildId,
   env: {
     // Exposed to client code via process.env; see src/version.ts.
     NEXT_PUBLIC_EVO_SDK_VERSION: evoSdkVersion,
+    NEXT_PUBLIC_GIT_COMMIT: gitCommit,
   },
   images: {
     unoptimized: true,
