@@ -437,18 +437,19 @@ export async function executeDocumentTransfer(args: {
       options.documentType,
       options.documentId,
     );
+    const { Identifier } = await import('@dashevo/evo-sdk');
+    const recipientId = Identifier.fromBase58(options.recipientId);
     await submit(
       () =>
         sdk.documents.transfer({
           document: existing,
-          recipientId: options.recipientId as unknown as Parameters<
-            typeof sdk.documents.transfer
-          >[0]['recipientId'],
+          recipientId,
           identityKey: material.identityKey,
           signer: material.identitySigner,
         }),
       {
         identityId: material.identityId,
+        recipientId: options.recipientId,
         contractId: options.contractId,
         documentType: options.documentType,
         documentId: options.documentId,
@@ -523,15 +524,15 @@ export async function executeDocumentPurchase(args: {
       options.documentType,
       options.documentId,
     );
+    const { Identifier } = await import('@dashevo/evo-sdk');
+    // The buyer is whoever is signing; pass the active identity, not the
+    // key's optional contractBounds metadata.
+    const buyerId = Identifier.fromBase58(material.identityId);
     await submit(
       () =>
         sdk.documents.purchase({
           document: existing,
-          // The buyer is whoever is signing; pass the active identity, not the
-          // key's optional contractBounds metadata.
-          buyerId: material.identityId as unknown as Parameters<
-            typeof sdk.documents.purchase
-          >[0]['buyerId'],
+          buyerId,
           price: options.priceCredits,
           identityKey: material.identityKey,
           signer: material.identitySigner,
@@ -557,6 +558,14 @@ export async function executeDocumentPurchase(args: {
 
 // ─── identity ───────────────────────────────────────────────────────────
 
+interface CreditTransferFacadeOptions {
+  identity: Identity;
+  recipientId: string;
+  amount: bigint;
+  signer: SdkSigningMaterial['identitySigner'];
+  signingKey: SdkSigningMaterial['identityKey'];
+}
+
 export async function executeIdentityCreditTransfer(args: {
   sdk: EvoSDK;
   signer: ExplorerSigner;
@@ -569,24 +578,24 @@ export async function executeIdentityCreditTransfer(args: {
     () => resolveSigningCriteria('identity.creditTransfer', sdk, options),
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
-      // SDK rc.2 merges facade and raw-transition declarations with this
-      // options name. Pass the real facade shape; do not invent nonce fields
-      // to satisfy the upstream declaration collision.
-      const result = (await submit(
+      // SDK rc.2 merges the facade's IdentityCreditTransferOptions with the raw
+      // transition's (which adds senderId/nonce). Type-check the real facade
+      // shape here, then cast only across that upstream declaration collision.
+      const transfer: CreditTransferFacadeOptions = {
+        identity,
+        recipientId: options.recipientId,
+        amount: options.amountCredits,
+        signer: material.identitySigner,
+        signingKey: material.identityKey,
+      };
+      const result = await submit(
         () =>
-          sdk.identities.creditTransfer({
-            identity,
-            recipientId: options.recipientId,
-            amount: options.amountCredits,
-            signer: material.identitySigner,
-            signingKey: material.identityKey,
-          } as unknown as Parameters<typeof sdk.identities.creditTransfer>[0]),
+          sdk.identities.creditTransfer(
+            transfer as unknown as Parameters<typeof sdk.identities.creditTransfer>[0],
+          ),
         { identityId: material.identityId, recipientId: options.recipientId },
         args.assertCurrent,
-      )) as unknown as {
-        senderBalance?: bigint;
-        recipientBalance?: bigint;
-      };
+      );
       return {
         kind: 'identity' as const,
         identityId: material.identityId,

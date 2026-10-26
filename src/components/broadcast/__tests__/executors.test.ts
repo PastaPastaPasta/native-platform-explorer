@@ -42,6 +42,7 @@ vi.mock('@dashevo/evo-sdk', () => {
   }
 
   return {
+    Identifier: { fromBase58: (base58: string) => ({ base58 }) },
     DataContract: class DataContract {
       id = 'placeholder-contract-id';
       constructor(readonly args: unknown) {}
@@ -511,5 +512,42 @@ describe('broadcast executors', () => {
       }),
     ).rejects.toBeInstanceOf(OperationNotSubmittedError);
     expect(prepareSdk).not.toHaveBeenCalled();
+  });
+
+  it('passes typed identifiers for document transfer recipients and buyers', async () => {
+    const transfer = vi.fn().mockResolvedValue(undefined);
+    const purchase = vi.fn().mockResolvedValue(undefined);
+    const sdk = {
+      contracts: noteContracts(),
+      documents: { get: vi.fn().mockResolvedValue({ id: 'doc-1' }), transfer, purchase },
+    } as never;
+    const target = { contractId: 'contract-1', documentType: 'note', documentId: 'doc-1' };
+    await executeDocumentTransfer({
+      sdk,
+      signer: createMockSigner(),
+      options: { ...target, recipientId: 'recipient-1' },
+    });
+    expect(transfer.mock.calls[0]![0].recipientId).toEqual({ base58: 'recipient-1' });
+    await executeDocumentPurchase({
+      sdk,
+      signer: createMockSigner(),
+      options: { ...target, priceCredits: 5n },
+    });
+    expect(purchase.mock.calls[0]![0].buyerId).toEqual({ base58: 'identity-1' });
+  });
+
+  it('keeps the recipient in an unknown transfer receipt', async () => {
+    const error = await executeDocumentTransfer({
+      sdk: {
+        contracts: noteContracts(),
+        documents: {
+          get: vi.fn().mockResolvedValue({}),
+          transfer: vi.fn().mockRejectedValue(new Error('timeout')),
+        },
+      } as never,
+      signer: createMockSigner(),
+      options: { contractId: 'c', documentType: 'note', documentId: 'd', recipientId: 'r' },
+    }).catch((e: unknown) => e);
+    expect((error as BroadcastOutcomeUnknownError).entities).toMatchObject({ recipientId: 'r' });
   });
 });
