@@ -105,6 +105,38 @@ export function extractDocumentRows(data: unknown): Array<Record<string, unknown
   );
 }
 
+/** Entry count and last document ID of a documents.query page. Map entries
+ *  whose value is undefined still count: they occupy a slot of the page. */
+export function documentPageCursor(data: unknown): { count: number; lastId?: string } {
+  if (data instanceof Map) {
+    const keys = Array.from(data.keys());
+    return { count: keys.length, lastId: keys.length ? String(keys[keys.length - 1]) : undefined };
+  }
+  if (!Array.isArray(data)) return { count: 0 };
+  const last = data[data.length - 1] as { $id?: unknown; id?: unknown } | undefined;
+  const id = last?.$id ?? last?.id;
+  return { count: data.length, lastId: typeof id === 'string' ? id : undefined };
+}
+
+/** Plain-language explanations for Platform query errors the workspace can
+ *  anticipate. The raw error stays visible alongside. */
+export function describeQueryError(message: string | undefined): string | undefined {
+  if (!message) return undefined;
+  if (/requires a `(?:countable|summable|rangeCountable|rangeSummable)|(?:count|sum) query requires|countable: true/.test(message)) {
+    return 'This document type has no index that supports this aggregate. COUNT needs a countable index whose properties are the WHERE fields (or documentsCountable for an unfiltered count); SUM and AVG need a matching summable index. The schema panel lists each index\'s flags.';
+  }
+  if (/missing order by|orderBy field for each range element/i.test(message)) {
+    return 'Add ORDER BY for every field filtered with a range (<, >, BETWEEN, STARTS WITH) or IN.';
+  }
+  if (/query must be for valid indexes|where clause on non indexed property|query must better match an existing index/i.test(message)) {
+    return 'No index covers this combination of WHERE and ORDER BY fields. Filters and sorting must follow one index\'s property order; the schema panel lists the indices.';
+  }
+  if (/invalid limit/i.test(message)) {
+    return 'The Platform rejected the LIMIT for this query shape. Try a smaller LIMIT.';
+  }
+  return undefined;
+}
+
 /** Keep the canonical group key, rather than guessing a schema-dependent decoded value. */
 export function aggregateExportRows(
   data: unknown,

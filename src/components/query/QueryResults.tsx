@@ -5,7 +5,7 @@ import { HStack, Text } from '@chakra-ui/react';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
-import { DocumentsResultsTable, getLastDocId } from '@components/contract/DocumentsResultsTable';
+import { DocumentsResultsTable } from '@components/contract/DocumentsResultsTable';
 import { CursorPagination } from '@components/pagination/CursorPagination';
 import type { HeuristicColumn } from '@util/schema';
 import { extractDocumentRows } from '@util/query-workspace';
@@ -19,7 +19,12 @@ export interface QueryResultsProps {
   columns: HeuristicColumn[];
   contractId: string;
   documentType: string;
-  limit: number;
+  /** A follow-up request found at least one more document after this page. */
+  hasNext: boolean;
+  /** That follow-up request is still in flight. */
+  checkingNext?: boolean;
+  /** Cursor for the next page: the last entry's ID, including absent documents. */
+  lastId: string | undefined;
   cursorStack: Array<string | undefined>;
   onCursorStackChange: (stack: Array<string | undefined>) => void;
 }
@@ -33,7 +38,9 @@ export function QueryResults({
   columns,
   contractId,
   documentType,
-  limit,
+  hasNext,
+  checkingNext,
+  lastId,
   cursorStack,
   onCursorStackChange,
 }: QueryResultsProps) {
@@ -56,14 +63,14 @@ export function QueryResults({
           <HStack justify="space-between" mt={3}>
             <Text fontSize="xs" color="gray.400">
               {rows.length} document{rows.length === 1 ? '' : 's'} returned
+              {checkingNext ? ' · checking for more…' : ''}
             </Text>
             <CursorPagination
               pageIndex={cursorStack.length - 1}
               hasPrev={cursorStack.length > 1}
-              hasNext={rows.length === limit && !!getLastDocId(rows)}
+              hasNext={hasNext && !!lastId}
               onPrev={() => onCursorStackChange(cursorStack.slice(0, -1))}
               onNext={() => {
-                const lastId = getLastDocId(rows);
                 if (lastId) onCursorStackChange([...cursorStack, lastId]);
               }}
             />

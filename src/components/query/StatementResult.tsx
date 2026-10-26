@@ -23,18 +23,32 @@ import {
 } from '@sdk/queries';
 import { resolveContractId, toDocumentsQuery, type ParsedQuery } from '@util/sql-parser';
 import { toError } from '@util/errors';
+import { describeQueryError, documentPageCursor } from '@util/query-workspace';
 import { useSdk } from '@sdk/hooks';
 import { ResultActions } from './ResultActions';
 import {
+  checkAggregateAgainstIndices,
+  checkQueryAgainstIndices,
+  getDocumentTypeAggregates,
   getDocumentTypeSchema,
   getIndicesForType,
   getPropertySchema,
   heuristicColumnsForType,
-  validateWhereAgainstIndices,
 } from '@util/schema';
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 import { QueryResults } from './QueryResults';
 import { AggregateResults, type AggregateResultMap } from './AggregateResults';
+
+/** Drive's DEFAULT_QUERY_LIMIT, which caps per-group aggregate entries when LIMIT is omitted. */
+const DEFAULT_GROUP_LIMIT = 100;
+
+const RANGE_OPERATORS = new Set(['>', '>=', '<', '<=', 'between', 'startsWith']);
+
+/** The GROUP BY field that also carries the range filter (RangeDistinct mode). */
+function rangeGroupField(parsed: ParsedQuery): string | undefined {
+  const field = parsed.groupBy?.[parsed.groupBy.length - 1];
+  return field && parsed.where.some((w) => w.field === field && RANGE_OPERATORS.has(w.operator)) ? field : undefined;
+}
 
 export interface StatementResultProps {
   parsed: ParsedQuery;
@@ -89,11 +103,12 @@ export function StatementResult({
     return parsed.groupBy.map((f) => getPropertySchema(docSchema, f));
   }, [parsed, docSchema]);
 
-  const whereFields = parsed.where.map((w) => w.field);
-  const validation = useMemo(
-    () => validateWhereAgainstIndices(whereFields, indices),
-    [whereFields, indices],
-  );
+  const indexCheck = useMemo(() => {
+    if (!docSchema) return undefined;
+    return parsed.select === 'documents'
+      ? checkQueryAgainstIndices(parsed, indices)
+      : checkAggregateAgainstIndices(parsed, parsed.select, parsed.aggregateField, indices, getDocumentTypeAggregates(docSchema));
+  }, [parsed, indices, docSchema]);
 
   const startAfter = cursorStack[cursorStack.length - 1];
 
@@ -117,6 +132,16 @@ export function StatementResult({
     parsed.aggregateField,
     executionId,
   );
+
+  const limit = parsed.limit ?? 25;
+  // A full page only means more documents may exist; ask for the next one.
+  const page = useMemo(() => documentPageCursor(result?.data), [result]);
+  const probeParams =
+    !isAggregate && params && result && !result.error && page.count >= limit && page.lastId
+      ? { ...params, limit: 1, startAfter: page.lastId }
+      : undefined;
+  const probeQ = useDocumentsQuery(probeParams, `${executionId}-next-${page.lastId ?? ''}`);
+  const hasNextPage = !!probeParams && probeQ.isSuccess && documentPageCursor(probeQ.data).count > 0;
 
   const refetch = isAggregate ? aggQ.refetch : docsQ.refetch;
   useEffect(() => {
@@ -156,7 +181,6 @@ export function StatementResult({
     stateChangeRef.current('queued');
   }
 
-  const limit = parsed.limit ?? 25;
   const resolvedAlias = contractSource === 'alias' ? parsed.contractAlias : undefined;
 
   return (
@@ -184,20 +208,18 @@ export function StatementResult({
         </Alert>
       )}
 
-      {whereFields.length > 0 && !validation.valid && !!contractQ.data && docSchema && (
-        <Alert status="warning" borderRadius="md" bg="rgba(255,200,0,0.06)">
+      {!!indexCheck?.warnings.length && (
+        <Alert status="warning" borderRadius="md" bg="rgba(255,200,0,0.06)" alignItems="flex-start">
           <AlertIcon />
           <AlertDescription fontSize="sm">
-            WHERE fields [{whereFields.join(', ')}] don&apos;t match any declared index prefix. The
-            query may be rejected by the platform.
-            {indices.length > 0 && (
-              <Text as="span" display="block" mt={1} fontSize="xs" color="gray.400">
-                Available indices:{' '}
-                {indices
-                  .map((idx) => `${idx.name} [${idx.properties.map((p) => p.field).join(', ')}]`)
-                  .join(' · ')}
-              </Text>
-            )}
+            The Platform will probably reject this query:
+            <Box as="ul" pl={4} mt={1}>
+              {indexCheck.warnings.map((warning) => (
+                <Text as="li" key={warning} fontSize="xs" color="gray.300">
+                  {warning}
+                </Text>
+              ))}
+            </Box>
           </AlertDescription>
         </Alert>
       )}
@@ -275,9 +297,8 @@ export function StatementResult({
       )}
       {result?.error && (
         <Text fontSize="xs" color="orange.300">
-          Check this network&apos;s contract and document type, then compare WHERE and ORDER BY with
-          the declared index order. Unsupported SQL is rejected in the editor; Platform errors may
-          also reflect index requirements or an unavailable endpoint.
+          {describeQueryError(result.error.message) ??
+            "Check this network's contract and document type, then compare WHERE and ORDER BY with the declared index order. Unsupported SQL is rejected in the editor; Platform errors may also reflect index requirements or an unavailable endpoint."}
         </Text>
       )}
       {result && (
@@ -291,6 +312,9 @@ export function StatementResult({
           kind={parsed.select as 'count' | 'sum' | 'avg'}
           aggregateField={parsed.aggregateField}
           groupBy={parsed.groupBy}
+          groupLimit={parsed.limit ?? DEFAULT_GROUP_LIMIT}
+          rangeGroupField={rangeGroupField(parsed)}
+          descending={parsed.orderBy[0]?.direction === 'desc'}
           groupBySchemas={groupBySchemas}
           data={result?.data as AggregateResultMap | undefined}
           isLoading={active || executionState === 'queued'}
@@ -310,7 +334,9 @@ export function StatementResult({
           columns={columns}
           contractId={effectiveContractId!}
           documentType={parsed.from}
-          limit={limit}
+          hasNext={hasNextPage}
+          checkingNext={!!probeParams && probeQ.isFetching}
+          lastId={page.lastId}
           cursorStack={cursorStack}
           onCursorStackChange={changePage}
         />
