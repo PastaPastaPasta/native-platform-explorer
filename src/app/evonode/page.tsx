@@ -1,7 +1,7 @@
 'use client';
 
 import NextLink from 'next/link';
-import { Suspense } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import {
   Badge,
@@ -9,6 +9,7 @@ import {
   Heading,
   HStack,
   Progress,
+  Select,
   SimpleGrid,
   Text,
   VStack,
@@ -17,81 +18,213 @@ import { Container } from '@ui/Container';
 import { InfoBlock } from '@ui/InfoBlock';
 import { LoadingCard } from '@ui/LoadingCard';
 import { ErrorCard } from '@ui/ErrorCard';
+import { LookupInput } from '@ui/LookupInput';
 import { Identifier } from '@components/data/Identifier';
 import { InfoLine } from '@components/data/InfoLine';
-import { CodeBlock } from '@components/data/CodeBlock';
 import { BigNumberDisplay } from '@components/data/BigNumber';
 import { NotActive } from '@components/data/NotActive';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import {
   useAllEvonodeBlocksInEpoch,
   useCurrentEpoch,
+  useEvonodesBlocksByIds,
+  useFinalizedEpochInfo,
   useProtocolVersionUpgradeVoteStatus,
 } from '@sdk/queries';
 import { shortId } from '@util/identifier';
-import { normaliseEpoch } from '@util/epoch';
+import { normaliseEpoch, proposerStanding, type ProposerStanding } from '@util/epoch';
+import { proposerMapByHex, proTxHashToBase58, proTxHashToHex } from '@util/protx';
+import { findOwnVote } from '@util/protocol-votes';
+import { readProp } from '@util/sdk-shape';
 import { useSdk } from '@sdk/hooks';
 import { getNetwork } from '@sdk/networks';
 
-function Content() {
-  const params = useSearchParams();
-  const proTxHash = params.get('proTxHash') ?? '';
+// Recent epochs offered by the selector. Older epochs are reachable from
+// /epoch/history/, whose finalized proposer lists link back here.
+const EPOCH_CHOICES = 25;
+
+function validateProTxHash(v: string): string | null {
+  return proTxHashToHex(v) ? null : 'Expected a 64-character hex proTxHash (or its base58 form).';
+}
+
+function Landing({ invalid }: { invalid?: string }) {
+  return (
+    <Container py={{ base: 4, md: 6 }}>
+      <VStack align="stretch" spacing={4}>
+        <InfoBlock emphasised>
+          <VStack align="stretch" spacing={3}>
+            <Heading size="md" color="gray.100">
+              Evonodes
+            </Heading>
+            {invalid ? (
+              <Text fontSize="sm" color="danger">
+                “{shortId(invalid, 12, 6)}” is not a proTxHash.
+              </Text>
+            ) : null}
+            <LookupInput
+              label="proTxHash"
+              placeholder="64-character hex proTxHash"
+              description="Shows the evonode's proposed blocks per epoch and its protocol-upgrade vote."
+              validate={validateProTxHash}
+              buildHref={(v) => `/evonode/?proTxHash=${encodeURIComponent(proTxHashToHex(v)!)}`}
+            />
+          </VStack>
+        </InfoBlock>
+        <InfoBlock>
+          <HStack justify="space-between" flexWrap="wrap" spacing={3}>
+            <Text fontSize="sm" color="gray.250">
+              Don&apos;t have a proTxHash? Pick an evonode from the proposer leaderboard or the
+              protocol vote list.
+            </Text>
+            <HStack spacing={2}>
+              <Button as={NextLink} href="/epoch/" size="xs" variant="outline">
+                Current epoch leaderboard →
+              </Button>
+              <Button as={NextLink} href="/network/protocol/" size="xs" variant="outline">
+                Protocol votes →
+              </Button>
+            </HStack>
+          </HStack>
+        </InfoBlock>
+      </VStack>
+    </Container>
+  );
+}
+
+function Standing({
+  loading,
+  error,
+  standing,
+  blocks,
+  epochLabel,
+}: {
+  loading: boolean;
+  error: Error | null;
+  standing: ProposerStanding | null;
+  /** Authoritative block count when it comes from a separate query. */
+  blocks?: number | null;
+  epochLabel: string;
+}) {
+  const own = blocks ?? standing?.blocks ?? null;
+  return (
+    <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+      <InfoBlock>
+        <InfoLine
+          label={`Blocks proposed (${epochLabel})`}
+          value={
+            loading ? (
+              <Text fontSize="sm" color="gray.400">
+                Scanning…
+              </Text>
+            ) : error ? (
+              <Text fontSize="sm" color="danger">
+                {error.message || 'Failed to load'}
+              </Text>
+            ) : own ? (
+              <VStack align="flex-start" spacing={1}>
+                <BigNumberDisplay value={own} />
+                {standing && standing.topBlocks > 0 ? (
+                  <Progress
+                    value={(own / standing.topBlocks) * 100}
+                    colorScheme="blue"
+                    size="xs"
+                    width="100%"
+                    borderRadius="full"
+                    bg="gray.800"
+                  />
+                ) : null}
+              </VStack>
+            ) : (
+              <VStack align="flex-start" spacing={1}>
+                <NotActive />
+                <Text fontSize="xs" color="gray.400">
+                  No blocks proposed in this epoch.
+                </Text>
+              </VStack>
+            )
+          }
+        />
+      </InfoBlock>
+      <InfoBlock>
+        <InfoLine
+          label="Rank"
+          value={
+            !loading && standing ? (
+              <Text fontFamily="mono" fontSize="md" color="gray.100">
+                #{standing.rank}{' '}
+                <Text as="span" color="gray.400" fontSize="xs">
+                  of {standing.proposers} proposers
+                </Text>
+              </Text>
+            ) : (
+              <NotActive />
+            )
+          }
+        />
+      </InfoBlock>
+      <InfoBlock>
+        <InfoLine
+          label="Share of blocks"
+          value={
+            !loading && standing && standing.totalBlocks > 0 ? (
+              <Text fontFamily="mono" fontSize="md" color="gray.100">
+                {((standing.blocks / standing.totalBlocks) * 100).toFixed(2)}%{' '}
+                <Text as="span" color="gray.400" fontSize="xs">
+                  ({standing.blocks}/{standing.totalBlocks})
+                </Text>
+              </Text>
+            ) : (
+              <NotActive />
+            )
+          }
+        />
+      </InfoBlock>
+    </SimpleGrid>
+  );
+}
+
+function Evonode({ hex }: { hex: string }) {
   const { network } = useSdk();
-
-  usePageBreadcrumbs([
-    { label: 'Home', href: '/' },
-    { label: 'Evonode' },
-    { label: proTxHash ? shortId(proTxHash) : '—' },
-  ]);
-
   const currentQ = useCurrentEpoch();
   const currentIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : undefined;
+  const currentProtocol = readProp<number>(currentQ.data, 'protocolVersion');
+  const [chosen, setChosen] = useState<number | undefined>(undefined);
+  const epoch = chosen ?? currentIdx;
+  const isCurrent = epoch !== undefined && epoch === currentIdx;
 
-  // Paginate through every proposer for the current epoch (server caps each
-  // page at 100). Gives us rank + share + block count in one walk.
-  const allBlocksQ = useAllEvonodeBlocksInEpoch(proTxHash ? currentIdx : undefined);
-  const allBars = (() => {
-    const m = allBlocksQ.data as Map<string, number> | undefined;
-    if (!m) return [] as Array<{ proTxHash: string; blocks: number }>;
-    return [...m.entries()]
-      .map(([p, b]) => ({ proTxHash: p, blocks: b }))
-      .sort((a, b) => b.blocks - a.blocks);
-  })();
-  const myIndex = allBars.findIndex((b) => b.proTxHash === proTxHash);
-  const myEntry = myIndex >= 0 ? allBars[myIndex] : null;
-  const total = allBars.reduce((a, b) => a + b.blocks, 0);
-  const topBlocks = allBars[0]?.blocks ?? 0;
-  const sharePct = total > 0 && myEntry ? (myEntry.blocks / total) * 100 : 0;
+  // Only the current epoch has live proposer data; earlier epochs return
+  // empty maps and carry their proposers in the finalized record instead.
+  const ids = useMemo(() => [hex], [hex]);
+  const ownBlocksQ = useEvonodesBlocksByIds(isCurrent ? epoch : undefined, ids);
+  const allBlocksQ = useAllEvonodeBlocksInEpoch(isCurrent ? epoch : undefined);
+  const finalizedQ = useFinalizedEpochInfo(!isCurrent ? epoch : undefined);
 
-  // Protocol-upgrade vote status: paginated across all masternodes. We only
-  // scan the first 100 in Stage 5; if this evonode is beyond page 1 the vote
-  // won't appear. Label the result honestly.
-  const voteQ = useProtocolVersionUpgradeVoteStatus(undefined, 100);
-  const voteMap = voteQ.data as Map<string, unknown> | undefined;
-  const myVote = voteMap
-    ? (() => {
-        for (const [key, val] of voteMap) {
-          if (String(key) === proTxHash) return val;
-        }
-        return undefined;
-      })()
-    : undefined;
+  const ownBlocks = useMemo(() => {
+    if (!(ownBlocksQ.data instanceof Map)) return null;
+    return proposerMapByHex(ownBlocksQ.data).get(hex) ?? 0;
+  }, [ownBlocksQ.data, hex]);
+  const finalizedEntry =
+    finalizedQ.data instanceof Map && epoch !== undefined ? finalizedQ.data.get(epoch) : undefined;
+  const standing = useMemo(() => {
+    const source = isCurrent
+      ? allBlocksQ.data
+      : readProp<unknown>(finalizedEntry, 'blockProposers');
+    return proposerStanding(proposerMapByHex(source), hex);
+  }, [isCurrent, allBlocksQ.data, finalizedEntry, hex]);
 
+  // The vote page starts at the first hash ≥ this one; findOwnVote rejects a
+  // successor's entry when this node has no vote.
+  const voteQ = useProtocolVersionUpgradeVoteStatus(hex, 1);
+  const myVote = findOwnVote(voteQ.data, hex);
+
+  const base58 = proTxHashToBase58(hex);
   const l1InsightBase =
     getNetwork(network).l1ExplorerBaseUrl ??
     'http://insight.testnet.networks.dash.org/insight';
-
-  if (!proTxHash) {
-    return (
-      <Container py={8}>
-        <InfoBlock>
-          <Text color="gray.250">
-            Provide a proTxHash as <code>?proTxHash=…</code>.
-          </Text>
-        </InfoBlock>
-      </Container>
-    );
-  }
+  const epochChoices =
+    currentIdx === undefined
+      ? []
+      : Array.from({ length: Math.min(EPOCH_CHOICES, currentIdx + 1) }, (_, i) => currentIdx - i);
 
   return (
     <Container py={{ base: 4, md: 6 }}>
@@ -102,94 +235,73 @@ function Content() {
               <Heading size="md" color="gray.100">
                 Evonode
               </Heading>
-              {currentIdx !== undefined ? (
-                <Button
-                  as={NextLink}
-                  href={`/epoch/detail/?index=${currentIdx}`}
+              <HStack spacing={2}>
+                <Text as="label" htmlFor="evonode-epoch" fontSize="xs" color="gray.400">
+                  Epoch
+                </Text>
+                <Select
+                  id="evonode-epoch"
                   size="xs"
-                  variant="outline"
+                  width="auto"
+                  value={epoch ?? ''}
+                  isDisabled={currentIdx === undefined}
+                  onChange={(e) => setChosen(Number(e.target.value))}
                 >
-                  Epoch #{currentIdx}
-                </Button>
-              ) : null}
+                  {epochChoices.map((i) => (
+                    <option key={i} value={i}>
+                      #{i}
+                      {i === currentIdx ? ' (current)' : ''}
+                    </option>
+                  ))}
+                </Select>
+                {epoch !== undefined ? (
+                  <Button
+                    as={NextLink}
+                    href={`/epoch/detail/?index=${epoch}`}
+                    size="xs"
+                    variant="outline"
+                  >
+                    Epoch #{epoch} →
+                  </Button>
+                ) : null}
+              </HStack>
             </HStack>
-            <Identifier value={proTxHash} avatar copy highlight="both" />
+            <Identifier value={hex} avatar copy highlight="both" />
+            {base58 ? (
+              <Text fontSize="xs" color="gray.400" fontFamily="mono">
+                base58 {base58}
+              </Text>
+            ) : null}
           </VStack>
         </InfoBlock>
 
-        <SimpleGrid columns={{ base: 1, md: 3 }} spacing={3}>
+        {currentQ.isError ? (
+          <ErrorCard error={currentQ.error} onRetry={() => currentQ.refetch()} />
+        ) : isCurrent || epoch === undefined ? (
+          <Standing
+            epochLabel={epoch !== undefined ? `epoch #${epoch}, current` : 'current epoch'}
+            loading={currentQ.isLoading || ownBlocksQ.isLoading || allBlocksQ.isLoading}
+            error={ownBlocksQ.error ?? allBlocksQ.error ?? null}
+            standing={standing}
+            blocks={ownBlocks}
+          />
+        ) : finalizedQ.isError ? (
+          <ErrorCard error={finalizedQ.error} onRetry={() => finalizedQ.refetch()} />
+        ) : !finalizedQ.isLoading && !finalizedEntry ? (
           <InfoBlock>
-            <InfoLine
-              label="Blocks proposed (current epoch)"
-              value={
-                currentQ.isLoading || allBlocksQ.isLoading ? (
-                  <Text fontSize="sm" color="gray.400">
-                    Scanning…
-                  </Text>
-                ) : allBlocksQ.isError ? (
-                  <Text fontSize="sm" color="danger">
-                    {allBlocksQ.error?.message ?? 'Failed to load'}
-                  </Text>
-                ) : myEntry ? (
-                  <VStack align="flex-start" spacing={1}>
-                    <BigNumberDisplay value={myEntry.blocks} />
-                    {topBlocks > 0 ? (
-                      <Progress
-                        value={(myEntry.blocks / topBlocks) * 100}
-                        colorScheme="blue"
-                        size="xs"
-                        width="100%"
-                        borderRadius="full"
-                        bg="gray.800"
-                      />
-                    ) : null}
-                  </VStack>
-                ) : (
-                  <VStack align="flex-start" spacing={1}>
-                    <NotActive />
-                    <Text fontSize="xs" color="gray.400">
-                      Not a proposer so far this epoch.
-                    </Text>
-                  </VStack>
-                )
-              }
-            />
+            <Text color="gray.400" fontSize="sm">
+              Epoch #{epoch} has no finalized record yet, and Platform keeps live proposer counts
+              only for the current epoch.
+            </Text>
           </InfoBlock>
-          <InfoBlock>
-            <InfoLine
-              label="Rank"
-              value={
-                myEntry ? (
-                  <Text fontFamily="mono" fontSize="md" color="gray.100">
-                    #{myIndex + 1}{' '}
-                    <Text as="span" color="gray.400" fontSize="xs">
-                      of {allBars.length}
-                    </Text>
-                  </Text>
-                ) : (
-                  <NotActive />
-                )
-              }
-            />
-          </InfoBlock>
-          <InfoBlock>
-            <InfoLine
-              label="Share of blocks this epoch"
-              value={
-                myEntry ? (
-                  <Text fontFamily="mono" fontSize="md" color="gray.100">
-                    {sharePct.toFixed(2)}%{' '}
-                    <Text as="span" color="gray.400" fontSize="xs">
-                      ({myEntry.blocks}/{total})
-                    </Text>
-                  </Text>
-                ) : (
-                  <NotActive />
-                )
-              }
-            />
-          </InfoBlock>
-        </SimpleGrid>
+        ) : (
+          <Standing
+            epochLabel={`epoch #${epoch}, finalized`}
+            loading={finalizedQ.isLoading}
+            error={null}
+            standing={standing}
+          />
+        )}
 
         <InfoBlock>
           <VStack align="stretch" spacing={3}>
@@ -197,21 +309,40 @@ function Content() {
               <Heading size="sm" color="gray.100">
                 Protocol upgrade vote
               </Heading>
-              <Badge variant="subtle" colorScheme="gray" fontSize="2xs" textTransform="none">
-                first 100 masternodes scanned
-              </Badge>
+              <Button as={NextLink} href="/network/protocol/" size="xs" variant="ghost">
+                All votes →
+              </Button>
             </HStack>
             {voteQ.isLoading ? (
               <LoadingCard lines={2} />
             ) : voteQ.isError ? (
               <ErrorCard error={voteQ.error} onRetry={() => voteQ.refetch()} />
-            ) : myVote === undefined ? (
+            ) : myVote === null ? (
               <Text color="gray.400" fontSize="sm">
-                No vote recorded for this evonode in the first 100 masternodes scanned.
-                Paginating through more pages is tracked as a follow-up.
+                No protocol version vote is recorded for this proTxHash.
               </Text>
             ) : (
-              <CodeBlock value={myVote} />
+              <HStack spacing={3} flexWrap="wrap">
+                <Text fontFamily="mono" fontSize="2xl" color="gray.100">
+                  v{myVote}
+                </Text>
+                {typeof currentProtocol === 'number' ? (
+                  <Badge
+                    variant="subtle"
+                    colorScheme={myVote > currentProtocol ? 'yellow' : 'green'}
+                    textTransform="none"
+                  >
+                    {myVote > currentProtocol
+                      ? `upgrade from v${currentProtocol}`
+                      : myVote === currentProtocol
+                        ? 'current version'
+                        : `behind current v${currentProtocol}`}
+                  </Badge>
+                ) : null}
+                <Text fontSize="xs" color="gray.400">
+                  voted by <Identifier value={hex} dense copy={false} avatar={false} />
+                </Text>
+              </HStack>
             )}
           </VStack>
         </InfoBlock>
@@ -224,7 +355,7 @@ function Content() {
             </Text>
             <Button
               as="a"
-              href={`${l1InsightBase}/tx/${proTxHash}`}
+              href={`${l1InsightBase}/tx/${hex}`}
               target="_blank"
               rel="noreferrer"
               size="xs"
@@ -237,6 +368,21 @@ function Content() {
       </VStack>
     </Container>
   );
+}
+
+function Content() {
+  const params = useSearchParams();
+  const raw = params.get('proTxHash') ?? '';
+  const hex = proTxHashToHex(raw);
+
+  usePageBreadcrumbs([
+    { label: 'Home', href: '/' },
+    { label: 'Evonode', href: hex ? '/evonode/' : undefined },
+    ...(hex ? [{ label: shortId(hex) }] : []),
+  ]);
+
+  if (!hex) return <Landing invalid={raw.trim() ? raw : undefined} />;
+  return <Evonode key={hex} hex={hex} />;
 }
 
 export default function Page() {

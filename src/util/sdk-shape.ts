@@ -54,7 +54,7 @@ const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvw
  *  32-byte platform Identifiers that arrive as raw Uint8Array (e.g. the
  *  `records.identity` field on DPNS documents, which is a binary identifier
  *  in the contract schema rather than an Identifier class instance). */
-function bytesToBase58(bytes: Uint8Array): string {
+export function bytesToBase58(bytes: Uint8Array): string {
   let zeros = 0;
   while (zeros < bytes.length && bytes[zeros] === 0) zeros++;
   const digits: number[] = [];
