@@ -88,8 +88,10 @@ identity, or fund an address, from an asset-lock proof made by a Core wallet),
 and a masternode voting key with its ProTxHash (masternode votes, also linked
 from each open contest). The explorer does not build asset-lock transactions.
 A new identity's keys are derived from a mnemonic on the DIP-13 identity paths
-(so connecting that mnemonic on `/wallet` finds them) or entered as WIFs, and
-keys another identity already uses are refused before anything is signed.
+(so connecting that mnemonic on `/wallet` finds them) or entered as WIFs. The
+review shows each new key's hash to compare with the wallet; keys that no
+longer match it, or that another identity already uses, are refused before
+anything is signed.
 Address amounts are exact integer credits checked against the protocol's
 minimums; the SDK fetches each input address's nonce. Advanced → Broadcast a
 signed state transition decodes hex or base64 locally, shows its type, owner,
