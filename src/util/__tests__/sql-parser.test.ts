@@ -518,3 +518,71 @@ it('preserves escaped SQL identifier punctuation', () => {
   const parsed = parseSql('SELECT * FROM `odd``name` ORDER BY `group` ASC LIMIT 25');
   expect(parsed).toEqual(expect.objectContaining({ ok: true, query: expect.objectContaining({ from: 'odd`name' }) }));
 });
+
+describe('SQL edge cases', () => {
+  const error = (sql: string) => {
+    const parsed = parseSql(sql);
+    if (parsed.ok) throw new Error(`expected ${sql} to fail`);
+    return parsed;
+  };
+
+  it('asks for quotes around an unquoted base58 ID that starts with a digit', () => {
+    const sql = 'SELECT * FROM domain WHERE $ownerId = 4EfA9Jrvv3nnCFdSf7fad59851iiTRZ6Wcu6YVJ4iSeF';
+    expect(error(sql)).toEqual({
+      ok: false,
+      message: "Unquoted value '4EfA9Jrvv3nnCFdSf7fad59851iiTRZ6Wcu6YVJ4iSeF'. Write string values, including IDs, in single quotes: '4EfA9Jrvv3nnCFdSf7fad59851iiTRZ6Wcu6YVJ4iSeF'.",
+      position: sql.indexOf('4EfA'),
+    });
+  });
+
+  it('rejects bare words and backtick identifiers as values', () => {
+    expect(error('SELECT * FROM doc WHERE x = y').message).toBe("Unquoted value 'y'. Write string values, including IDs, in single quotes: 'y'.");
+    expect(error('SELECT * FROM doc WHERE x IN (a, \'b\')').message).toMatch(/^Unquoted value 'a'/);
+    expect(error("SELECT * FROM doc WHERE x = `it's`").message).toBe(
+      "Backticks quote field names. Write string values in single quotes: 'it''s'.",
+    );
+  });
+
+  it('reports malformed numbers as syntax errors', () => {
+    const sql = 'SELECT * FROM doc WHERE amount = 1.2.3';
+    expect(error(sql)).toEqual({ ok: false, message: "Invalid number '1.2.3'.", position: sql.indexOf('1.2.3') });
+    expect(error('SELECT * FROM doc WHERE amount = 1.').message).toBe("Invalid number '1.'.");
+  });
+
+  it('ignores -- line comments', () => {
+    const parsed = parseSqlMulti("-- newest names\nSELECT * FROM domain -- the DPNS type\nWHERE label = 'a--b' -- trailing\n; -- done");
+    expect(parsed).toEqual(expect.objectContaining({ ok: true }));
+    if (!parsed.ok) return;
+    expect(parsed.queries).toHaveLength(1);
+    expect(parsed.queries[0]!.where).toEqual([{ field: 'label', operator: '==', value: 'a--b' }]);
+    expect(parseSql('SELECT * FROM doc WHERE x > -5 -- negative')).toEqual(
+      expect.objectContaining({ ok: true, query: expect.objectContaining({ where: [{ field: 'x', operator: '>', value: -5 }] }) }),
+    );
+  });
+
+  it('rejects inequality and NOT with explanations', () => {
+    expect(error("SELECT * FROM doc WHERE x != 'a'").message).toMatch(/^'!=' is not supported — Platform queries/);
+    expect(error("SELECT * FROM doc WHERE x <> 'a'").message).toMatch(/^'<>' is not supported/);
+    expect(error("SELECT * FROM doc WHERE x NOT IN ('a')").message).toMatch(/^NOT is not supported/);
+    expect(error("SELECT * FROM doc WHERE NOT x = 'a'").message).toMatch(/^NOT is not supported/);
+    expect(error("SELECT * FROM doc WHERE x NOT LIKE 'a%'").message).toMatch(/^NOT is not supported/);
+  });
+
+  it('maps a LIKE prefix pattern to startsWith', () => {
+    const parsed = parseSql("SELECT * FROM domain WHERE normalizedLabel like 'ali%' ORDER BY normalizedLabel");
+    expect(parsed).toEqual(expect.objectContaining({ ok: true }));
+    if (!parsed.ok) return;
+    expect(parsed.query.where).toEqual([{ field: 'normalizedLabel', operator: 'startsWith', value: 'ali' }]);
+  });
+
+  it.each([
+    ["LIKE '%ali'", /^Only prefix patterns are supported/],
+    ["LIKE 'a_i%'", /^Only prefix patterns are supported/],
+    ["LIKE '%'", /^Only prefix patterns are supported/],
+    ["LIKE 'a%b'", /^Only prefix patterns are supported/],
+    ["LIKE 'alice'", /^LIKE 'alice' has no wildcard; use = 'alice'/],
+    ['LIKE 5', /^LIKE needs a quoted pattern/],
+  ])('rejects %s', (clause, message) => {
+    expect(error(`SELECT * FROM domain WHERE normalizedLabel ${clause}`).message).toMatch(message);
+  });
+});

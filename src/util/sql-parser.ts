@@ -53,6 +53,8 @@ const TT = {
   Dot: 9,
   Semicolon: 10,
   EOF: 11,
+  /** A word starting with a digit, e.g. an unquoted base58 ID. Never valid SQL. */
+  BareWord: 12,
 } as const;
 
 type TT = (typeof TT)[keyof typeof TT];
@@ -61,6 +63,8 @@ interface Token {
   type: TT;
   value: string;
   pos: number;
+  /** Backtick-quoted identifier. */
+  quoted?: boolean;
 }
 
 const KEYWORDS = new Set([
@@ -82,6 +86,7 @@ const KEYWORDS = new Set([
   'COUNT',
   'SUM',
   'AVG',
+  'LIKE',
   'NOT',
   'NULL',
   'TRUE',
@@ -101,6 +106,12 @@ function tokenize(sql: string): Token[] {
 
     const ch = sql[i]!;
     const pos = i;
+
+    // `--` line comment
+    if (ch === '-' && sql[i + 1] === '-') {
+      while (i < sql.length && sql[i] !== '\n') i++;
+      continue;
+    }
 
     // single-char tokens
     if (ch === '(') {
@@ -134,11 +145,11 @@ function tokenize(sql: string): Token[] {
       continue;
     }
 
-    // operators: >=, <=, ==, !=, >, <, =
+    // operators: >=, <=, ==, !=, <>, >, <, =
     if (ch === '>' || ch === '<' || ch === '=' || ch === '!') {
       let op = ch;
-      if (i + 1 < sql.length && sql[i + 1] === '=') {
-        op += '=';
+      if (i + 1 < sql.length && (sql[i + 1] === '=' || (ch === '<' && sql[i + 1] === '>'))) {
+        op += sql[i + 1];
         i++;
       }
       tokens.push({ type: TT.Operator, value: op, pos });
@@ -182,6 +193,14 @@ function tokenize(sql: string): Token[] {
         num += sql[i];
         i++;
       }
+      // A digit-led word such as a base58 ID: keep it whole so the parser can
+      // ask for quotes instead of reporting a stray clause.
+      if (i < sql.length && /[a-zA-Z_$]/.test(sql[i]!)) {
+        while (i < sql.length && /[a-zA-Z0-9_$]/.test(sql[i]!)) num += sql[i++];
+        tokens.push({ type: TT.BareWord, value: num, pos });
+        continue;
+      }
+      if (!/^-?\d+(?:\.\d+)?$/.test(num)) throw new ParseError(`Invalid number '${num}'.`, pos);
       tokens.push({ type: TT.Number, value: num, pos });
       continue;
     }
@@ -201,7 +220,7 @@ function tokenize(sql: string): Token[] {
         id += sql[i++];
       }
       if (!closed) throw new ParseError('Unterminated quoted identifier.', pos);
-      tokens.push({ type: TT.Identifier, value: id, pos });
+      tokens.push({ type: TT.Identifier, value: id, pos, quoted: true });
       continue;
     }
 
@@ -408,7 +427,9 @@ class Parser {
   }
 
   private parseCondition(): ParsedCondition {
+    this.rejectNot();
     const field = this.parseFieldPath();
+    this.rejectNot();
 
     if (this.peekKeyword('BETWEEN')) {
       this.advance();
@@ -433,6 +454,11 @@ class Parser {
       return { field, operator: 'startsWith', value };
     }
 
+    if (this.peekKeyword('LIKE')) {
+      this.advance();
+      return { field, operator: 'startsWith', value: this.parseLikePrefix() };
+    }
+
     // also accept startsWith as a single identifier (case-insensitive)
     if (this.peek().type === TT.Identifier && this.peek().value.toLowerCase() === 'startswith') {
       this.advance();
@@ -443,6 +469,35 @@ class Parser {
     const op = this.parseOperator();
     const value = this.parseValue();
     return { field, operator: op, value };
+  }
+
+  private rejectNot(): void {
+    if (this.peekKeyword('NOT')) {
+      throw new ParseError(
+        'NOT is not supported — Platform queries cannot negate a filter (NOT IN, NOT LIKE, NOT BETWEEN).',
+        this.peek().pos,
+      );
+    }
+  }
+
+  /** `LIKE 'abc%'` is a prefix match, which Platform supports as startsWith. */
+  private parseLikePrefix(): string {
+    const tok = this.peek();
+    if (tok.type !== TT.String) {
+      throw new ParseError(`LIKE needs a quoted pattern such as 'abc%', got '${tok.value}'`, tok.pos);
+    }
+    this.advance();
+    const prefix = tok.value.endsWith('%') ? tok.value.slice(0, -1) : undefined;
+    if (prefix === undefined && !/[%_]/.test(tok.value)) {
+      throw new ParseError(`LIKE '${tok.value}' has no wildcard; use = '${tok.value}' for an exact match.`, tok.pos);
+    }
+    if (!prefix || /[%_]/.test(prefix)) {
+      throw new ParseError(
+        "Only prefix patterns are supported: LIKE 'abc%' (a literal prefix and one trailing %). Use STARTS WITH for a prefix containing % or _.",
+        tok.pos,
+      );
+    }
+    return prefix;
   }
 
   private parseFieldPath(): string {
@@ -470,6 +525,12 @@ class Parser {
           return '<';
         case '<=':
           return '<=';
+        case '!=':
+        case '<>':
+          throw new ParseError(
+            `'${tok.value}' is not supported — Platform queries can match values, ranges, IN lists and prefixes, but not exclude a value.`,
+            tok.pos,
+          );
         default:
           throw new ParseError(`Unknown operator '${tok.value}'`, tok.pos);
       }
@@ -506,10 +567,17 @@ class Parser {
       this.advance();
       return null;
     }
-    // allow unquoted identifiers as string values (e.g. base58 IDs)
-    if (tok.type === TT.Identifier) {
-      this.advance();
-      return tok.value;
+    if (tok.type === TT.Identifier && tok.quoted) {
+      throw new ParseError(
+        `Backticks quote field names. Write string values in single quotes: '${tok.value.replace(/'/g, "''")}'.`,
+        tok.pos,
+      );
+    }
+    if (tok.type === TT.Identifier || tok.type === TT.BareWord) {
+      throw new ParseError(
+        `Unquoted value '${tok.value}'. Write string values, including IDs, in single quotes: '${tok.value}'.`,
+        tok.pos,
+      );
     }
     throw new ParseError(`Expected value, got '${tok.value}'`, tok.pos);
   }

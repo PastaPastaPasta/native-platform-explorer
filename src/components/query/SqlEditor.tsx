@@ -22,6 +22,22 @@ export interface SqlEditorProps {
   onCancel?: () => void;
 }
 
+/** Locate a parse-error offset as a 1-based line/column plus the caret line,
+ *  copying tabs from the source so the caret lines up under the offending text. */
+export function errorCaret(sql: string, position: number): { line: number; column: number; text: string; caret: string } {
+  const offset = Math.min(Math.max(0, position), sql.length);
+  const lineStart = sql.lastIndexOf('\n', offset - 1) + 1;
+  const lineEnd = sql.indexOf('\n', offset);
+  const text = sql.slice(lineStart, lineEnd === -1 ? sql.length : lineEnd).replace(/\r$/, '');
+  const before = sql.slice(lineStart, offset);
+  return {
+    line: sql.slice(0, lineStart).split('\n').length,
+    column: before.length + 1,
+    text,
+    caret: `${before.replace(/[^\t]/g, ' ')}^`,
+  };
+}
+
 export function SqlEditor({
   value,
   onChange,
@@ -32,6 +48,7 @@ export function SqlEditor({
   onCancel,
 }: SqlEditorProps) {
   const [isMac, setIsMac] = useState(false);
+  const caret = parseError && value ? errorCaret(value, parseError.position) : null;
   useEffect(() => {
     setIsMac(/Mac|iPhone|iPad/.test(navigator.userAgent));
   }, []);
@@ -75,21 +92,29 @@ export function SqlEditor({
               <Text fontSize="xs" color="red.300" mb={1}>
                 {parseError.message}
               </Text>
-              {value && (
-                <Code
-                  display="block"
-                  fontSize="2xs"
-                  bg="rgba(255,0,0,0.08)"
-                  color="gray.300"
-                  p={2}
-                  borderRadius="md"
-                  whiteSpace="pre"
-                  overflowX="auto"
-                >
-                  {value}
-                  {'\n'}
-                  {' '.repeat(Math.max(0, parseError.position))}^
-                </Code>
+              {caret && (
+                <>
+                  {value.includes('\n') && (
+                    <Text fontSize="2xs" color="gray.400" mb={1}>
+                      Line {caret.line}, column {caret.column}
+                    </Text>
+                  )}
+                  <Code
+                    data-testid="sql-error-caret"
+                    display="block"
+                    fontSize="2xs"
+                    bg="rgba(255,0,0,0.08)"
+                    color="gray.300"
+                    p={2}
+                    borderRadius="md"
+                    whiteSpace="pre"
+                    overflowX="auto"
+                  >
+                    {caret.text}
+                    {'\n'}
+                    {caret.caret}
+                  </Code>
+                </>
               )}
             </Box>
           )}
