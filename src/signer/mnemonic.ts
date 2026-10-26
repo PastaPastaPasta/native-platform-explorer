@@ -20,6 +20,13 @@ export function identityKeyPath(
   return `m/9'/${coinType}'/5'/0'/0'/${identityIndex}'/${keyIndex}'`;
 }
 
+/** Why `index` is not a hardened DIP-13 identity index, or null. */
+export function identityIndexError(index: number): string | null {
+  return Number.isSafeInteger(index) && index >= 0 && index < 2 ** 31
+    ? null
+    : 'Enter an identity index from 0 to 2147483647.';
+}
+
 /**
  * Derive the identity's DIP-13 keys (or one explicit path). Only derived keys
  * that match enabled on-chain public data are kept by the local signer.
@@ -38,12 +45,8 @@ export async function createMnemonicSigner(
   }
   const explicitPath = path?.trim();
   // An explicit path imports exactly that key; the identity index is unused.
-  if (
-    !explicitPath &&
-    (!Number.isSafeInteger(identityIndex) || identityIndex < 0 || identityIndex >= 2 ** 31)
-  ) {
-    throw new SignerUnavailableError('Enter an identity index from 0 to 2147483647.');
-  }
+  const indexError = explicitPath ? null : identityIndexError(identityIndex);
+  if (indexError) throw new SignerUnavailableError(indexError);
   const paths = explicitPath
     ? [explicitPath]
     : Array.from({ length: IDENTITY_KEY_SCAN_DEPTH }, (_, keyIndex) =>

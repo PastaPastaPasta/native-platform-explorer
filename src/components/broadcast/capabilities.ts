@@ -4,37 +4,51 @@ import type { ExplorerSigner, KeySelectionCriteria, SignerKeyDescriptor } from '
 import { SYSTEM_DATA_CONTRACTS } from '@constants/system-data-contracts';
 
 export interface OperationCapabilityRequirement {
-  status: 'available' | 'external-bridge' | 'unsupported';
+  status: 'available' | 'unsupported';
   reason?: string;
   criteria?: KeySelectionCriteria;
+  /**
+   * Who signs: the connected identity signer (the default), or keys the form
+   * collects for this operation only (address, asset-lock and voting keys, or
+   * a transition that is already signed). Form-signed operations need no
+   * connected signer.
+   */
+  signer?: 'identity' | 'form';
 }
 
+/** Whether the operation signs with keys entered in its own form. */
+export function signsInForm(requirement: OperationCapabilityRequirement | undefined): boolean {
+  return requirement?.signer === 'form';
+}
+
+const FORM_KEYS_REASON =
+  'This operation signs with keys you enter in the form. They stay in this tab only for this operation; no connected signer is needed.';
+
 export interface OperationCapability {
-  status: 'available' | 'requires-another-signer' | 'external-bridge' | 'unsupported';
+  status: 'available' | 'requires-another-signer' | 'unsupported';
   reason: string;
 }
 
 /** Capabilities describe the implemented path, before collecting or reviewing inputs. */
 export function operationRequirement(id: string): OperationCapabilityRequirement {
   switch (id) {
+    case 'identity.create':
     case 'identity.topUp':
-      return {
-        status: 'external-bridge',
-        reason:
-          'Top-ups run in the Dash Platform bridge, which creates the required Dash asset-lock transaction. Open the bridge to continue.',
-      };
+    case 'addresses.transfer':
+    case 'addresses.topUpIdentity':
+    case 'addresses.withdraw':
+    case 'addresses.fundFromAssetLock':
+    case 'addresses.createIdentity':
+    case 'voting.castVote':
+      return { status: 'available', signer: 'form', reason: FORM_KEYS_REASON };
     case 'stateTransitions.broadcast':
       return {
-        status: 'unsupported',
+        status: 'available',
+        signer: 'form',
         reason:
-          'Raw state-transition broadcasting is unavailable in this explorer. Use the tool that produced the signed transition to broadcast it.',
+          'The pasted transition is already signed; the explorer decodes it locally and broadcasts it unchanged. No connected signer is needed.',
       };
-    case 'voting.castVote':
-      return {
-        status: 'unsupported',
-        reason:
-          'Masternode vote broadcasting is unavailable in this explorer. Use a masternode voting tool.',
-      };
+    case 'addresses.transferFromIdentity':
     case 'identity.creditTransfer':
       return {
         status: 'available',
@@ -162,6 +176,9 @@ export function resolveOperationCapability(
       status: requirement.status,
       reason: requirement.reason ?? 'This operation is unavailable here.',
     };
+  }
+  if (signsInForm(requirement)) {
+    return { status: 'available', reason: requirement?.reason ?? FORM_KEYS_REASON };
   }
   if (!signer?.prepareSdk) {
     return {

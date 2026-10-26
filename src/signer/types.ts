@@ -108,3 +108,6 @@ export class SignerDisconnectedError extends SignerUnavailableError {
     this.name = 'SignerDisconnectedError';
   }
 }
+
+/** The networks keys and addresses are encoded for (devnets use testnet encodings). */
+export type DerivationNetwork = 'mainnet' | 'testnet';

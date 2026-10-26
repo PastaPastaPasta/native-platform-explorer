@@ -10,6 +10,7 @@ import type {
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
 import { extractErrorMessage } from '@sdk/errors';
+import { hexToBytes } from '@util/hex';
 import { assertWritableProtocolVersion } from '@sdk/protocol-version';
 import { decodeWif } from '@/signer/local';
 import {
@@ -26,7 +27,7 @@ import {
   submitOperation,
   type ReceiptEntities,
 } from './outcomes';
-import { DPNS_CONTRACT_ID, operationRequirement, resolveSigningCriteria } from './capabilities';
+import { DPNS_CONTRACT_ID, resolveSigningCriteria } from './capabilities';
 import type { ContractRegisterOptions } from './forms/ContractRegister';
 import type { ContractUpdateOptions } from './forms/ContractUpdate';
 import type { DocumentCreateOptions } from './forms/DocumentCreate';
@@ -42,9 +43,7 @@ import {
   type IdentityCreditWithdrawalOptions,
 } from './forms/IdentityCreditWithdrawal';
 import type { IdentityUpdateKeysOptions, NewIdentityKey } from './forms/IdentityUpdateKeys';
-import type { IdentityTopUpOptions } from './forms/IdentityTopUp';
 import { DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
-import type { VotingCastVoteOptions } from './forms/VotingCastVote';
 
 export interface ContractRegisterResult {
   kind: 'contractRegister';
@@ -82,7 +81,8 @@ export interface IdentityResult {
 
 export interface ExecuteArgs<TOptions> {
   sdk: EvoSDK;
-  signer: ExplorerSigner;
+  /** The connected signer; null for operations that sign with keys from the form. */
+  signer: ExplorerSigner | null;
   options: TOptions;
   /** Recheck the approved session immediately before entering a write call. */
   assertCurrent?: () => void;
@@ -101,7 +101,7 @@ export interface ExecuteArgs<TOptions> {
 // disabled between review and signing, fail instead of signing with another.
 // Before `fn` builds anything, the session's protocol version is checked
 // against the network's; `fn` receives the checked version.
-async function withSigningMaterial<T>(
+export async function withSigningMaterial<T>(
   { sdk, signer, signingKeyId }: Pick<ExecuteArgs<unknown>, 'sdk' | 'signer' | 'signingKeyId'>,
   criteria: () => Promise<KeySelectionCriteria | undefined>,
   fn: (
@@ -110,10 +110,12 @@ async function withSigningMaterial<T>(
     platformVersion: number,
   ) => Promise<T>,
 ): Promise<T> {
-  if (!signer.prepareSdk) {
+  if (!signer?.prepareSdk) {
     throw new OperationNotSubmittedError(
-      `The "${signer.kind}" signer does not support SDK signing yet. ` +
-        'Connect via the Bridge backup tab on /wallet to enable writes.',
+      signer
+        ? `The "${signer.kind}" signer does not support SDK signing yet. ` +
+            'Connect via the Bridge backup tab on /wallet to enable writes.'
+        : 'Connect a signer on /wallet to sign this operation.',
     );
   }
   let resolved: KeySelectionCriteria | undefined;
@@ -350,7 +352,7 @@ async function fetchExistingDocument(
   return existing;
 }
 
-async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<Identity> {
+export async function fetchExistingIdentity(sdk: EvoSDK, identityId: string): Promise<Identity> {
   const identity = await sdk.identities.fetch(identityId);
   if (!identity) throw new Error(`Identity ${identityId} not found.`);
   return identity;
@@ -771,25 +773,6 @@ async function newIdentityKeys(
 
 const lower = <T extends string>(value: T) => value.toLowerCase() as Lowercase<T>;
 
-function hexToBytes(hex: string): Uint8Array {
-  return Uint8Array.from(hex.match(/.{2}/g) ?? [], (byte) => parseInt(byte, 16));
-}
-
-export async function executeIdentityTopUp(
-  _args: ExecuteArgs<IdentityTopUpOptions>,
-): Promise<IdentityResult> {
-  // Top-up requires an asset-lock proof, which is built end-to-end inside the
-  // bridge (Core wallet UTXO → Type-8 special tx → InstantSend proof). We
-  // intentionally don't replicate that flow in the explorer; the form deep-
-  // links the user to the bridge instead. This executor only ever runs if the
-  // user clicks "Broadcast" past the deep-link CTA.
-  throw new OperationNotSubmittedError(
-    'Top-up runs in the Dash Platform bridge — click "Open bridge" on the form ' +
-      'instead. When the bridge completes the top-up, return to the explorer ' +
-      'and refresh the identity page to check the balance.',
-  );
-}
-
 // ─── DPNS ───────────────────────────────────────────────────────────────
 
 export async function executeDpnsRegister(
@@ -822,13 +805,4 @@ export async function executeDpnsRegister(
       documentId: String(registered.domainDocumentId),
     };
   });
-}
-
-// ─── voting ─────────────────────────────────────────────────────────────
-
-export async function executeVotingCastVote(
-  _args: ExecuteArgs<VotingCastVoteOptions>,
-): Promise<IdentityResult> {
-  // Unsupported execution must fail before allocating any signing material.
-  throw new OperationNotSubmittedError(operationRequirement('voting.castVote').reason);
 }

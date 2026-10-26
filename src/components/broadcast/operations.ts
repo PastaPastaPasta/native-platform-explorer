@@ -1,7 +1,7 @@
 'use client';
 
 import type { OperationDescriptor } from './OperationShell';
-import { operationRequirement, resolveSigningCriteria } from './capabilities';
+import { operationRequirement, resolveSigningCriteria, signsInForm } from './capabilities';
 import { ContractRegisterForm, type ContractRegisterOptions } from './forms/ContractRegister';
 import { ContractUpdateForm, type ContractUpdateOptions } from './forms/ContractUpdate';
 import { DocumentCreateForm, type DocumentCreateOptions } from './forms/DocumentCreate';
@@ -23,10 +23,42 @@ import {
   redactIdentityUpdateKeys,
   type IdentityUpdateKeysOptions,
 } from './forms/IdentityUpdateKeys';
-import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/IdentityTopUp';
 import { DpnsRegisterForm, DPNS_TLD, type DpnsRegisterOptions } from './forms/DpnsRegister';
-import { VotingCastVoteForm, type VotingCastVoteOptions } from './forms/VotingCastVote';
-import { StateTransitionBroadcastForm, type RawBroadcastOptions } from './forms/RawBroadcast';
+import { IdentityCreateForm, type IdentityCreateOptions } from './forms/identity/IdentityCreate';
+import { IdentityTopUpForm, type IdentityTopUpOptions } from './forms/identity/IdentityTopUp';
+import {
+  AddressTransferForm,
+  type AddressTransferOptions,
+} from './forms/addresses/AddressTransfer';
+import {
+  AddressTransferFromIdentityForm,
+  type AddressTransferFromIdentityOptions,
+} from './forms/addresses/AddressTransferFromIdentity';
+import {
+  AddressTopUpIdentityForm,
+  type AddressTopUpIdentityOptions,
+} from './forms/addresses/AddressTopUpIdentity';
+import {
+  AddressWithdrawForm,
+  type AddressWithdrawOptions,
+} from './forms/addresses/AddressWithdraw';
+import {
+  AddressFundFromAssetLockForm,
+  type AddressFundFromAssetLockOptions,
+} from './forms/addresses/AddressFundFromAssetLock';
+import {
+  AddressCreateIdentityForm,
+  type AddressCreateIdentityOptions,
+} from './forms/addresses/AddressCreateIdentity';
+import { formatCredits, sumOutputs } from './forms/addresses/limits';
+import { MasternodeVoteForm, type MasternodeVoteOptions } from './forms/voting/MasternodeVote';
+import {
+  redactAddressKey,
+  redactAssetLockKey,
+  redactNewIdentityKeys,
+  redactVotingKey,
+} from './forms/redact';
+import { RawBroadcastForm, type RawBroadcastOptions } from './forms/raw/RawBroadcast';
 import {
   executeContractRegister,
   executeContractUpdate,
@@ -39,16 +71,33 @@ import {
   executeIdentityCreditTransfer,
   executeIdentityCreditWithdrawal,
   executeIdentityUpdateKeys,
-  executeIdentityTopUp,
   executeDpnsRegister,
-  executeVotingCastVote,
   type ContractRegisterResult,
   type ContractUpdateResult,
   type DocumentResult,
   type IdentityResult,
 } from './executors';
+import {
+  executeAddressCreateIdentity,
+  executeAddressFundFromAssetLock,
+  executeAddressTopUpIdentity,
+  executeAddressTransfer,
+  executeAddressTransferFromIdentity,
+  executeAddressWithdraw,
+  type AddressesResult,
+} from './executors/addresses';
+import { executeIdentityCreate, executeIdentityTopUp } from './executors/identity-create';
+import { executeMasternodeVote, type VoteResult } from './executors/voting';
+import { executeRawBroadcast, type RawBroadcastResult } from './executors/raw';
 
-export type OperationGroup = 'identity' | 'contract' | 'document' | 'dpns' | 'voting' | 'advanced';
+export type OperationGroup =
+  | 'identity'
+  | 'addresses'
+  | 'contract'
+  | 'document'
+  | 'dpns'
+  | 'voting'
+  | 'advanced';
 
 export interface OperationEntry {
   /** Stable op id used in URLs (e.g. "contract.register"). */
@@ -69,6 +118,7 @@ function makeEntry<O, R>(
   blurb: string,
   descriptor: OperationDescriptor<O, R>,
 ): OperationEntry {
+  const capability = operationRequirement(id);
   return {
     id,
     group,
@@ -77,19 +127,18 @@ function makeEntry<O, R>(
     descriptor: {
       ...descriptor,
       operationId: id,
-      capability: operationRequirement(id),
-      signingCriteria: (sdk, options) => resolveSigningCriteria(id, sdk, options),
+      capability,
+      // Form-signed operations have no connected-signer key to select.
+      ...(signsInForm(capability)
+        ? {}
+        : { signingCriteria: (sdk, options) => resolveSigningCriteria(id, sdk, options) }),
     } as OperationDescriptor<unknown, unknown>,
   };
 }
 
-function previewOnly(operation: string): never {
-  throw new Error(
-    `${operation} is preview-only in this build: paste a hex-encoded state ` +
-      `transition obtained from another tool. The end-to-end SDK path for raw ` +
-      `byte broadcast is tracked as follow-up work.`,
-  );
-}
+const ADDRESS_FEE_NOTE =
+  "the paying address covers Platform's fee from the balance it keeps after this operation.";
+const ASSET_LOCK_FEE_NOTE = "Platform takes its fee from the asset lock's value.";
 
 export const OPERATIONS: OperationEntry[] = [
   // ────────────────────────────────────────────────────────────────────────
@@ -234,20 +283,39 @@ export const OPERATIONS: OperationEntry[] = [
   // ────────────────────────────────────────────────────────────────────────
   // Identity
   // ────────────────────────────────────────────────────────────────────────
-  makeEntry<IdentityTopUpOptions, unknown>(
+  makeEntry<IdentityCreateOptions, IdentityResult>(
+    'identity',
+    'identity.create',
+    'Create an identity',
+    'Fund a new identity with a Dash asset lock, or through the bridge.',
+    {
+      title: 'Create an identity',
+      description:
+        'Creates an identity funded by an asset-lock transaction from a Core wallet. Without a ' +
+        'Core wallet, use the bridge, which builds the asset lock for you.',
+      secrets: { reviewData: (o) => redactNewIdentityKeys(redactAssetLockKey(o)) },
+      feeNote: ASSET_LOCK_FEE_NOTE,
+      FormComponent: IdentityCreateForm,
+      summarise: (o) =>
+        `Create identity ${o.proof.identityId} from the ${o.proof.type} asset lock ${o.proof.outPoint}.`,
+      execute: executeIdentityCreate,
+    },
+  ),
+  makeEntry<IdentityTopUpOptions, IdentityResult>(
     'identity',
     'identity.topUp',
     'Top up an identity',
-    'Add Platform credits by spending L1 DASH through the bridge.',
+    'Add credits with a Dash asset lock, or through the bridge.',
     {
       title: 'Top up an identity',
       description:
-        'Top-up requires an asset-lock proof built from a Dash Core transaction. ' +
-        'For now we hand off to the bridge — return to the explorer when the ' +
-        'top-up completes, then refresh the identity page to check the balance.',
-      secrets: 'none',
+        'Adds credits from an asset-lock transaction from a Core wallet. Without a Core wallet, ' +
+        'use the bridge, which builds the asset lock for you.',
+      secrets: { reviewData: redactAssetLockKey },
+      feeNote: ASSET_LOCK_FEE_NOTE,
       FormComponent: IdentityTopUpForm,
-      summarise: (o) => `Top up ${o.identityId} by ${o.amountDash} DASH (via bridge).`,
+      summarise: (o) =>
+        `Top up ${o.identityId} from the ${o.proof.type} asset lock ${o.proof.outPoint}.`,
       execute: executeIdentityTopUp,
     },
   ),
@@ -309,6 +377,116 @@ export const OPERATIONS: OperationEntry[] = [
   ),
 
   // ────────────────────────────────────────────────────────────────────────
+  // Platform addresses
+  // ────────────────────────────────────────────────────────────────────────
+  makeEntry<AddressTransferOptions, AddressesResult>(
+    'addresses',
+    'addresses.transfer',
+    'Send between addresses',
+    'Move credits from a Platform address you hold the key for to other addresses.',
+    {
+      title: 'Send credits between Platform addresses',
+      description:
+        "Spends credits from a Platform address, signed with that address's private key, to one " +
+        'or more Platform addresses.',
+      secrets: { reviewData: redactAddressKey },
+      feeNote:
+        "the paying address covers Platform's fee from the balance it keeps, unless you chose that the recipient pays it.",
+      FormComponent: AddressTransferForm,
+      summarise: (o) =>
+        `Send ${formatCredits(sumOutputs(o.outputs))} credits from ${o.fromAddress} to ` +
+        `${o.outputs.length} address(es); ${o.feeFrom === 'recipient' ? 'the recipient' : 'the sender'} pays the fee.`,
+      execute: executeAddressTransfer,
+    },
+  ),
+  makeEntry<AddressTransferFromIdentityOptions, AddressesResult>(
+    'addresses',
+    'addresses.transferFromIdentity',
+    'Fund addresses from your identity',
+    'Send credits from the connected identity to Platform addresses.',
+    {
+      title: 'Fund Platform addresses from your identity',
+      description:
+        "Sends credits from the connected identity to Platform addresses, signed with the identity's CRITICAL transfer key.",
+      secrets: 'none',
+      FormComponent: AddressTransferFromIdentityForm,
+      summarise: (o) =>
+        `Send ${formatCredits(sumOutputs(o.outputs))} credits to ${o.outputs.length} address(es).`,
+      execute: executeAddressTransferFromIdentity,
+    },
+  ),
+  makeEntry<AddressTopUpIdentityOptions, AddressesResult>(
+    'addresses',
+    'addresses.topUpIdentity',
+    'Top up an identity from an address',
+    'Move credits from a Platform address into an identity.',
+    {
+      title: 'Top up an identity from a Platform address',
+      description:
+        "Moves credits from a Platform address, signed with the address's key, into an identity.",
+      secrets: { reviewData: redactAddressKey },
+      feeNote: ADDRESS_FEE_NOTE,
+      FormComponent: AddressTopUpIdentityForm,
+      summarise: (o) =>
+        `Top up ${o.identityId} with ${formatCredits(o.amountCredits)} credits from ${o.fromAddress}.`,
+      execute: executeAddressTopUpIdentity,
+    },
+  ),
+  makeEntry<AddressWithdrawOptions, AddressesResult>(
+    'addresses',
+    'addresses.withdraw',
+    'Withdraw from an address',
+    'Convert Platform address credits to DASH at a Core address.',
+    {
+      title: 'Withdraw from a Platform address',
+      description:
+        'Withdraws credits from a Platform address to a Dash Core address. Platform queues the ' +
+        'withdrawal and pays it as a Core transaction later.',
+      secrets: { reviewData: redactAddressKey },
+      feeNote: ADDRESS_FEE_NOTE,
+      FormComponent: AddressWithdrawForm,
+      summarise: (o) =>
+        `Withdraw ${formatCredits(o.amountCredits)} credits from ${o.fromAddress} to ${o.toAddress} ` +
+        `at ${o.coreFeePerByte} duff(s)/byte.`,
+      execute: executeAddressWithdraw,
+    },
+  ),
+  makeEntry<AddressFundFromAssetLockOptions, AddressesResult>(
+    'addresses',
+    'addresses.fundFromAssetLock',
+    'Fund an address from an asset lock',
+    'Credit a Platform address with a Dash asset lock from a Core wallet.',
+    {
+      title: 'Fund a Platform address from an asset lock',
+      description:
+        'Credits the whole value of an asset-lock transaction from a Core wallet to a Platform address.',
+      secrets: { reviewData: redactAssetLockKey },
+      feeNote: ASSET_LOCK_FEE_NOTE,
+      FormComponent: AddressFundFromAssetLockForm,
+      summarise: (o) =>
+        `Fund ${o.address} from the ${o.proof.type} asset lock ${o.proof.outPoint}.`,
+      execute: executeAddressFundFromAssetLock,
+    },
+  ),
+  makeEntry<AddressCreateIdentityOptions, AddressesResult>(
+    'addresses',
+    'addresses.createIdentity',
+    'Create an identity from an address',
+    'Fund a new identity with Platform address credits.',
+    {
+      title: 'Create an identity from a Platform address',
+      description:
+        "Creates an identity funded by a Platform address, signed with the address's key and the new identity's keys.",
+      secrets: { reviewData: (o) => redactNewIdentityKeys(redactAddressKey(o)) },
+      feeNote: ADDRESS_FEE_NOTE,
+      FormComponent: AddressCreateIdentityForm,
+      summarise: (o) =>
+        `Create an identity with ${formatCredits(o.amountCredits)} credits from ${o.fromAddress}.`,
+      execute: executeAddressCreateIdentity,
+    },
+  ),
+
+  // ────────────────────────────────────────────────────────────────────────
   // DPNS
   // ────────────────────────────────────────────────────────────────────────
   makeEntry<DpnsRegisterOptions, IdentityResult>(
@@ -335,40 +513,47 @@ export const OPERATIONS: OperationEntry[] = [
   // ────────────────────────────────────────────────────────────────────────
   // Voting
   // ────────────────────────────────────────────────────────────────────────
-  makeEntry<VotingCastVoteOptions, IdentityResult>(
+  makeEntry<MasternodeVoteOptions, VoteResult>(
     'voting',
     'voting.castVote',
-    'Cast a vote',
-    'Vote on a contested DPNS or contract resource (masternodes only).',
+    'Cast a masternode vote',
+    'Vote on a contested DPNS name or contract resource with a masternode voting key.',
     {
-      title: 'Cast a vote',
+      title: 'Cast a masternode vote',
       description:
-        'Casts a masternode vote on a contested resource (e.g. a contested DPNS ' +
-        'name). Only operating masternodes have a voting key.',
-      secrets: 'none',
-      FormComponent: VotingCastVoteForm,
-      summarise: (o) => `Vote ${o.choice}${o.targetIdentityId ? ` → ${o.targetIdentityId}` : ''}.`,
-      execute: executeVotingCastVote,
+        "Casts a masternode's vote on a contested resource, such as a contested DPNS name. It " +
+        "needs the masternode's ProTxHash and voting key.",
+      secrets: { reviewData: redactVotingKey },
+      feeNote: "votes are paid from the contest's prefunded balance, not by the masternode.",
+      FormComponent: MasternodeVoteForm,
+      summarise: (o) =>
+        `Vote ${o.choice === 'towardsIdentity' ? `for ${o.towardsIdentityId}` : o.choice} on ` +
+        `${o.documentTypeName} ${JSON.stringify(o.indexValues)} as masternode ${o.proTxHash}.`,
+      execute: executeMasternodeVote,
     },
   ),
 
   // ────────────────────────────────────────────────────────────────────────
   // Advanced
   // ────────────────────────────────────────────────────────────────────────
-  makeEntry<RawBroadcastOptions, unknown>(
+  makeEntry<RawBroadcastOptions, RawBroadcastResult>(
     'advanced',
     'stateTransitions.broadcast',
-    'Broadcast a raw state transition',
-    'Paste a hex-encoded state transition produced elsewhere.',
+    'Broadcast a signed state transition',
+    'Paste a transition signed by another tool, check it, and broadcast it.',
     {
-      title: 'Broadcast a raw state transition',
+      title: 'Broadcast a signed state transition',
       description:
-        'Paste a hex-encoded state transition. Use only if you have a hex blob ' +
-        'from another tool — most users want the named operations above instead.',
+        'Decodes a signed transition (hex or base64) locally, shows what it does, and broadcasts ' +
+        'the same bytes. Most users want the named operations above instead.',
       secrets: 'none',
-      FormComponent: StateTransitionBroadcastForm,
-      summarise: (o) => `Broadcast ${o.stHex.length / 2} bytes of raw state transition.`,
-      execute: async () => previewOnly('stateTransitions.broadcastStateTransition'),
+      feeNote:
+        "the transition's owner (or its address inputs) pays the fee it was signed for; broadcasting cannot change it.",
+      FormComponent: RawBroadcastForm,
+      summarise: (o) =>
+        `Broadcast the ${o.transition.type} transition ${o.transition.hash}` +
+        `${o.transition.ownerId ? ` owned by ${o.transition.ownerId}` : ''}.`,
+      execute: executeRawBroadcast,
     },
   ),
 ];
@@ -387,21 +572,27 @@ export const GROUPS: { id: OperationGroup; label: string; blurb: string }[] = [
   {
     id: 'identity',
     label: 'Identity & credits',
-    blurb: 'Top up, transfer credits, withdraw to L1, manage keys.',
+    blurb: 'Create, top up, transfer credits, withdraw to L1, manage keys.',
+  },
+  {
+    id: 'addresses',
+    label: 'Platform addresses',
+    blurb: 'Send, fund, withdraw, and create identities with address credits.',
   },
   { id: 'dpns', label: 'DPNS', blurb: 'Register and manage names.' },
   { id: 'voting', label: 'Voting', blurb: 'Masternode votes on contested resources.' },
   {
     id: 'advanced',
     label: 'Advanced',
-    blurb: 'Low-level tools — raw broadcast, etc.',
+    blurb: 'Broadcast a transition signed elsewhere.',
   },
 ];
 
-/** Picker marker for operations that cannot be signed here, or null when they can. */
-export function operationStatusLabel(entry: OperationEntry): 'Bridge' | 'Unavailable' | null {
-  const status = entry.descriptor.capability?.status;
-  return status === 'external-bridge' ? 'Bridge' : status === 'unsupported' ? 'Unavailable' : null;
+/** Picker marker: who signs, or that the operation cannot be signed here. */
+export function operationStatusLabel(entry: OperationEntry): 'Keys in form' | 'Unavailable' | null {
+  const capability = entry.descriptor.capability;
+  if (capability?.status === 'unsupported') return 'Unavailable';
+  return signsInForm(capability) ? 'Keys in form' : null;
 }
 
 export function findOperationById(id: string | null | undefined): OperationEntry | undefined {

@@ -34,8 +34,11 @@ import { ErrorCard } from '@ui/ErrorCard';
 import { CodeBlock } from '@components/data/CodeBlock';
 import { SignerStatusCard } from './SignerStatusCard';
 import { OperationReceipt } from './OperationReceipt';
-import { IdentityTopUpForm } from './forms/IdentityTopUp';
-import { resolveOperationCapability, type OperationCapabilityRequirement } from './capabilities';
+import {
+  resolveOperationCapability,
+  signsInForm,
+  type OperationCapabilityRequirement,
+} from './capabilities';
 import {
   BroadcastOutcomeUnknownError,
   OperationNotSubmittedError,
@@ -56,7 +59,8 @@ import { selectSigningKey } from '@/signer/keys';
 import type { ExecuteArgs } from './executors';
 
 export interface OperationFormProps<TOptions> {
-  signer: ExplorerSigner;
+  /** The connected signer. Always set for operations the identity signer signs. */
+  signer: ExplorerSigner | null;
   network: 'mainnet' | 'testnet';
   onOptionsChange: (options: TOptions | null) => void;
 }
@@ -82,6 +86,8 @@ export interface OperationDescriptor<TOptions, TResult> {
   destructive?: boolean;
   FormComponent: React.ComponentType<OperationFormProps<TOptions>>;
   summarise: (options: TOptions) => string;
+  /** Who pays the fee, shown at review. Defaults to the signing identity's balance. */
+  feeNote?: string;
   /** The shell never shows these inputs, and keeps only receipt identifiers once it settles. */
   secrets: SecretInputs<TOptions>;
   /** Key requirements for these inputs; the review step shows the key they select. */
@@ -143,8 +149,9 @@ interface Review<TOptions, TResult> {
   /** What the review step shows; never the inputs of an operation with secrets. */
   view: unknown;
   sdk: EvoSDK;
-  signer: ExplorerSigner;
-  identityId: string;
+  signer: ExplorerSigner | null;
+  /** The connected signer's identity; null when the form supplies the keys. */
+  identityId: string | null;
   network: Network;
   trusted: boolean;
   sessionSignal: AbortSignal | null;
@@ -237,14 +244,12 @@ export function OperationShell<TOptions, TResult>({
     snapshot.contextBinding === current.current.contextBinding &&
     snapshot.fingerprint === current.current.optionsFingerprint;
   const reviewIsCurrent = review !== null && isCurrent(review);
+  const formSigned = signsInForm(descriptor.capability);
+  // Form-signed operations never sign with the connected signer.
+  const reviewSigner = formSigned ? null : signer;
+  const usesSigner = descriptor.capability?.status === 'available' && !formSigned;
   useEffect(() => {
-    if (
-      !descriptor.capability ||
-      descriptor.capability.status !== 'available' ||
-      !signer ||
-      status !== 'ready'
-    )
-      return;
+    if (!usesSigner || !signer || status !== 'ready') return;
     let cancelled = false;
     void signer
       .availableKeys()
@@ -262,12 +267,9 @@ export function OperationShell<TOptions, TResult>({
     return () => {
       cancelled = true;
     };
-  }, [descriptor.capability, signer, status, contextBinding, keyRefresh]);
+  }, [usesSigner, signer, status, contextBinding, keyRefresh]);
   const checkingKeys =
-    !!signer &&
-    descriptor.capability?.status === 'available' &&
-    status === 'ready' &&
-    keyState?.binding !== contextBinding;
+    !!signer && usesSigner && status === 'ready' && keyState?.binding !== contextBinding;
   const keyError = keyState?.binding === contextBinding ? keyState.error : undefined;
   const capability = descriptor.capability
     ? resolveOperationCapability(
@@ -279,7 +281,7 @@ export function OperationShell<TOptions, TResult>({
         status: signer?.prepareSdk ? 'available' : 'requires-another-signer',
         reason: 'Connect an SDK-compatible signer on the wallet page.',
       };
-  const signerSessionMatches = !signer?.sdk || signer.sdk === sdk;
+  const signerSessionMatches = formSigned || !signer?.sdk || signer.sdk === sdk;
   const capabilityAvailable =
     !checkingKeys && signerSessionMatches && capability.status === 'available' && !keyError;
   const retryKeyCheck = () => {
@@ -373,7 +375,7 @@ export function OperationShell<TOptions, TResult>({
   const onReview = () => {
     if (
       !sdk ||
-      !signer ||
+      (!signer && !formSigned) ||
       status !== 'ready' ||
       sessionSignal?.aborted ||
       !capabilityAvailable ||
@@ -400,8 +402,8 @@ export function OperationShell<TOptions, TResult>({
       summary,
       view,
       sdk,
-      signer,
-      identityId: signer.identityId,
+      signer: reviewSigner,
+      identityId: reviewSigner?.identityId ?? null,
       network,
       trusted,
       sessionSignal,
@@ -468,34 +470,24 @@ export function OperationShell<TOptions, TResult>({
     }
   };
 
-  if (
-    !submission &&
-    (capability.status === 'unsupported' || capability.status === 'external-bridge')
-  ) {
+  if (!submission && capability.status === 'unsupported') {
     return (
       <InfoBlock>
         <VStack align="stretch" spacing={3}>
           <Heading size="sm" color="gray.100">
             {descriptor.title}
           </Heading>
-          <Badge
-            alignSelf="flex-start"
-            colorScheme={capability.status === 'external-bridge' ? 'blue' : 'orange'}
-          >
-            {capability.status === 'external-bridge' ? 'External bridge' : 'Unsupported'}
+          <Badge alignSelf="flex-start" colorScheme="orange">
+            Unsupported
           </Badge>
           <Text fontSize="sm" color="gray.250">
             {capability.reason}
           </Text>
-          {capability.status === 'external-bridge' &&
-          descriptor.operationId === 'identity.topUp' ? (
-            <IdentityTopUpForm key={formRevision} signer={signer} onOptionsChange={() => {}} />
-          ) : null}
         </VStack>
       </InfoBlock>
     );
   }
-  if (!signer && !submission) {
+  if (!signer && !submission && !formSigned) {
     return (
       <InfoBlock>
         <Heading size="sm" color="gray.100" mb={2}>
@@ -587,7 +579,7 @@ export function OperationShell<TOptions, TResult>({
           Retry signer capabilities
         </Button>
       ) : null}
-      {!submission && signer ? (
+      {!submission && (signer || formSigned) ? (
         <InfoBlock display={activeStep === 0 ? undefined : 'none'}>
           <Form
             key={formRevision}
@@ -620,7 +612,8 @@ export function OperationShell<TOptions, TResult>({
             </Heading>
             <Text color="gray.250">{review.summary}</Text>
             <Text fontSize="sm" color="gray.250">
-              Identity: {review.identityId} · Network: {review.network} ·{' '}
+              {review.identityId ? `Identity: ${review.identityId}` : 'Keys: entered in the form'}{' '}
+              · Network: {review.network} ·{' '}
               {review.trusted ? 'trusted quorum source' : 'proof verification'}
             </Text>
             <CodeBlock value={review.view} />
@@ -662,9 +655,11 @@ export function OperationShell<TOptions, TResult>({
               </VStack>
             ) : null}
             <Text fontSize="sm" color="gray.250">
-              Fees: Platform deducts processing fees from the identity&apos;s credit balance when
-              the transition executes. The SDK does not provide an estimate in advance, so the exact
-              fee is only known afterwards.
+              Fees:{' '}
+              {review.descriptor.feeNote ??
+                "Platform deducts processing fees from the identity's credit balance when the transition executes."}{' '}
+              The SDK does not provide an estimate in advance, so the exact fee is only known
+              afterwards.
             </Text>
             {descriptor.destructive ? (
               <InfoBlock>
@@ -736,7 +731,9 @@ export function OperationShell<TOptions, TResult>({
           <VStack align="stretch" spacing={3}>
             <Text color="gray.250">
               {busy
-                ? 'Signing via your connected signer and broadcasting via DAPI…'
+                ? signsInForm(submission.descriptor.capability)
+                  ? 'Signing with the keys from the form and broadcasting via DAPI…'
+                  : 'Signing via your connected signer and broadcasting via DAPI…'
                 : notSubmitted
                   ? 'Not submitted.'
                   : error

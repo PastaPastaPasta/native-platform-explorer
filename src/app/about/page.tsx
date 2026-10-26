@@ -113,6 +113,25 @@ export default function Page() {
             prior context.
           </Text>
 
+          <Heading as="h2" size="md" color="gray.100" mt={6} mb={2} id="write-mode">
+            Write mode
+          </Heading>
+          <Text color="gray.250" mb={3}>
+            Opt-in, and off in read-only deployments. Every operation is built, reviewed (inputs
+            that contain private keys are never shown back), signed, and broadcast from your
+            browser; mainnet needs a typed confirmation. Identity operations sign with the
+            signer connected on the wallet page. Platform address operations, asset-lock identity
+            creation and top-ups, and masternode votes take their keys in the form instead and keep
+            them in the tab only for that operation. The explorer does not build asset-lock
+            transactions: bring the proof from a Core wallet, or use the bridge.
+          </Text>
+          <Text color="gray.250" mb={3}>
+            If a write fails after it was sent, the outcome is reported as unknown: check the
+            affected identity or address before you send anything again, because a retry may spend
+            twice. A signed transition from another tool can be decoded and broadcast unchanged
+            under Advanced.
+          </Text>
+
           <Heading as="h2" size="md" color="gray.100" mt={6} mb={2}>
             Privacy
           </Heading>

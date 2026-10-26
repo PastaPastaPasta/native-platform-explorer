@@ -284,5 +284,12 @@ test('the shipped generated map binds actual epoch, aggregate, signer and no-cal
   assert.ok(methods('/query/').includes('documents.countWithProof'));
   assert.ok(methods('/wallet/').includes('wallet.deriveKeyFromSeedWithPath'));
   assert.ok(methods('/broadcast/').includes('documents.replace'));
-  assert.ok(!methods('/broadcast/').includes('identities.topUp'));
+  for (const method of [
+    'identities.topUp',
+    'identities.create',
+    'addresses.transfer',
+    'voting.masternodeVote',
+    'stateTransitions.broadcastStateTransition',
+  ])
+    assert.ok(methods('/broadcast/').includes(method), method);
 });

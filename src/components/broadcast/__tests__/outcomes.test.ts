@@ -90,6 +90,16 @@ describe('transaction outcome messages', () => {
     // broadcast and which therefore stays "outcome unknown". The result
     // converters (wasm-dpp2 convert_proof_result) are infallible.
     // NotImplemented is no longer raised anywhere in 5.0.0-rc.8.
+    //
+    // Re-checked for the form-signed writes (same tag): addressFundsTransfer,
+    // identityTopUpFromAddresses, addressFundsWithdraw, identityTransferToAddresses,
+    // addressFundingFromAssetLock, identityCreateFromAddresses (its nonce lookup
+    // raises InvalidArgument for unknown or underfunded inputs, before building
+    // the transition), identityCreate, identityTopUp, masternodeVote (a duplicate
+    // vote is resolved inside the call by fetching the recorded vote) and
+    // broadcastStateTransition. The raw broadcast waits (waitForResponse,
+    // waitForAffectedState) run after the executor's own broadcast, so the
+    // executor reports every wait failure as "outcome unknown" whatever its kind.
     // pnpm installs evo-sdk's wasm-sdk dependency next to it.
     const evo = realpathSync('node_modules/@dashevo/evo-sdk');
     const wasm = `${evo}/../wasm-sdk/package.json`;

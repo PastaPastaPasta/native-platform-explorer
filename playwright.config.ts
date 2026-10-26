@@ -1,6 +1,8 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
+// scripts/serve-export.mjs reads the same variable.
+const port = Number(process.env.NPE_PREVIEW_PORT || 3100);
 
 export default defineConfig({
   testDir: './e2e',
@@ -9,12 +11,12 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: `http://127.0.0.1:3100${basePath}/`,
+    baseURL: `http://127.0.0.1:${port}${basePath}/`,
     trace: 'retain-on-failure',
   },
   webServer: {
     command: 'node scripts/serve-export.mjs',
-    port: 3100,
+    port,
     reuseExistingServer: false,
     timeout: 120_000,
   },

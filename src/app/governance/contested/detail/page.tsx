@@ -17,6 +17,7 @@ import { VoteTallyBar } from '@components/governance/VoteTallyBar';
 import { ContenderCard } from '@components/governance/ContenderCard';
 import { ContenderVoters } from '@components/governance/ContenderVoters';
 import { IdentityLink } from '@components/data/IdentityLink';
+import { WriteActions } from '@components/broadcast/WriteActions';
 import { usePageBreadcrumbs } from '@hooks/usePageBreadcrumbs';
 import { useContestedResourceVoteState, useVotePollsByEndDate } from '@sdk/queries';
 import { shortId } from '@util/identifier';
@@ -208,6 +209,24 @@ function Content() {
                   }
                 />
               </HStack>
+            ) : null}
+            {data && !isFinished ? (
+              <WriteActions
+                title="Masternodes:"
+                size="xs"
+                links={[
+                  {
+                    op: 'voting.castVote',
+                    label: 'Vote on this contest',
+                    params: {
+                      contract: contractId,
+                      docType,
+                      indexName,
+                      indexValues: JSON.stringify(indexValues),
+                    },
+                  },
+                ]}
+              />
             ) : null}
           </VStack>
         </InfoBlock>

@@ -13,7 +13,6 @@ import {
   executeIdentityCreditWithdrawal,
   executeIdentityUpdateKeys,
   executeDpnsRegister,
-  executeVotingCastVote,
 } from '../executors';
 import { operationRequirement } from '../capabilities';
 import type * as ProtocolVersion from '@sdk/protocol-version';
@@ -72,16 +71,6 @@ const noteContracts = (schema: object = {}) => ({
 });
 
 describe('broadcast executors', () => {
-  it('rejects unsupported voting without allocating signing material', async () => {
-    const prepareSdk = vi.fn();
-    await expect(executeVotingCastVote({
-      sdk: {} as never,
-      signer: createMockSigner({ prepareSdk }),
-      options: {} as never,
-    })).rejects.toThrow(/vote broadcasting is unavailable/i);
-    expect(prepareSdk).not.toHaveBeenCalled();
-  });
-
   it.each([
     ['contract.register', executeContractRegister],
     ['contract.update', executeContractUpdate],

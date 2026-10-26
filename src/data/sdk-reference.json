@@ -172,17 +172,110 @@
       "source": "src/app/broadcast/page.tsx",
       "calls": [
         {
+          "method": "addresses.createIdentity",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 369,
+              "owner": "executeAddressCreateIdentity"
+            }
+          ]
+        },
+        {
+          "method": "addresses.fundFromAssetLock",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 318,
+              "owner": "executeAddressFundFromAssetLock"
+            }
+          ]
+        },
+        {
+          "method": "addresses.get",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 87,
+              "owner": "assertSpendable"
+            },
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 540,
+              "owner": "useAddressInfo"
+            }
+          ]
+        },
+        {
+          "method": "addresses.getWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 541,
+              "owner": "useAddressInfo"
+            }
+          ]
+        },
+        {
+          "method": "addresses.topUpIdentity",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 232,
+              "owner": "executeAddressTopUpIdentity"
+            }
+          ]
+        },
+        {
+          "method": "addresses.transfer",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 150,
+              "owner": "executeAddressTransfer"
+            }
+          ]
+        },
+        {
+          "method": "addresses.transferFromIdentity",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 184,
+              "owner": "executeAddressTransferFromIdentity"
+            }
+          ]
+        },
+        {
+          "method": "addresses.withdraw",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/addresses.ts",
+              "line": 274,
+              "owner": "executeAddressWithdraw"
+            }
+          ]
+        },
+        {
           "method": "contracts.fetch",
           "kind": "facade",
           "sources": [
             {
               "file": "src/components/broadcast/capabilities.ts",
-              "line": 132,
+              "line": 146,
               "owner": "resolveSigningCriteria"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 268,
+              "line": 270,
               "owner": "executeContractUpdate"
             },
             {
@@ -208,7 +301,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 238,
+              "line": 240,
               "owner": "executeContractRegister"
             }
           ]
@@ -219,7 +312,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 303,
+              "line": 305,
               "owner": "executeContractUpdate"
             }
           ]
@@ -230,7 +323,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 377,
+              "line": 379,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -241,7 +334,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 448,
+              "line": 450,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -252,7 +345,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 348,
+              "line": 350,
               "owner": "fetchExistingDocument"
             },
             {
@@ -268,7 +361,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 576,
+              "line": 578,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -279,7 +372,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 416,
+              "line": 418,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -290,7 +383,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 533,
+              "line": 535,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -301,7 +394,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 493,
+              "line": 495,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -323,7 +416,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 804,
+              "line": 787,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -373,12 +466,34 @@
           ]
         },
         {
+          "method": "identities.byPublicKeyHash",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/identity-create.ts",
+              "line": 32,
+              "owner": "buildNewIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.create",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/identity-create.ts",
+              "line": 92,
+              "owner": "executeIdentityCreate"
+            }
+          ]
+        },
+        {
           "method": "identities.creditTransfer",
           "kind": "facade",
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 634,
+              "line": 636,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -389,7 +504,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 667,
+              "line": 669,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -400,8 +515,45 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 354,
+              "line": 356,
               "owner": "fetchExistingIdentity"
+            },
+            {
+              "file": "src/components/broadcast/executors/identity-create.ts",
+              "line": 78,
+              "owner": "executeIdentityCreate"
+            },
+            {
+              "file": "src/components/broadcast/executors/voting.ts",
+              "line": 58,
+              "owner": "voterKey"
+            },
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 308,
+              "owner": "useIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.fetchWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 309,
+              "owner": "useIdentity"
+            }
+          ]
+        },
+        {
+          "method": "identities.topUp",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/identity-create.ts",
+              "line": 127,
+              "owner": "executeIdentityTopUp"
             }
           ]
         },
@@ -411,8 +563,41 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 703,
+              "line": 705,
               "owner": "executeIdentityUpdateKeys"
+            }
+          ]
+        },
+        {
+          "method": "stateTransitions.broadcastStateTransition",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/raw.ts",
+              "line": 68,
+              "owner": "executeRawBroadcast"
+            }
+          ]
+        },
+        {
+          "method": "stateTransitions.waitForAffectedState",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/raw.ts",
+              "line": 41,
+              "owner": "waitForOutcome"
+            }
+          ]
+        },
+        {
+          "method": "stateTransitions.waitForResponse",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/raw.ts",
+              "line": 36,
+              "owner": "waitForOutcome"
             }
           ]
         },
@@ -439,18 +624,133 @@
           ]
         },
         {
+          "method": "voting.contestedResourceVoteState",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 1148,
+              "owner": "useContestedResourceVoteState"
+            }
+          ]
+        },
+        {
+          "method": "voting.contestedResourceVoteStateWithProof",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/sdk/queries.ts",
+              "line": 1149,
+              "owner": "useContestedResourceVoteState"
+            }
+          ]
+        },
+        {
+          "method": "voting.masternodeVote",
+          "kind": "facade",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/voting.ts",
+              "line": 111,
+              "owner": "executeMasternodeVote"
+            }
+          ]
+        },
+        {
+          "method": "AssetLockProof.createChainAssetLockProof",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/forms/identity/asset-lock.ts",
+              "line": 57,
+              "owner": "parseAssetLockProof"
+            }
+          ]
+        },
+        {
+          "method": "AssetLockProof.createInstantAssetLockProof",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/forms/identity/asset-lock.ts",
+              "line": 46,
+              "owner": "parseAssetLockProof"
+            }
+          ]
+        },
+        {
+          "method": "AssetLockProof.fromHex",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/form-signed.ts",
+              "line": 63,
+              "owner": "loadAssetLockProof"
+            },
+            {
+              "file": "src/components/broadcast/forms/identity/asset-lock.ts",
+              "line": 68,
+              "owner": "parseAssetLockProof"
+            }
+          ]
+        },
+        {
+          "method": "AssetLockProof.fromJSON",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/forms/identity/asset-lock.ts",
+              "line": 67,
+              "owner": "parseAssetLockProof"
+            }
+          ]
+        },
+        {
+          "method": "CoreScript.fromP2PKH",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/util/core-address.ts",
+              "line": 59,
+              "owner": "coreScriptForAddress"
+            }
+          ]
+        },
+        {
+          "method": "CoreScript.fromP2SH",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/util/core-address.ts",
+              "line": 60,
+              "owner": "coreScriptForAddress"
+            }
+          ]
+        },
+        {
           "method": "Identifier.fromBase58",
           "kind": "utility",
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 490,
+              "line": 492,
               "owner": "executeDocumentTransfer"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 573,
+              "line": 575,
               "owner": "executeDocumentPurchase"
+            }
+          ]
+        },
+        {
+          "method": "Identifier.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/voting.ts",
+              "line": 34,
+              "owner": "voterIdentityId"
             }
           ]
         },
@@ -460,8 +760,79 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 742,
+              "line": 744,
               "owner": "newIdentityKeys"
+            },
+            {
+              "file": "src/signer/form-keys.ts",
+              "line": 48,
+              "owner": "loadPrivateKey"
+            }
+          ]
+        },
+        {
+          "method": "ResourceVoteChoice.Abstain",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/voting.ts",
+              "line": 101,
+              "owner": "executeMasternodeVote"
+            }
+          ]
+        },
+        {
+          "method": "ResourceVoteChoice.Lock",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/voting.ts",
+              "line": 102,
+              "owner": "executeMasternodeVote"
+            }
+          ]
+        },
+        {
+          "method": "ResourceVoteChoice.TowardsIdentity",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/voting.ts",
+              "line": 99,
+              "owner": "executeMasternodeVote"
+            }
+          ]
+        },
+        {
+          "method": "StateTransition.fromBytes",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/forms/raw/decode.ts",
+              "line": 103,
+              "owner": "decodeStateTransition"
+            }
+          ]
+        },
+        {
+          "method": "StateTransition.fromHex",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/components/broadcast/executors/raw.ts",
+              "line": 61,
+              "owner": "executeRawBroadcast"
+            }
+          ]
+        },
+        {
+          "method": "wallet.deriveKeyFromSeedWithPath",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/new-identity.ts",
+              "line": 120,
+              "owner": "prepareNewIdentityKeys"
             }
           ]
         },
@@ -487,8 +858,24 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 661,
+              "line": 663,
               "owner": "executeIdentityCreditWithdrawal"
+            },
+            {
+              "file": "src/util/core-address.ts",
+              "line": 55,
+              "owner": "coreScriptForAddress"
+            }
+          ]
+        },
+        {
+          "method": "wallet.validateMnemonic",
+          "kind": "utility",
+          "sources": [
+            {
+              "file": "src/signer/new-identity.ts",
+              "line": 107,
+              "owner": "prepareNewIdentityKeys"
             }
           ]
         }
@@ -3542,7 +3929,7 @@
           "sources": [
             {
               "file": "src/signer/mnemonic.ts",
-              "line": 55,
+              "line": 58,
               "owner": "createMnemonicSigner"
             }
           ]
@@ -3564,7 +3951,7 @@
           "sources": [
             {
               "file": "src/signer/mnemonic.ts",
-              "line": 36,
+              "line": 43,
               "owner": "createMnemonicSigner"
             }
           ]

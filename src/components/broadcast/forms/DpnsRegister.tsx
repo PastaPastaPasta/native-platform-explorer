@@ -37,7 +37,7 @@ export function DpnsRegisterForm({ signer, onOptionsChange }: OperationFormProps
       <Text fontSize="sm" color="gray.250">
         The name is registered to the connected identity{' '}
         <Text as="span" fontFamily="mono" wordBreak="break-all">
-          {signer.identityId}
+          {signer?.identityId}
         </Text>
         . Disconnect on /wallet and reconnect to use another identity.
       </Text>
