@@ -23,7 +23,7 @@ describe('getConfig', () => {
       defaultNetwork: 'testnet',
       trustedMode: true,
       disableWriteMode: false,
-      rateProvider: 'kucoin',
+      rateProvider: 'coinbase',
       wellKnownUrl: null,
     });
   });
@@ -32,20 +32,20 @@ describe('getConfig', () => {
     vi.stubEnv('NEXT_PUBLIC_DEFAULT_NETWORK', 'devnet-paloma');
     vi.stubEnv('NEXT_PUBLIC_TRUSTED_MODE', 'false');
     vi.stubEnv('NEXT_PUBLIC_DISABLE_WRITE_MODE', 'true');
-    vi.stubEnv('NEXT_PUBLIC_RATE_PROVIDER', 'coinbase');
+    vi.stubEnv('NEXT_PUBLIC_RATE_PROVIDER', 'kucoin');
     vi.stubEnv('NEXT_PUBLIC_WELL_KNOWN_URL', 'https://example.test/well-known.json');
 
     expect(getConfig()).toEqual({
       defaultNetwork: 'devnet-paloma',
       trustedMode: false,
       disableWriteMode: true,
-      rateProvider: 'coinbase',
+      rateProvider: 'kucoin',
       wellKnownUrl: 'https://example.test/well-known.json',
     });
   });
 
-  it('falls back to kucoin for unknown rate providers', () => {
+  it('falls back to coinbase (CORS-enabled) for unknown rate providers', () => {
     vi.stubEnv('NEXT_PUBLIC_RATE_PROVIDER', 'not-a-provider');
-    expect(getConfig().rateProvider).toBe('kucoin');
+    expect(getConfig().rateProvider).toBe('coinbase');
   });
 });

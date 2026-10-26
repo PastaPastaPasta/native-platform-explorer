@@ -15,9 +15,11 @@ function parseBool(raw: string | undefined, fallback: boolean): boolean {
   return raw.toLowerCase() === 'true';
 }
 
+// Coinbase is the default: KuCoin's API sends no CORS headers, so browsers
+// block it. `kucoin` remains an explicit opt-in (see .env.local.example).
 function parseRateProvider(raw: string | undefined): RateProvider {
-  if (raw === 'coinbase' || raw === 'none') return raw;
-  return 'kucoin';
+  if (raw === 'kucoin' || raw === 'none') return raw;
+  return 'coinbase';
 }
 
 export function getConfig(): AppConfig {
