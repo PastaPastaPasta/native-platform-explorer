@@ -92,9 +92,9 @@ export function tallyProtocolVotes(
 }
 
 /** Versions voted above the network's current version, most votes first
- *  (ties to the higher version). rc.2's versionUpgradeState().nextProtocolVersion
- *  is the first voted version above the SDK's built-in version (12), not the
- *  network's, so a pending upgrade must be read from the tally instead. */
+ *  (ties to the higher version), the rule evo-sdk 5.0's
+ *  versionUpgradeState().nextProtocolVersion also applies. rc.2's compared
+ *  against the SDK's built-in version (12) instead of the network's. */
 export function upgradeCandidates(
   tally: Pick<VoteTally, 'byVersion'>,
   current: number,

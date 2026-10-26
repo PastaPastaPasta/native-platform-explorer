@@ -15,8 +15,9 @@ export function ErrorCard({
   error: Error | null | undefined;
   onRetry?: () => void;
 }) {
-  // rc.2's trusted context never refetches a missing quorum, so retrying in
-  // the same session cannot succeed; a new session fetches a fresh list.
+  // The SDK already asked the quorum service for a quorum it had not cached
+  // before failing, so the same request in this session would fail again; a
+  // new session re-reads the service's quorum lists.
   const reconnect = useContext(SdkContext)?.reconnect;
   const missingQuorum = !!reconnect && classifySdkError(error) === 'missing-quorum';
   const action = missingQuorum ? reconnect : onRetry;

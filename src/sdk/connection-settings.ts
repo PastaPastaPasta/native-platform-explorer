@@ -94,9 +94,8 @@ export function resolveQuorumUrl(network: Network, settings: ConnectionSettings)
 export interface DevnetSdkArgs {
   name: string;
   quorumUrl?: string;
-  /** Configured DAPI addresses. The SDK's trusted context replaces them with
-   *  the quorum service's masternode list when that list is non-empty, so
-   *  these only take effect for services that do not publish masternodes. */
+  /** Configured DAPI addresses. Since evo-sdk 5.0 they take precedence over
+   *  the quorum service's masternode list, which is then not fetched. */
   addresses?: string[];
 }
 
@@ -115,7 +114,7 @@ export function getDevnetSdkArgs(network: Network): DevnetSdkArgs {
 /**
  * Options for `new EvoSDK(...)`. Always trusted: the pinned SDK cannot run
  * proof-bearing queries without a trusted context ("Non-trusted mode is not
- * supported in WASM") and panics when `proofs: false` is requested.
+ * supported in WASM") and refuses them when `proofs: false` is requested.
  */
 export function buildSdkOptions(network: Network, settings: ConnectionSettings): EvoSDKOptions {
   const cfg: NetworkConfig = getNetwork(network);

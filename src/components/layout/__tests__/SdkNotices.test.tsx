@@ -1,12 +1,14 @@
 import React from 'react';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '@/test/render';
 import { createMockSdk } from '@/test/sdk';
 import { SdkSessionError } from '@sdk/errors';
-import { networkProtocolVersion } from '@sdk/version';
 import { createCustomDevnetConfig, removeCustomDevnet, saveCustomDevnet } from '@sdk/networks';
 import { SdkSessionNotice, SdkVersionNotice } from '../SdkNotices';
+
+// The newest protocol the bundled SDK supports; nothing else is read from the module.
+vi.mock('@dashevo/evo-sdk', () => ({ EvoSDK: { getLatestVersionNumber: async () => 14 } }));
 
 const status = (current: number) => ({ toJSON: () => ({ version: { protocol: { drive: { current, latest: current } } } }) });
 
@@ -83,27 +85,36 @@ describe('SdkSessionNotice', () => {
 });
 
 describe('SdkVersionNotice', () => {
-  it('reads the network protocol version from system.status', () => {
-    expect(networkProtocolVersion(status(14))).toBe(14);
-    expect(networkProtocolVersion({ chain: {} })).toBeNull();
-    expect(networkProtocolVersion(undefined)).toBeNull();
-  });
-
-  it('warns when the network protocol differs from the SDK protocol and can be dismissed', async () => {
-    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(12), system: { status: vi.fn().mockResolvedValue(status(14)) } });
+  it('warns when the network runs a protocol newer than the SDK supports and can be dismissed', async () => {
+    // The session ratchets no higher than the newest version it supports.
+    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(14), system: { status: vi.fn().mockResolvedValue(status(15)) } });
     renderWithProviders(<SdkVersionNotice />, { sdk: { sdk } });
-    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Testnet runs Platform protocol v14'));
-    expect(screen.getByRole('status')).toHaveTextContent('speaks v12');
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Testnet runs Platform protocol v15'));
+    expect(screen.getByRole('status')).toHaveTextContent('supports up to v14');
     fireEvent.click(screen.getByRole('button', { name: 'Dismiss protocol version warning' }));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
-    expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:12:14');
+    expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:network-newer:14:15');
   });
 
-  it('stays silent when versions match', async () => {
-    const statusFn = vi.fn().mockResolvedValue(status(12));
-    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(12), system: { status: statusFn } });
+  it('warns when the network runs a protocol older than the session uses', async () => {
+    // A devnet session starts at v14 and cannot step down to a v13 devnet.
+    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(14), system: { status: vi.fn().mockResolvedValue(status(13)) } });
+    renderWithProviders(<SdkVersionNotice />, { sdk: { sdk } });
+    await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Testnet runs Platform protocol v13, older than the v14 this SDK session uses'));
+    expect(screen.getByRole('status')).toHaveTextContent('writes are disabled');
+    expect(screen.getByRole('link', { name: 'clear the SDK cache' })).toHaveAttribute('href', expect.stringMatching(/^\/settings\/?#connection$/));
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss protocol version warning' }));
+    expect(window.sessionStorage.getItem('npe:protocolWarningDismissed')).toBe('testnet:network-older:14:13');
+  });
+
+  it.each([14, 13])('stays silent when the network runs v%s, which the SDK supports', async (current) => {
+    const statusFn = vi.fn().mockResolvedValue(status(current));
+    // Before its first proved answer a 5.0 session reports the network floor (13).
+    const sdk = createMockSdk({ version: vi.fn().mockReturnValue(13), system: { status: statusFn } });
     renderWithProviders(<SdkVersionNotice />, { sdk: { sdk } });
     await waitFor(() => expect(statusFn).toHaveBeenCalled());
+    // Let the supported-version lookup settle before asserting silence.
+    await act(() => new Promise((resolve) => setTimeout(resolve, 0)));
     expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 });

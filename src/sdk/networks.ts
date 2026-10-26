@@ -15,9 +15,10 @@ export interface NetworkConfig {
   insightApiUrl?: string;
   /** Faucet URL (devnets/testnet). */
   faucetBaseUrl?: string;
-  /** Custom DAPI masternode endpoints. Optional: every session prefetches
-   *  from the devnet's quorum service, whose published masternode list
-   *  replaces these; they are used only when it publishes none. */
+  /** Custom DAPI masternode endpoints. Optional: without them a session
+   *  uses the masternode list the devnet's quorum service publishes. When set
+   *  they replace that list (the SDK then skips the discovery request); quorum
+   *  keys still come from the service. */
   dapiAddresses?: string[];
   /** Devnet short name (no `devnet-` prefix). Passed to the SDK as
    *  `EvoSDK.devnet(name)` / `EvoSDK.devnetTrusted(name)`. Only meaningful
@@ -36,7 +37,8 @@ export function devnetShortName(cfg: NetworkConfig): string {
 }
 
 /** Why the SDK cannot derive `https://quorums.<short>.networks.dash.org` from
- *  a devnet short name (rc.2 trusted-context `get_quorum_base_url`), or null. */
+ *  a devnet short name (trusted-context `get_quorum_base_url`, unchanged from
+ *  rc.2 to 5.0), or null. */
 export function derivedQuorumNameError(short: string): string | null {
   if (!short) return 'the name without "devnet-" is empty';
   if (!/^[a-z0-9-]+$/i.test(short)) return 'it may use only letters, digits and hyphens';

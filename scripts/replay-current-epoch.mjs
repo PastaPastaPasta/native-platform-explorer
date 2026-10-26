@@ -169,7 +169,7 @@ const durationMs = epochDurationMs('mainnet');
 assert.equal(durationMs, 788_400_000n);
 const sdkUrl = import.meta.resolve('@dashevo/evo-sdk');
 const sdkPackage = JSON.parse(await readFile(new URL('../package.json', sdkUrl), 'utf8'));
-assert.equal(sdkPackage.version, '4.0.0-rc.2', 'This regression targets the pinned SDK.');
+assert.equal(sdkPackage.version, '5.0.0-rc.8', 'This regression targets the pinned SDK.');
 await record({ kind: 'runtime', output, node: process.version, sdkPublicExport: sdkUrl,
   sdkPackageVersion: sdkPackage.version, network: 'mainnet', trusted: true, retries: 0,
   helperSourceSha256: hash(helperSource), epochQueriesSourceSha256: hash(queriesSource),
@@ -193,7 +193,7 @@ globalThis.fetch = async (input, init) => {
   const id = transports.length + 1;
   let body;
   let result;
-  if (mode.startsWith('replay-')) {
+  if (mode.startsWith('replay-') && !(mode.endsWith('-then-live') && replayOffset >= replayBodies.length)) {
     assert(replayOffset < replayBodies.length, 'Unexpected retry/fallback transport.');
     body = replayBodies[replayOffset++];
     result = new Response(body, { status: 200,
@@ -272,30 +272,32 @@ try {
   const metadata42 = rewrite(historicalBody, { epoch: 42 });
   const genesisMetadata42 = rewrite(genesisBody, { epoch: 42 });
 
+  // Since 5.0 the SDK's implicit current method reads epoch zero, takes
+  // metadata.epoch only as a hint, and proves [hint, hint + 1] ascending: the
+  // newest started epoch in that proof is the answer.
+  const confirmQuery = (call, startEpoch) => assert.deepEqual(call.query,
+    { startEpoch, count: 2, ascending: true, prove: true });
   const liveCurrentProbe = await probe('live implicit current control', 'live-implicit-current',
     () => sdk.epoch.currentWithProof());
-  const liveCurrent = accepted(liveCurrentProbe, 1);
-  expectQuery(liveCurrentProbe.calls[0], null, false);
-  assert.equal(liveCurrent.data.index, derive(liveCurrentProbe.calls[0].body));
+  const liveCurrent = accepted(liveCurrentProbe, 2);
+  expectQuery(liveCurrentProbe.calls[0], 0);
+  confirmQuery(liveCurrentProbe.calls[1], liveCurrent.data.index);
+  assert.equal(liveCurrent.data.index, derive(liveCurrentProbe.calls[1].body));
 
   const historicalReplay = await probe('unmodified historical replay control', 'replay-historical-control',
     () => sdk.epoch.epochsInfoWithProof(explicit(42, false)), [historicalBody]);
   assert.deepEqual(JSON.parse(json(accepted(historicalReplay, 1).data)), JSON.parse(json(historical.data)));
   expectQuery(historicalReplay.calls[0], 42, false);
 
-  const oldUnmodified = await probe('old implicit unmodified historical rejection', 'replay-old-unmodified',
-    () => sdk.epoch.currentWithProof(), [historicalBody]);
-  rejected(oldUnmodified, 1, /upper bound/i);
-  expectQuery(oldUnmodified.calls[0], null, false);
-
-  const oldAttack = await probe('old implicit metadata-only epoch42 accepted', 'replay-old-metadata42',
-    () => sdk.epoch.currentWithProof(), [metadata42]);
-  const wronglyCurrent = accepted(oldAttack, 1);
-  assert.equal(wronglyCurrent.data.index, 42);
-  assert.equal(wronglyCurrent.metadata.epoch, 42);
-  assert.deepEqual(JSON.parse(json(wronglyCurrent.data)), JSON.parse(json(historical.data.get(42))));
-  assert.deepEqual(wronglyCurrent.proof.grovedbProof, historical.proof.grovedbProof);
-  expectQuery(oldAttack.calls[0], null, false);
+  // rc.2's implicit method accepted epoch 42 here. 5.0 follows the hint to a
+  // live proof that shows later epochs started, refines twice, and fails closed.
+  const sdkAttack = await probe('SDK implicit current rejects metadata-only epoch42', 'replay-sdk-metadata42-then-live',
+    () => sdk.epoch.currentWithProof(), [genesisMetadata42]);
+  assert(!sdkAttack.accepted, 'The SDK implicit current method accepted a metadata-only epoch hint.');
+  assert.equal(sdkAttack.error.name, 'StaleNode');
+  assert.equal(sdkAttack.calls.length, 4, 'Unexpected retry/cache/fallback.');
+  expectQuery(sdkAttack.calls[0], 0);
+  confirmQuery(sdkAttack.calls[1], 42);
 
   const execution = { assertActive() {} }; // No cancellation; does not alter SDK results or verification.
   const fixedLive = await probe('actual helper live signed-time current', 'live-helper',
@@ -310,7 +312,9 @@ try {
 
   const fixedAttack = await probe('actual helper rejects historical metadata42', 'replay-fixed-metadata42',
     () => fetchCurrentEpoch(sdk, 'mainnet', true, execution), [genesisMetadata42, metadata42]);
-  rejected(fixedAttack, 2, /missing data for query|lower bound/i);
+  // rc.2 named the missing bound; 5.0 (GroveDB V1 proofs) rejects the descending
+  // proof against the ascending query.
+  rejected(fixedAttack, 2, /missing data for query|lower bound|does not match the query direction/i);
   expectQuery(fixedAttack.calls[0], 0);
   expectQuery(fixedAttack.calls[1], derive(genesisBody));
   assert(derive(genesisBody) > 42);
@@ -335,7 +339,7 @@ try {
   const summary = { passed: true, verdict: 'CONFIRMED', severity: 'Low explorer data integrity',
     sdkPackageVersion: sdkPackage.version, helperSourceSha256: hash(helperSource),
     actualHelperEpoch: fixedLive.value.index, currentAtHistoricalSignedRoot: currentAtHistoricalRoot,
-    incorrectlyAcceptedOldImplicitEpoch: wronglyCurrent.data.index, genesisTimeMs,
+    sdkImplicitMetadata42Rejection: sdkAttack.error.name, genesisTimeMs,
     historicalOriginal: evidence(historicalBody), historicalMetadata42: evidence(metadata42),
     genesisOriginal: evidence(genesisBody), genesisMetadata42: evidence(genesisMetadata42),
     claim: 'Current at authenticated response time; not a general newest-signed-root guarantee.',

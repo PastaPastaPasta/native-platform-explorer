@@ -27,6 +27,7 @@ import {
 } from '@sdk/networks';
 import { CustomDevnetModal } from '@components/layout/CustomDevnetModal';
 import { ConnectionSettingsForm } from '@components/settings/ConnectionSettingsForm';
+import { ContractCacheSettings } from '@components/settings/ContractCacheSettings';
 import { WellKnownRegistrySettings } from '@components/settings/WellKnownRegistrySettings';
 import { getQuorumKeySource } from '@sdk/proofs';
 import { useProtocolVersionCheck } from '@sdk/version';
@@ -133,6 +134,7 @@ export default function Page() {
               longer timeouts.
             </Text>
             <ConnectionSettingsForm />
+            <ContractCacheSettings />
           </VStack>
         </InfoBlock>
 
@@ -145,8 +147,7 @@ export default function Page() {
               Devnets you&apos;ve added are stored in this browser only. They share testnet
               derivation paths. Each devnet needs a reachable quorums service (default:
               <code> https://quorums.&lt;name&gt;.networks.dash.org</code>) for quorum keys
-              and its masternode list; saved DAPI addresses are used only when that service
-              publishes no masternodes.
+              and, unless DAPI addresses are saved with the devnet, its masternode list.
             </Text>
             {customDevnets.length === 0 ? (
               <Text fontSize="sm" color="gray.400">
@@ -302,7 +303,8 @@ export default function Page() {
               label="Protocol version"
               value={
                 <Text fontFamily="mono" color={protocol.mismatch ? 'warning' : undefined}>
-                  SDK v{protocol.sdkVersion ?? '—'} · network v{protocol.networkVersion ?? '—'}
+                  SDK up to v{protocol.sdkVersion ?? '—'} · session v{protocol.sessionVersion ?? '—'} ·
+                  network v{protocol.networkVersion ?? '—'}
                 </Text>
               }
             />

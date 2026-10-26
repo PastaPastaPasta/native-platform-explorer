@@ -10,6 +10,7 @@ import type {
   IdentityPublicKeyInCreation,
 } from '@dashevo/evo-sdk';
 import { extractErrorMessage } from '@sdk/errors';
+import { assertWritableProtocolVersion } from '@sdk/protocol-version';
 import { decodeWif } from '@/signer/local';
 import {
   SignerDisconnectedError,
@@ -98,10 +99,16 @@ export interface ExecuteArgs<TOptions> {
 // adapters still have their IdentitySigner freed by the fallback here.
 // The signer refetches the identity's keys, so pin the reviewed key: if it was
 // disabled between review and signing, fail instead of signing with another.
+// Before `fn` builds anything, the session's protocol version is checked
+// against the network's; `fn` receives the checked version.
 async function withSigningMaterial<T>(
-  { signer, signingKeyId }: Pick<ExecuteArgs<unknown>, 'signer' | 'signingKeyId'>,
+  { sdk, signer, signingKeyId }: Pick<ExecuteArgs<unknown>, 'sdk' | 'signer' | 'signingKeyId'>,
   criteria: () => Promise<KeySelectionCriteria | undefined>,
-  fn: (material: SdkSigningMaterial, submit: typeof submitOperation) => Promise<T>,
+  fn: (
+    material: SdkSigningMaterial,
+    submit: typeof submitOperation,
+    platformVersion: number,
+  ) => Promise<T>,
 ): Promise<T> {
   if (!signer.prepareSdk) {
     throw new OperationNotSubmittedError(
@@ -145,7 +152,9 @@ async function withSigningMaterial<T>(
           `#${signingKeyId}. Build and review the operation again.`,
       );
     }
-    return await fn(material, submit);
+    // Nothing is built or submitted yet, so a failure here is "not submitted".
+    const platformVersion = await assertWritableProtocolVersion(sdk);
+    return await fn(material, submit, platformVersion);
   } catch (error) {
     if (
       error instanceof BroadcastOutcomeUnknownError ||
@@ -190,10 +199,6 @@ function reviewedKeyUnavailable(keyId: number, cause: unknown): string {
   );
 }
 
-async function getPlatformVersion(sdk: EvoSDK): Promise<number> {
-  return sdk.version();
-}
-
 /** The contract's `$defs`, serialised by the SDK as `schemaDefs`. */
 function contractDefinitions(
   contract: DataContract,
@@ -214,8 +219,7 @@ export async function executeContractRegister(
   return withSigningMaterial(
     args,
     () => resolveSigningCriteria('contract.register', sdk, options),
-    async (material, submit) => {
-      const platformVersion = await getPlatformVersion(sdk);
+    async (material, submit, platformVersion) => {
       const { DataContract } = await import('@dashevo/evo-sdk');
       // The SDK fetches its own identity nonce and derives the published ID
       // from it, so the constructor nonce and ID here are placeholders. Do not
@@ -260,9 +264,7 @@ export async function executeContractUpdate(
   return withSigningMaterial(
     args,
     () => resolveSigningCriteria('contract.update', sdk, options),
-    async (material, submit) => {
-      const platformVersion = await getPlatformVersion(sdk);
-
+    async (material, submit, platformVersion) => {
       const current = await sdk.contracts.fetch(options.contractId);
       if (!current) throw new Error(`Contract ${options.contractId} not found.`);
       if (String(current.ownerId) !== material.identityId) {
@@ -366,7 +368,11 @@ export async function executeDocumentCreate(
       material.identityId,
       options.properties,
     );
-    await submit(
+    // From protocol 14 a new document's id commits to the identity contract
+    // nonce the SDK assigns while submitting, so the id built above is a
+    // placeholder: report the confirmed document's id, and no id when the
+    // outcome is unknown.
+    const created = await submit(
       () =>
         sdk.documents.create({
           document,
@@ -377,7 +383,6 @@ export async function executeDocumentCreate(
         identityId: material.identityId,
         contractId: options.contractId,
         documentType: options.documentType,
-        documentId: String(document.id),
       },
       args.assertCurrent,
     );
@@ -386,7 +391,7 @@ export async function executeDocumentCreate(
       action: 'create' as const,
       contractId: options.contractId,
       documentType: options.documentType,
-      documentId: String(document.id),
+      documentId: String(created.id),
       ownerId: material.identityId,
     };
   });
@@ -613,9 +618,10 @@ export async function executeIdentityCreditTransfer(
     () => resolveSigningCriteria('identity.creditTransfer', sdk, options),
     async (material, submit) => {
       const identity = await fetchExistingIdentity(sdk, material.identityId);
-      // SDK rc.2 merges the facade's IdentityCreditTransferOptions with the raw
-      // transition's (which adds senderId/nonce). Type-check the real facade
-      // shape here, then cast only across that upstream declaration collision.
+      // The SDK (rc.2 and 5.0) merges the facade's IdentityCreditTransferOptions
+      // with the raw transition's (which adds senderId/nonce). Type-check the
+      // real facade shape here, then cast only across that upstream declaration
+      // collision.
       const transfer: CreditTransferFacadeOptions = {
         identity,
         recipientId: options.recipientId,

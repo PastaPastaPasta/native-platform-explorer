@@ -149,7 +149,7 @@ export async function fetchAllEvonodeBlocks(
     if (!(result instanceof Map) || result.size === 0) return out;
     let lastHex: string | undefined;
     for (const [key, val] of result) {
-      // Display key = the SDK's map key (hex in rc.2, which /evonode/ links
+      // Display key = the SDK's map key (hex in rc.2 and 5.0, which /evonode/ links
       // accept along with base58). Pagination cursor = hex.
       const displayKey = typeof key === 'string' ? key : String(key ?? '');
       const hex = keyToHex(key);

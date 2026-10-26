@@ -69,9 +69,9 @@ export function* sdkErrorChain(error: unknown): Generator<SdkErrorFields> {
 /**
  * Coarse outcome of a failed SDK call, used for empty states, retry policy and
  * proof labels:
- * - `not-found`: the SDK reported an absence by kind (pinned rc.2
- *   TotalCreditsNotFound=12, EpochNotFound=13, IdentityNonceNotFound=23,
- *   NotFound=27), raised after a proven fetch or a local schema check.
+ * - `not-found`: the SDK reported an absence by kind (TotalCreditsNotFound,
+ *   EpochNotFound, IdentityNonceNotFound, NotFound), raised after a proven
+ *   fetch or a local schema check.
  * - `timeout` / `transport`: no usable answer from DAPI; worth retrying. This
  *   includes a gRPC NOT_FOUND status, which is one node's unproven answer.
  * - `missing-quorum`: the response names a quorum the trusted context does not
@@ -90,24 +90,27 @@ export type SdkErrorClass =
   | 'invalid-request'
   | 'unknown';
 
-// Pinned rc.2 WasmSdkErrorKind values; names mirror the `name` getter.
-const KIND = {
-  config: 0, driveProof: 2, proof: 4, invalidProvedResponse: 5, dapiClient: 6, coreClient: 10,
-  totalCreditsNotFound: 12, epochNotFound: 13, timeout: 14, cancelled: 19, staleNode: 20,
-  identityNonceNotFound: 23, invalidArgument: 25, serialization: 26, notFound: 27, notImplemented: 28,
+/** Pinned 5.0.0-rc.8 WasmSdkErrorKind values, keyed by the `name` getter's
+ * text. 5.0 inserted ExecutionNotProved (6), shifting every later kind by one
+ * from rc.2; a test checks these against the installed SDK's enum. */
+export const SDK_ERROR_KINDS = {
+  Config: 0, DriveProofError: 2, Proof: 4, InvalidProvedResponse: 5, DapiClientError: 7, CoreClientError: 11,
+  TotalCreditsNotFound: 13, EpochNotFound: 14, TimeoutReached: 15, Cancelled: 20, StaleNode: 21,
+  IdentityNonceNotFound: 24, InvalidArgument: 26, SerializationError: 27, NotFound: 28, NotImplemented: 29,
 } as const;
-// Only proven paths raise these in the app. rc.2's unproved getIdentityUnproved
-// and getIdentityKeys({ type: 'search' }) also raise NotFound from one node's
-// answer; using either would need its own classification.
-const NOT_FOUND_KINDS = new Set<number>([KIND.totalCreditsNotFound, KIND.epochNotFound, KIND.identityNonceNotFound, KIND.notFound]);
-const TIMEOUT_KINDS = new Set<number>([KIND.timeout]);
-// Kinds naming the absent entity itself. Generic NotFound (27) is also raised
-// for a missing dependency, e.g. "Data contract not found" for a documents query.
-const ABSENT_ENTITY_KINDS = new Set<number>([KIND.totalCreditsNotFound, KIND.epochNotFound, KIND.identityNonceNotFound]);
+const KIND = SDK_ERROR_KINDS;
+// Only proven paths raise these in the app. The SDK's unproved
+// getIdentityUnproved also raises NotFound from one node's answer; using it
+// would need its own classification.
+const NOT_FOUND_KINDS = new Set<number>([KIND.TotalCreditsNotFound, KIND.EpochNotFound, KIND.IdentityNonceNotFound, KIND.NotFound]);
+const TIMEOUT_KINDS = new Set<number>([KIND.TimeoutReached]);
+// Kinds naming the absent entity itself. Generic NotFound is also raised for a
+// missing dependency, e.g. "Data contract not found" for a documents query.
+const ABSENT_ENTITY_KINDS = new Set<number>([KIND.TotalCreditsNotFound, KIND.EpochNotFound, KIND.IdentityNonceNotFound]);
 const ABSENT_ENTITY_TAG = /^(EpochNotFound|TotalCreditsNotFound|IdentityNonceNotFound)$/;
-const TRANSPORT_KINDS = new Set<number>([KIND.dapiClient, KIND.coreClient, KIND.cancelled, KIND.staleNode]);
-const INVALID_KINDS = new Set<number>([KIND.config, KIND.invalidArgument, KIND.serialization, KIND.notImplemented]);
-const PROOF_KINDS = new Set<number>([KIND.driveProof, KIND.proof, KIND.invalidProvedResponse]);
+const TRANSPORT_KINDS = new Set<number>([KIND.DapiClientError, KIND.CoreClientError, KIND.Cancelled, KIND.StaleNode]);
+const INVALID_KINDS = new Set<number>([KIND.Config, KIND.InvalidArgument, KIND.SerializationError, KIND.NotImplemented]);
+const PROOF_KINDS = new Set<number>([KIND.DriveProofError, KIND.Proof, KIND.InvalidProvedResponse]);
 
 const NOT_FOUND_TAG = /^(NotFound|EpochNotFound|TotalCreditsNotFound|IdentityNonceNotFound)$/;
 const TIMEOUT_TAG = /^(TimeoutReached)$/;
@@ -181,8 +184,9 @@ export function isAllEndpointsFailure(error: unknown): boolean {
 
 /** Retry only outcomes another attempt can change. Definite answers (absent
  * records, failed verification, rejected requests) and missing quorum keys,
- * which only a new session can acquire (ErrorCard offers Reconnect), are
- * reported immediately. */
+ * which the SDK has already tried to fetch from the quorum service (a new
+ * session re-reads its lists; ErrorCard offers Reconnect), are reported
+ * immediately. */
 export function isRetryableSdkError(error: unknown): boolean {
   const kind = classifySdkError(error);
   return kind === 'timeout' || kind === 'transport' || kind === 'unknown';

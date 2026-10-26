@@ -35,16 +35,20 @@ export interface IdentityVoteRow {
 }
 
 function normaliseChoice(raw: unknown): { choice: VoteChoice; towards?: string } {
-  // rc.2 ResourceVote: `.choice.voteType` is 'TowardsIdentity' | 'Abstain' | 'Lock'
-  // and `.choice.value` the identity; toJSON() has `resourceVoteChoice.type`.
+  // ResourceVote: `.choice.voteType` is 'TowardsIdentity' | 'Abstain' | 'Lock'
+  // and `.choice.value` the identity. toJSON() has `resourceVoteChoice`:
+  // `{ type, data }` in rc.2, `{ $type, identity }` in 5.0.
   const choice = readProp<unknown>(raw, 'choice') ?? readProp<unknown>(raw, 'resourceVoteChoice');
   const voteType =
     readProp<string>(choice, 'voteType') ??
     readProp<string>(choice, 'type') ??
+    readProp<string>(choice, '$type') ??
     readProp<string>(raw, 'voteType') ??
     (typeof choice === 'string' ? choice : undefined);
   const s = (typeof voteType === 'string' ? voteType : '').toLowerCase();
-  const towards = idToString(readProp<unknown>(choice, 'value') ?? readProp<unknown>(choice, 'data'));
+  const towards = idToString(
+    readProp<unknown>(choice, 'value') ?? readProp<unknown>(choice, 'data') ?? readProp<unknown>(choice, 'identity'),
+  );
   if (s.includes('toward')) return { choice: 'towardsIdentity', towards };
   if (s.includes('abstain')) return { choice: 'abstain' };
   if (s.includes('lock')) return { choice: 'lock' };
@@ -52,12 +56,14 @@ function normaliseChoice(raw: unknown): { choice: VoteChoice; towards?: string }
 }
 
 function voteRow(voteId: string, raw: unknown): IdentityVoteRow {
-  // Prefer ResourceVote.toJSON(): its `votePoll.data.indexValues` are decoded
-  // values, while the `poll.indexValues` getter yields serialized Value bytes.
+  // Prefer ResourceVote.toJSON(): its poll's `indexValues` are decoded values,
+  // while the `poll.indexValues` getter yields serialized Value bytes. The poll
+  // fields sit in `votePoll.data` in rc.2 and directly in `votePoll` in 5.0.
   const json = toPlain(raw);
   const vote = json && typeof json === 'object' && 'votePoll' in json ? json : raw;
   const { choice, towards } = normaliseChoice(vote);
-  const poll = readProp<unknown>(readProp<unknown>(vote, 'votePoll'), 'data') ?? readProp<unknown>(vote, 'poll');
+  const votePoll = readProp<unknown>(vote, 'votePoll');
+  const poll = readProp<unknown>(votePoll, 'data') ?? votePoll ?? readProp<unknown>(vote, 'poll');
   const indexValues = toPlain(readProp<unknown>(poll, 'indexValues'));
   return {
     voteId,

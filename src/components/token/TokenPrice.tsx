@@ -12,7 +12,7 @@ export interface TokenPriceSummary {
 }
 
 /**
- * rc.2 `TokenPriceInfo` flattens the pricing schedule: a single price fills
+ * `TokenPriceInfo` (rc.2 and 5.0) flattens the pricing schedule: a single price fills
  * both fields; a tiered schedule reports the price of its lowest amount tier
  * as `basePrice` and its highest tier as `currentPrice`. The fields are not a
  * "base" and a "current" price in the market sense, so they are labelled by tier.

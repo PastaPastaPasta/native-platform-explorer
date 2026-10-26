@@ -48,9 +48,11 @@ export default function Page() {
   const currentQ = useCurrentEpoch();
   const votesQ = useAllProtocolVotes();
 
-  // The running version comes from the current epoch record. rc.2's
-  // versionUpgradeState() reports both versions relative to the SDK's
-  // built-in version, so it is only shown as a discrepancy note.
+  // The running version comes from the current epoch record and the next one
+  // from the vote tally, which also gives the denominator. Since evo-sdk 5.0
+  // versionUpgradeState() reads the current version from the response
+  // metadata (rc.2 used the SDK's built-in version), so it should agree; it is
+  // only shown as a note when it does not.
   const epochIdx = currentQ.data ? normaliseEpoch(currentQ.data).index : undefined;
   const epochProtocol = readProp<number>(currentQ.data, 'protocolVersion');
   const current = typeof epochProtocol === 'number' ? epochProtocol : null;

@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import type { DocumentsQueryParams } from '@sdk/queries';
 import type { ParsedQuery } from '../sql-parser';
@@ -255,7 +256,8 @@ describe('buildSdkExample', () => {
       expect(JSON.parse(log.mock.calls[0]![0] as string)).toEqual({
         'doc-id': { amount: '9007199254740993' },
       });
-      expect(example).toContain('@dashevo/evo-sdk@4.0.0-rc.2');
+      const installed = JSON.parse(readFileSync(`${process.cwd()}/node_modules/@dashevo/evo-sdk/package.json`, 'utf8')) as { version: string };
+      expect(example).toContain(`@dashevo/evo-sdk@${installed.version}`);
     },
   );
 

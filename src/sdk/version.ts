@@ -1,47 +1,58 @@
 'use client';
 
-import { toPlain } from '@util/contract';
+import { useQuery } from '@tanstack/react-query';
 import { useSdk } from './hooks';
 import { useSystemStatus } from './queries';
-
-/** Platform protocol version the responding node currently runs
- *  (`status.version.protocol.drive.current`). */
-export function networkProtocolVersion(status: unknown): number | null {
-  const plain = toPlain(status) as { version?: { protocol?: { drive?: { current?: unknown } } } } | null | undefined;
-  const current = plain?.version?.protocol?.drive?.current;
-  const n = typeof current === 'bigint' ? Number(current) : current;
-  return typeof n === 'number' && Number.isInteger(n) && n > 0 ? n : null;
-}
+import {
+  networkProtocolVersion,
+  protocolVersionMismatch,
+  sessionProtocolVersion,
+  type ProtocolVersionMismatch,
+} from './protocol-version';
 
 export interface ProtocolVersionCheck {
-  /** Protocol version the SDK session speaks (`sdk.version()`). */
+  /** Newest Platform protocol version the bundled SDK supports
+   *  (`EvoSDK.getLatestVersionNumber()`). */
   sdkVersion: number | null;
+  /** Protocol version this SDK session currently uses (`sdk.version()`). */
+  sessionVersion: number | null;
   networkVersion: number | null;
-  mismatch: boolean;
+  mismatch: ProtocolVersionMismatch;
 }
 
 /**
- * PRD §11.7 version check. `sdk.version()` returns the Platform *protocol*
- * version the SDK was built for (12 for evo-sdk 4.0.0-rc.2), not the npm
- * package version, so it is compared with the protocol version the network
- * reports. Shares the polled `system.status` query, so it adds no requests.
+ * PRD §11.7 version check. Since evo-sdk 5.0 a session detects the network's
+ * protocol version from its responses, but only upward (see
+ * `protocolVersionMismatch`). So it warns when the network is newer than the
+ * bundled SDK supports, or older than the version the session already uses.
+ * Shares the polled `system.status` query, so it adds no network requests;
+ * each poll re-reads the session's version.
  */
 export function useProtocolVersionCheck(): ProtocolVersionCheck {
   const { sdk, status } = useSdk();
   const statusQ = useSystemStatus();
-  let sdkVersion: number | null = null;
-  if (status === 'ready' && sdk) {
-    try {
-      const v = sdk.version();
-      sdkVersion = typeof v === 'number' && Number.isInteger(v) ? v : null;
-    } catch {
-      sdkVersion = null;
-    }
-  }
-  const networkVersion = status === 'ready' ? networkProtocolVersion(statusQ.data) : null;
+  const latestQ = useQuery({
+    queryKey: ['sdk', 'latestProtocolVersion'],
+    queryFn: async () => {
+      const { EvoSDK } = await import('@dashevo/evo-sdk');
+      return EvoSDK.getLatestVersionNumber();
+    },
+    // The WASM module is initialized once a session is ready, so this reads
+    // a constant without loading anything.
+    enabled: status === 'ready',
+    staleTime: Infinity,
+    gcTime: Infinity,
+    retry: false,
+  });
+  const latest = latestQ.data;
+  const sdkVersion = typeof latest === 'number' && Number.isInteger(latest) ? latest : null;
+  const ready = status === 'ready';
+  const networkVersion = ready ? networkProtocolVersion(statusQ.data) : null;
+  const sessionVersion = ready ? sessionProtocolVersion(sdk) : null;
   return {
     sdkVersion,
+    sessionVersion,
     networkVersion,
-    mismatch: sdkVersion !== null && networkVersion !== null && sdkVersion !== networkVersion,
+    mismatch: protocolVersionMismatch(sdkVersion, sessionVersion, networkVersion),
   };
 }

@@ -10,6 +10,7 @@ import type { EvoSDK } from '@dashevo/evo-sdk';
 import { getSdkQueryKey, overlayQueryResult, useSdk, useSdkQuery as useSessionQuery, type SdkQueryExecution } from './hooks';
 import { epochInfoQuery, epochRangeError, epochRangeQueries, fetchEpochRange, isEpochIndex } from './epoch-queries';
 import { fetchCurrentEpoch } from './current-epoch';
+import { withContractRefresh } from './contract-cache';
 import { getConfig } from '@/config';
 import { classifyProof, getQuorumKeySource, isProofFallbackBlocked, verificationForResponse, type ProofState } from './proofs';
 import { walkInstance } from '@util/wasm-json';
@@ -431,8 +432,8 @@ export function useDocument(
 ) {
   return useSdkQuery(
     ['documents', 'get', contractId, type, docId],
-    (sdk) => sdk.documents.get(contractId!, type!, docId!) as Promise<unknown>,
-    { enabled: !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.getWithProof(contractId!, type!, docId!), methodName: 'documents.get', methodParams: { contractId, documentType: type, documentId: docId } },
+    (sdk) => withContractRefresh(sdk, contractId!, () => sdk.documents.get(contractId!, type!, docId!) as Promise<unknown>),
+    { enabled: !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => withContractRefresh(sdk, contractId!, () => sdk.documents.getWithProof(contractId!, type!, docId!)), methodName: 'documents.get', methodParams: { contractId, documentType: type, documentId: docId } },
   );
 }
 
@@ -453,8 +454,8 @@ export function useDocumentHistory(
   const query = { dataContractId: contractId!, documentTypeName: type!, documentId: docId!, startAtMs: startAfterMs, limit: DOCUMENT_HISTORY_PAGE };
   return useSdkQuery(
     ['documents', 'history', contractId, type, docId, startAfterMs],
-    (sdk) => sdk.documents.history(query) as Promise<unknown>,
-    { enabled: enabled && !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.historyWithProof(query), methodName: 'documents.history', methodParams: { dataContractId: contractId, documentTypeName: type, documentId: docId, startAtMs: startAfterMs, limit: DOCUMENT_HISTORY_PAGE } },
+    (sdk) => withContractRefresh(sdk, contractId!, () => sdk.documents.history(query) as Promise<unknown>),
+    { enabled: enabled && !!contractId && !!type && !!docId, staleTime: LIVE, withProofFn: (sdk) => withContractRefresh(sdk, contractId!, () => sdk.documents.historyWithProof(query)), methodName: 'documents.history', methodParams: { dataContractId: contractId, documentTypeName: type, documentId: docId, startAtMs: startAfterMs, limit: DOCUMENT_HISTORY_PAGE } },
   );
 }
 
@@ -700,8 +701,8 @@ export function useDocumentsQuery(
     : [];
   return useSdkQuery(
     ['documents', 'query', ...key, ...(executionId === undefined ? [] : ['execution', executionId])],
-    (sdk) => sdk.documents.query(params as never) as Promise<unknown>,
-    { enabled: !!params, staleTime: LIVE, withProofFn: (sdk) => sdk.documents.queryWithProof(params as never), methodName: 'documents.query', methodParams: params ? { dataContractId: params.dataContractId, documentTypeName: params.documentTypeName, where: params.where, orderBy: params.orderBy, limit: params.limit, startAfter: params.startAfter } : {} },
+    (sdk) => withContractRefresh(sdk, params!.dataContractId, () => sdk.documents.query(params as never) as Promise<unknown>),
+    { enabled: !!params, staleTime: LIVE, withProofFn: (sdk) => withContractRefresh(sdk, params!.dataContractId, () => sdk.documents.queryWithProof(params as never)), methodName: 'documents.query', methodParams: params ? { dataContractId: params.dataContractId, documentTypeName: params.documentTypeName, where: params.where, orderBy: params.orderBy, limit: params.limit, startAfter: params.startAfter } : {} },
   );
 }
 
@@ -757,23 +758,23 @@ export function useDocumentsAggregate(
       field ?? '',
       ...(executionId === undefined ? [] : ['execution', executionId]),
     ],
-    async (sdk) => {
+    (sdk) => withContractRefresh(sdk, params!.dataContractId, async () => {
       switch (kind!) {
         case 'count': return sdk.documents.count(query);
         case 'sum':   return sdk.documents.sum(query, field!);
         case 'avg':   return sdk.documents.average(query, field!);
       }
-    },
+    }),
     {
       enabled,
       staleTime: LIVE,
-      withProofFn: async (sdk) => {
+      withProofFn: (sdk) => withContractRefresh(sdk, params!.dataContractId, async () => {
         switch (kind!) {
           case 'count': return sdk.documents.countWithProof(query);
           case 'sum':   return sdk.documents.sumWithProof(query, field!);
           case 'avg':   return sdk.documents.averageWithProof(query, field!);
         }
-      },
+      }),
       methodName,
       methodParams,
     },
@@ -1043,17 +1044,9 @@ export function useAllProtocolVotes() {
 }
 
 // ----- voting polls -----
-// NOTE: VotePollsByEndDateQuery is currently un-callable from JS in
-// @dashevo/wasm-sdk 3.1.0-dev.* because of a deserializer/validator
-// Catch-22 in packages/wasm-sdk/src/queries/voting/polls.rs:
-//   - the Rust field is `start_time_ms: Option<f64>`, and serde-wasm-bindgen
-//     routes a fractionless JS Number through the integer visitor, which
-//     the f64 deserializer rejects with `invalid type: integer …, expected f64`;
-//   - any fractional Number that passes the deserializer is then rejected
-//     downstream by `if raw.fract() != 0.0 { … "must be an integer value" }`.
-// There is no JS value (integer Number, BigInt, string, Float64Array,
-// Math.fround, etc.) that the SDK accepts. Track the upstream fix; until
-// then this hook is expected to error.
+// Older wasm-sdk builds rejected every JS timestamp for VotePollsByEndDateQuery
+// (an f64 field that refused integers, then refused fractions). evo-sdk 5.0
+// reads whole-number and BigInt millisecond timestamps (platform #5139).
 export function useVotePollsByEndDate(startDateMs?: number, endDateMs?: number, enabled = true) {
   const query = { startTimeMs: startDateMs, endTimeMs: endDateMs };
   return useSdkQuery(

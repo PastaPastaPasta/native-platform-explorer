@@ -59,8 +59,9 @@ export function ContractHistoryTimeline({ history }: { history: unknown }) {
       .reverse();
   }, [history]);
 
-  // A full response may have cut off older versions, which rc.2 cannot page to
-  // (DataContractHistoryQuery has no offset and startAtMs bounds from below).
+  // A full response may have cut off older versions, which the SDK (rc.2 and
+  // 5.0) cannot page to (DataContractHistoryQuery has no offset and startAtMs
+  // bounds from below).
   const truncated = versions.length >= HISTORY_LIMIT;
 
   if (versions.length === 0) {

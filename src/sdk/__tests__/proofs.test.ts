@@ -108,8 +108,8 @@ describe('classifyProof', () => {
     expect(isProofVerificationError({ code: 123, kind: 'InvalidProof' })).toBe(true);
     expect(isProofVerificationError({ kind: 4, name: 'Proof', message: 'State root differs' })).toBe(true);
     expect(isProofVerificationError({ kind: 5, name: 'InvalidProvedResponse' })).toBe(true);
-    expect(isProofVerificationError({ kind: 18, name: 'ContextProviderError', message: 'quorum key unavailable' })).toBe(false);
-    expect(isProofVerificationError({ kind: 6, name: 'DapiClientError', message: 'network failure' })).toBe(false);
+    expect(isProofVerificationError({ kind: 19, name: 'ContextProviderError', message: 'quorum key unavailable' })).toBe(false);
+    expect(isProofVerificationError({ kind: 7, name: 'DapiClientError', message: 'network failure' })).toBe(false);
   });
 
   it('reports outages even on non-proof methods', () => {
@@ -153,7 +153,7 @@ describe('describeProofState', () => {
   });
 });
 
-/** Getter-shaped WasmSdkError like the pinned rc.2 runtime produces. */
+/** Getter-shaped WasmSdkError like the pinned SDK runtime produces. */
 function sdkError(kind: number, name: string, message: string): unknown {
   return Object.create({
     get kind() { return kind; },
@@ -170,10 +170,10 @@ describe('SDK error kinds', () => {
   );
 
   it.each([
-    [27, 'NotFound', 'Data contract not found'],
-    [13, 'EpochNotFound', 'epoch not found'],
-    [12, 'TotalCreditsNotFound', 'total credits not found'],
-    [23, 'IdentityNonceNotFound', 'identity nonce not found'],
+    [28, 'NotFound', 'Data contract not found'],
+    [14, 'EpochNotFound', 'epoch not found'],
+    [13, 'TotalCreditsNotFound', 'total credits not found'],
+    [24, 'IdentityNonceNotFound', 'identity nonce not found'],
   ])('classifies %s %s as not-found, never as a proof failure', (kind, name, message) => {
     const error = sdkError(kind, name, message);
     expect(classifySdkError(error)).toBe('not-found');
@@ -184,10 +184,10 @@ describe('SDK error kinds', () => {
   });
 
   it.each([
-    [14, 'TimeoutReached', 'request timed out', 'timeout'],
-    // Live rc.2 responses: an old node and an exhausted address list.
-    [6, 'DapiClientError', "transport error: grpc error: code: 'Operation is not implemented or not supported'", 'transport'],
-    [17, 'Generic', "Failed to get status: no available addresses to retry, last error: grpc error: code: 'Internal error', message: \"Failed to call gRPC service: JS API error: TypeError: fetch failed\"", 'transport'],
+    [15, 'TimeoutReached', 'request timed out', 'timeout'],
+    // Messages recorded live (rc.2): an old node and an exhausted address list.
+    [7, 'DapiClientError', "transport error: grpc error: code: 'Operation is not implemented or not supported'", 'transport'],
+    [18, 'Generic', "Failed to get status: no available addresses to retry, last error: grpc error: code: 'Internal error', message: \"Failed to call gRPC service: JS API error: TypeError: fetch failed\"", 'transport'],
   ] as const)('classifies %s %s as a retryable outage', (kind, name, message, expected) => {
     const error = sdkError(kind, name, message);
     expect(classifySdkError(error)).toBe(expected);
@@ -200,8 +200,10 @@ describe('SDK error kinds', () => {
   });
 
   it.each([
-    [18, 'ContextProviderError', 'Quorum not found in cache for hash 0000004c…'],
+    [19, 'ContextProviderError', 'Quorum not found in cache for hash 0000004c…'],
     [4, 'Proof', 'context provider error: Failed to find quorum 0000004c…'],
+    // 5.0 shape, after the SDK's own fetch found no such quorum at the service.
+    [4, 'Proof', 'quorum key unavailable for quorum 6:0000004c…: context provider error: Quorum not found in cache for hash: 0000004c…'],
   ])('labels a missing quorum (%s %s) unavailable, not failed, and does not fall back', (kind, name, message) => {
     const error = new Error('Request failed', { cause: sdkError(kind, name, message) });
     expect(classifySdkError(error)).toBe('missing-quorum');
@@ -222,34 +224,34 @@ describe('SDK error kinds', () => {
   });
 
   it('does not retry rejected requests or cancelled sessions, retries unknown errors once', () => {
-    expect(shouldRetrySdkQuery(0, sdkError(25, 'InvalidArgument', 'bad id'))).toBe(false);
+    expect(shouldRetrySdkQuery(0, sdkError(26, 'InvalidArgument', 'bad id'))).toBe(false);
     expect(shouldRetrySdkQuery(0, new CancelledError())).toBe(false);
     expect(shouldRetrySdkQuery(0, new Error('offline'))).toBe(true);
     expect(shouldRetrySdkQuery(1, new Error('offline'))).toBe(false);
   });
 
   it('detects an exhausted DAPI address list through wrappers', () => {
-    expect(isAllEndpointsFailure(new Error('x', { cause: sdkError(17, 'Generic', 'no available addresses to retry') }))).toBe(true);
-    expect(isAllEndpointsFailure(sdkError(6, 'DapiClientError', 'transport error'))).toBe(false);
+    expect(isAllEndpointsFailure(new Error('x', { cause: sdkError(18, 'Generic', 'no available addresses to retry') }))).toBe(true);
+    expect(isAllEndpointsFailure(sdkError(7, 'DapiClientError', 'transport error'))).toBe(false);
   });
 });
 
 describe('absence and kind provenance', () => {
   it('treats only entity-specific absences as a definite empty answer', () => {
-    expect(isAbsentEntityError(sdkError(12, 'TotalCreditsNotFound', 'total credits not found'))).toBe(true);
-    expect(isAbsentEntityError(new Error('x', { cause: sdkError(13, 'EpochNotFound', 'epoch not found') }))).toBe(true);
-    // Live rc.2: a documents query against a missing contract. The contract is
+    expect(isAbsentEntityError(sdkError(13, 'TotalCreditsNotFound', 'total credits not found'))).toBe(true);
+    expect(isAbsentEntityError(new Error('x', { cause: sdkError(14, 'EpochNotFound', 'epoch not found') }))).toBe(true);
+    // Live (rc.2 and 5.0): a documents query against a missing contract. The contract is
     // a dependency, so "no documents" would be the wrong answer.
-    expect(isAbsentEntityError(sdkError(27, 'NotFound', 'Data contract not found'))).toBe(false);
+    expect(isAbsentEntityError(sdkError(28, 'NotFound', 'Data contract not found'))).toBe(false);
   });
 
   // Queries throw normalizeError(raw): a plain Error whose message repeats the
   // raw text, with the tagged WasmSdkError on `cause`. Classify both shapes.
   it.each([
-    [6, 'DapiClientError', "transport error: grpc error: code: 'Some requested entity was not found'"],
-    [6, 'DapiClientError', "no available addresses to retry, last error: grpc error: code: 'Some requested entity was not found', message: \"identity 4EfA not found\""],
-    // Live rc.2 unproved identity fetch for an unknown ID: one node's answer.
-    [17, 'Generic', 'Failed to fetch identity: transport error: grpc error: code: \'Some requested entity was not found\', message: "identity 4EfA not found"'],
+    [7, 'DapiClientError', "transport error: grpc error: code: 'Some requested entity was not found'"],
+    [7, 'DapiClientError', "no available addresses to retry, last error: grpc error: code: 'Some requested entity was not found', message: \"identity 4EfA not found\""],
+    // Recorded from rc.2's unproved identity fetch for an unknown ID: one node's answer.
+    [18, 'Generic', 'Failed to fetch identity: transport error: grpc error: code: \'Some requested entity was not found\', message: "identity 4EfA not found"'],
   ])('does not treat a gRPC NOT_FOUND (%s %s) as proven absence, raw or normalized', (kind, name, message) => {
     const raw = sdkError(kind, name, message);
     const normalized = normalizeError(raw);
@@ -264,11 +266,20 @@ describe('absence and kind provenance', () => {
   });
 
   it('keeps structured absences definite after normalization', () => {
-    for (const raw of [sdkError(13, 'EpochNotFound', 'epoch not found'), sdkError(27, 'NotFound', 'Data contract not found')]) {
+    for (const raw of [sdkError(14, 'EpochNotFound', 'epoch not found'), sdkError(28, 'NotFound', 'Data contract not found')]) {
       expect(classifySdkError(normalizeError(raw))).toBe('not-found');
       expect(shouldRetrySdkQuery(0, normalizeError(raw))).toBe(false);
     }
-    expect(isAbsentEntityError(normalizeError(sdkError(13, 'EpochNotFound', 'epoch not found')))).toBe(true);
+    expect(isAbsentEntityError(normalizeError(sdkError(14, 'EpochNotFound', 'epoch not found')))).toBe(true);
+  });
+
+  it('classifies a bare numeric kind by the 5.0 numbering', () => {
+    // 5.0 inserted ExecutionNotProved (6): rc.2's NotFound (27) is now SerializationError.
+    expect(classifySdkError({ kind: 28 })).toBe('not-found');
+    expect(classifySdkError({ kind: 27 })).toBe('invalid-request');
+    expect(classifySdkError({ kind: 15 })).toBe('timeout');
+    expect(classifySdkError({ kind: 7 })).toBe('transport');
+    expect(classifySdkError({ kind: 6 })).toBe('unknown');
   });
 
   it('ignores numeric kinds from other enums (WasmDppError) when the name disagrees', () => {

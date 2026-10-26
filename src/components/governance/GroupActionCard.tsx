@@ -14,18 +14,22 @@ import { safeStringify } from '@util/wasm-json';
 
 type Json = Record<string, unknown>;
 
-/** rc.2 `GroupAction.toJSON()`: `{ proposer_id, token_contract_position,
- *  event: { type: "tokenEvent", data: { type: "mint", data: [...] } } }`. */
+/** `GroupAction.toJSON()`: `{ proposer_id, token_contract_position, event }`.
+ *  The event is `{ type: "tokenEvent", data: { type: "mint", data: [...] } }`
+ *  in rc.2 and `{ $kind: "tokenEvent", $type: "mint", amount, ... }`, with the
+ *  token event's fields flattened, in 5.0. */
 export function summarizeGroupAction(action: unknown) {
   const plain = (toPlain(action) ?? {}) as Json;
   const event = (plain.event ?? {}) as Json;
-  const inner = (event.data ?? {}) as Json;
+  const flat = typeof event.$kind === 'string';
+  const inner = (flat ? event : event.data ?? {}) as Json;
+  const { $kind: _kind, $type: _type, ...fields } = inner;
   return {
     proposerId: idToString(readProp<unknown>(action, 'proposerId')) ?? (typeof plain.proposer_id === 'string' ? plain.proposer_id : undefined),
     tokenPosition: plain.token_contract_position ?? readProp<number>(action, 'tokenContractPosition'),
-    eventType: typeof event.type === 'string' ? event.type : undefined,
-    kind: typeof inner.type === 'string' ? inner.type : undefined,
-    payload: inner.data,
+    eventType: flat ? (event.$kind as string) : typeof event.type === 'string' ? event.type : undefined,
+    kind: typeof inner.type === 'string' ? inner.type : typeof inner.$type === 'string' ? inner.$type : undefined,
+    payload: flat ? fields : inner.data,
     plain,
   };
 }

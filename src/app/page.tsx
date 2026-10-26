@@ -258,9 +258,9 @@ export default function HomePage() {
   const quorumGroups = useMemo(() => quorumBreakdown(quorums), [quorums]);
 
   // The running version is the current epoch's, and a pending upgrade is
-  // read from the votes. rc.2's versionUpgradeState reports both relative to
-  // the SDK's built-in version, so it is not used: without an epoch the
-  // version is unknown rather than the SDK's.
+  // read from the votes, the same sources as the protocol page. (rc.2's
+  // versionUpgradeState reported both relative to the SDK's built-in version;
+  // 5.0 reads them from the response, but the vote walk is fetched anyway.)
   const epochProtocol = readProp<number>(epochQ.data, 'protocolVersion');
   const protocolCurrent = typeof epochProtocol === 'number' ? epochProtocol : undefined;
   const protocolPending = useMemo(

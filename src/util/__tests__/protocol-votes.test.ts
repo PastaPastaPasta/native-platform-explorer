@@ -102,7 +102,7 @@ describe('tallyProtocolVotes', () => {
 });
 
 describe('upgradeCandidates', () => {
-  // rc.2's versionUpgradeState() picks the first voted version above the
+  // rc.2's versionUpgradeState() picked the first voted version above the
   // SDK's own v12, so a v11 network voting for v12 reported no next version.
   it('finds a pending version above the network version, not the SDK version', () => {
     const tally = tallyProtocolVotes(new Map([[hash(1), 12], [hash(2), 12], [hash(3), 11]]));

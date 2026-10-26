@@ -173,10 +173,10 @@ export function CustomDevnetModal({ isOpen, onClose, onSaved }: CustomDevnetModa
                 _focus={{ borderColor: 'brand.normal' }}
               />
               <FormHelperText fontSize="xs" color="gray.400">
-                HP masternode endpoints, one per line (or comma-separated). The SDK uses
-                them only if the quorum service does not publish a masternode list; a
-                published list replaces them. If they use self-signed certs you may need to
-                visit each URL in a separate tab once to accept the certificate.
+                HP masternode endpoints, one per line (or comma-separated). When given, the
+                SDK sends requests only to these instead of the quorum service&apos;s
+                masternode list. If they use self-signed certs you may need to visit each
+                URL in a separate tab once to accept the certificate.
               </FormHelperText>
               {errors.dapi ? (
                 <FormErrorMessage fontSize="xs">{errors.dapi}</FormErrorMessage>
