@@ -86,8 +86,13 @@ export async function createLocalSigner(
     initial.forEach((key) => key.publicKey.free());
     if (!initial.length)
       throw new SignerUnavailableError(
-        'The imported private keys do not match any enabled ECDSA key on this identity. Check the identity, network, and derivation path.',
+        'The imported private keys do not match any enabled ECDSA key on this identity. Check the identity, network, identity index, and derivation path.',
       );
+    // Keep only secrets that control an on-chain key (mnemonics scan several).
+    const used = new Set(initial.map((key) => key.secret));
+    const secrets = assertLive();
+    secrets.filter((key) => !used.has(key)).forEach((key) => key.bytes.fill(0));
+    privateKeys = secrets.filter((key) => used.has(key));
   } catch (error) {
     destroy();
     throw error;

@@ -79,9 +79,11 @@ function MnemonicPane() {
   const { sdk, network, status } = useSdk();
   const [identityId, setIdentityId] = useState('');
   const [mnemonic, setMnemonic] = useState('');
+  const [identityIndex, setIdentityIndex] = useState('0');
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<Error | null>(null);
+  const validIdentityIndex = /^\d{1,10}$/.test(identityIndex.trim()) && Number(identityIndex) < 2 ** 31;
 
   const onConnect = async () => {
     if (!sdk || status !== 'ready') {
@@ -98,7 +100,7 @@ function MnemonicPane() {
         mnemonic.trim(),
         identityId.trim(),
         getDerivationNetwork(network),
-        0,
+        Number(identityIndex.trim()),
         path.trim() || undefined,
       );
       connect(signer);
@@ -114,8 +116,11 @@ function MnemonicPane() {
     <VStack align="stretch" spacing={3}>
       <Text fontSize="sm" color="gray.250">
         Paste a BIP-39 mnemonic and the identity ID it controls. The seed lives only in this
-        tab&apos;s memory. We use DIP-13 account 0 by default; enter the exact path used by your
-        wallet if it differs. The derived key must match an enabled on-chain key.
+        tab&apos;s memory. We derive the DIP-13 identity keys{' '}
+        <code>m/9&apos;/coin&apos;/5&apos;/0&apos;/0&apos;/identity&apos;/key&apos;</code> for key
+        indexes 0–15 of the identity index below (the bridge&apos;s first identity is 0) and keep
+        only keys that match enabled keys on the identity. Enter a full derivation path instead to
+        import exactly one key.
       </Text>
       <FormControl isRequired>
         <FormLabel fontSize="sm">Identity ID</FormLabel>
@@ -146,13 +151,27 @@ function MnemonicPane() {
           borderColor="gray.700"
         />
       </FormControl>
+      <FormControl isInvalid={!validIdentityIndex}>
+        <FormLabel fontSize="sm">Identity index</FormLabel>
+        <Input
+          aria-label="Identity index"
+          size="sm"
+          inputMode="numeric"
+          value={identityIndex}
+          onChange={(e) => setIdentityIndex(e.target.value)}
+          isDisabled={busy || path.trim().length > 0}
+          fontFamily="mono"
+          bg="gray.800"
+          borderColor="gray.700"
+        />
+      </FormControl>
       <FormControl>
         <FormLabel fontSize="sm">Derivation path (optional)</FormLabel>
         <Input
           aria-label="Derivation path"
           value={path}
           onChange={(e) => setPath(e.target.value)}
-          placeholder="Default: DIP-13 account 0"
+          placeholder="Default: DIP-13 identity keys for the index above"
           isDisabled={busy}
           fontFamily="mono"
         />
@@ -167,6 +186,7 @@ function MnemonicPane() {
             !sdk ||
             status !== 'ready' ||
             !isBase58Identifier(identityId.trim()) ||
+            (!validIdentityIndex && !path.trim()) ||
             mnemonic.trim().split(/\s+/).length < 12
           }
         >

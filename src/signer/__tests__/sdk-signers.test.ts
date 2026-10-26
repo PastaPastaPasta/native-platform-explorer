@@ -13,7 +13,7 @@ import {
 } from '@dashevo/evo-sdk';
 import type { EvoSDK, IdentityPublicKeyOptions } from '@dashevo/evo-sdk';
 import { createBackupSigner } from '../backup';
-import { createMnemonicSigner } from '../mnemonic';
+import { createMnemonicSigner, identityKeyPath } from '../mnemonic';
 import { createWifSigner } from '../wif';
 import { createLocalSigner } from '../local';
 import { operationRequirement } from '@components/broadcast/capabilities';
@@ -128,22 +128,46 @@ describe('SDK-compatible signers', () => {
     );
   });
 
-  it('uses the SDK DIP-13 default path instead of assuming a synchronous string API', async () => {
-    const info = await wallet.derivationPathDip13Testnet(0);
-    const path = info.path;
-    info.free();
-    const derived = await wallet.deriveKeyFromSeedWithPath({
-      mnemonic: PHRASE,
-      path,
-      network: 'testnet',
-    });
-    const keyData = Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) =>
-      parseInt(byte, 16),
-    );
-    derived.free();
-    const { sdk } = fixture({ data: keyData });
+  it('derives DIP-13 identity keys for the identity index and keeps every matching key', async () => {
+    expect(identityKeyPath('testnet', 0, 0)).toBe("m/9'/1'/5'/0'/0'/0'/0'");
+    expect(identityKeyPath('mainnet', 3, 7)).toBe("m/9'/5'/5'/0'/0'/3'/7'");
+    const publicData = async (path: string) => {
+      const derived = await wallet.deriveKeyFromSeedWithPath({ mnemonic: PHRASE, path, network: 'testnet' });
+      try {
+        return Uint8Array.from(derived.publicKey.match(/.{2}/g)!, (byte) => parseInt(byte, 16));
+      } finally {
+        derived.free();
+      }
+    };
+    const { sdk, changeKeys } = fixture();
+    changeKeys([
+      { keyId: 0, purpose: 0, securityLevel: 0, keyType: 0, data: await publicData(identityKeyPath('testnet', 0, 0)) },
+      { keyId: 2, purpose: 0, securityLevel: 2, keyType: 0, data: await publicData(identityKeyPath('testnet', 0, 2)) },
+      { keyId: 3, purpose: 0, securityLevel: 2, keyType: 0, data: await publicData(identityKeyPath('testnet', 1, 3)) },
+    ]);
+
     const signer = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet');
-    expect((await signer.availableKeys())[0]?.id).toBe(4);
+    expect((await signer.availableKeys()).map((key) => key.id)).toEqual([0, 2]);
+    const master = await signer.prepareSdk!(operationRequirement('identity.updateKeys').criteria);
+    expect(master.keyId).toBe(0);
+    master.release!();
+    const high = await signer.prepareSdk!({ purpose: 'AUTHENTICATION', allowedSecurityLevels: ['HIGH'] });
+    expect(high.keyId).toBe(2);
+    high.release!();
+    signer.destroy();
+
+    const second = await createMnemonicSigner(sdk, PHRASE, ID, 'testnet', 1);
+    expect((await second.availableKeys()).map((key) => key.id)).toEqual([3]);
+    second.destroy();
+  });
+
+  it('wipes imported secrets that do not control an on-chain key', async () => {
+    const { sdk } = fixture();
+    const matching = (await import('../local')).decodeWif(wif);
+    const unused = { bytes: new Uint8Array(32).fill(7), network: 'testnet' as const };
+    const signer = await createLocalSigner(sdk, 'mnemonic', ID, [await matching, unused]);
+    expect(unused.bytes.every((byte) => byte === 0)).toBe(true);
+    expect((await signer.availableKeys()).map((key) => key.id)).toEqual([4]);
     signer.destroy();
   });
 
