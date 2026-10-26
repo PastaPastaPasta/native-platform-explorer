@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --webpack",
-    "build": "pnpm check:sdk-reference && next build --webpack",
+    "build": "pnpm check:sdk-reference && next build --webpack && node scripts/harden-export.mjs",
     "start": "next start",
     "lint": "eslint src",
     "typecheck": "tsc --noEmit",
@@ -17,6 +17,8 @@
     "generate:sdk-reference": "node scripts/generate-sdk-reference.mjs",
     "check:sdk-reference": "node scripts/generate-sdk-reference.mjs --check",
     "test:sdk-reference": "node --test scripts/__tests__/generate-sdk-reference.test.mjs",
+    "test:export": "node --test scripts/__tests__/harden-export.test.mjs scripts/__tests__/verify-integrity.test.mjs",
+    "verify:integrity": "node scripts/verify-integrity.mjs",
     "test:watch": "vitest",
     "e2e": "playwright test",
     "serve": "serve out"

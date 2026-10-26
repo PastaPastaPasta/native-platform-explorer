@@ -3127,6 +3127,11 @@
       ]
     },
     {
+      "route": "/offline/",
+      "source": "src/app/offline/page.tsx",
+      "calls": []
+    },
+    {
       "route": "/query/",
       "source": "src/app/query/page.tsx",
       "calls": [
