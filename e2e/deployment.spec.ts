@@ -32,7 +32,7 @@ test('the exported site serves its routes, assets and bundled fonts at the deplo
 test('integrity.json describes the files the deployment serves', async ({ request }) => {
   const response = await request.get('integrity.json');
   expect(response.ok()).toBe(true);
-  const manifest = await response.json() as { basePath: string; buildId: string; files: Record<string, string> };
+  const manifest = await response.json() as { basePath: string; release: string; files: Record<string, string> };
   expect(manifest.basePath).toBe(process.env.NEXT_PUBLIC_BASE_PATH || '');
   const sdkChunk = Object.keys(manifest.files)
     .filter((file) => file.startsWith('_next/static/chunks/'))
@@ -42,5 +42,5 @@ test('integrity.json describes the files the deployment serves', async ({ reques
     expect(`sha256-${createHash('sha256').update(body).digest('base64')}`, file).toBe(manifest.files[file]);
   }
   const html = await (await request.get('')).text();
-  expect(html).toContain(`<meta name="npe-build" content="${manifest.buildId}"/>`);
+  expect(html).toContain(`<meta name="npe-release" content="${manifest.release}"/>`);
 });

@@ -68,10 +68,10 @@ test('the policy allows only self scripts plus the listed inline hashes', () => 
   }
 });
 
-test('the CSP and build meta go right after the charset, before any script', () => {
+test('the CSP and release meta go right after the charset, before any script', () => {
   const html = '<!DOCTYPE html><html><head><meta charSet="utf-8"/><script src="/_next/static/a.js"></script></head></html>';
   const out = injectHeadMeta(html, "default-src 'self'", 'abc');
-  assert.equal(out, `<!DOCTYPE html><html><head><meta charSet="utf-8"/><meta http-equiv="Content-Security-Policy" content="default-src 'self'"/><meta name="npe-build" content="abc"/><script src="/_next/static/a.js"></script></head></html>`);
+  assert.equal(out, `<!DOCTYPE html><html><head><meta charSet="utf-8"/><meta http-equiv="Content-Security-Policy" content="default-src 'self'"/><meta name="npe-release" content="abc"/><script src="/_next/static/a.js"></script></head></html>`);
   assert.throws(() => injectHeadMeta(out, 'x', 'abc'), /already has a CSP/);
   assert.throws(() => injectHeadMeta('<html><head><title>x</title></head>', 'x', 'abc'), /no <head>/);
 });
@@ -117,10 +117,12 @@ test('hardenExport writes SRI, CSP, the service worker and a complete integrity 
   const query = read('query/index.html');
   assert.ok(query.includes(`<script src="/app/${runtimeFile}" async="" integrity="${sri(patched)}">`));
   assert.ok(query.includes(`'${sha('query')}'`));
-  assert.ok(query.includes('<meta name="npe-build" content="build-1"/>'));
+  assert.match(manifest.release, /^build-1-[0-9a-f]{16}$/);
+  assert.ok(query.includes(`<meta name="npe-release" content="${manifest.release}"/>`));
 
   const config = JSON.parse(read('sw.js').match(/^const CONFIG = (.*);$/m)[1]);
   assert.equal(config.buildId, 'build-1');
+  assert.equal(config.release, manifest.release);
   assert.deepEqual(config.shell, ['', 'offline/', '_next/static/css/a.css', runtimeFile]);
   assert.equal(config.assets['_next/static/chunks/sdk.js'], sri('sdk()'));
   assert.equal(config.assets[runtimeFile], sri(patched));

@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { startServiceWorker, UPDATE_CHECK_INTERVAL_MS, type ServiceWorkerOptions } from '../service-worker';
 
-/** A worker that answers the build query like scripts/sw/service-worker.js. */
+/** A worker that answers the release query like scripts/sw/service-worker.js. */
 class FakeWorker extends EventTarget {
   state: ServiceWorkerState = 'installed';
   messages: unknown[] = [];
-  constructor(readonly buildId: string | null) { super(); }
+  constructor(readonly release: string | null) { super(); }
   postMessage(message: { type: string }, transfer?: MessagePort[]) {
     this.messages.push(message.type);
-    if (message.type === 'npe:get-build' && this.buildId !== null) transfer?.[0]?.postMessage({ buildId: this.buildId });
+    if (message.type === 'npe:get-release' && this.release !== null) transfer?.[0]?.postMessage({ release: this.release });
   }
   setState(state: ServiceWorkerState) {
     this.state = state;
@@ -41,7 +41,7 @@ function start(container: FakeContainer, overrides: Partial<ServiceWorkerOptions
     container: container as unknown as ServiceWorkerContainer,
     scriptUrl: '/app/sw.js',
     scope: '/app/',
-    buildId: 'page-build',
+    release: 'page-build',
     enabled: true,
     onUpdate,
     reload,
@@ -80,11 +80,11 @@ describe('startServiceWorker', () => {
     const { onUpdate, reload } = start(container);
     await settle();
     expect(onUpdate).toHaveBeenCalledOnce();
-    expect(waiting.messages).toEqual(['npe:get-build']);
+    expect(waiting.messages).toEqual(['npe:get-release']);
     expect(reload).not.toHaveBeenCalled();
 
     onUpdate.mock.calls[0]![0]();
-    expect(waiting.messages).toEqual(['npe:get-build', 'npe:activate']);
+    expect(waiting.messages).toEqual(['npe:get-release', 'npe:activate']);
     expect(reload).not.toHaveBeenCalled();
     container.takeOver(waiting);
     await settle();
@@ -100,7 +100,7 @@ describe('startServiceWorker', () => {
     container.registration.waiting = waiting;
     const { onUpdate, reload } = start(container);
     await settle();
-    expect(waiting.messages).toEqual(['npe:get-build', 'npe:activate']);
+    expect(waiting.messages).toEqual(['npe:get-release', 'npe:activate']);
     container.takeOver(waiting);
     await settle();
     expect(onUpdate).not.toHaveBeenCalled();
@@ -127,7 +127,7 @@ describe('startServiceWorker', () => {
     installing.setState('installed');
     container.takeOver(installing);
     await settle();
-    expect(installing.messages).toEqual(['npe:get-build']);
+    expect(installing.messages).toEqual(['npe:get-release']);
     expect(onUpdate).not.toHaveBeenCalled();
     expect(reload).not.toHaveBeenCalled();
   });

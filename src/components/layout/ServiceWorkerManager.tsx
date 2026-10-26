@@ -9,11 +9,11 @@ const basePath = (process.env.NEXT_PUBLIC_BASE_PATH ?? '').replace(/\/+$/, '');
 // NEXT_PUBLIC_SERVICE_WORKER=off also removes a worker an earlier deploy
 // installed (and ships an unregistering sw.js, see scripts/harden-export.mjs).
 const enabled = process.env.NODE_ENV === 'production' && process.env.NEXT_PUBLIC_SERVICE_WORKER !== 'off';
-// The build the page's HTML came from (scripts/harden-export.mjs writes the
+// The release the page's HTML came from (scripts/harden-export.mjs writes the
 // meta into every exported page). Read before hydration touches <head>.
-const pageBuildId = typeof document === 'undefined'
+const pageRelease = typeof document === 'undefined'
   ? ''
-  : document.querySelector<HTMLMetaElement>('meta[name="npe-build"]')?.content ?? '';
+  : document.querySelector<HTMLMetaElement>('meta[name="npe-release"]')?.content ?? '';
 
 /** Registers the offline service worker and offers a reload when a newer
  *  deploy is ready. */
@@ -29,7 +29,7 @@ export function ServiceWorkerManager() {
         container: navigator.serviceWorker,
         scriptUrl: `${basePath}/sw.js`,
         scope: `${basePath}/`,
-        buildId: pageBuildId,
+        release: pageRelease,
         enabled,
         onUpdate: (next) => setApply(() => next),
         reload: () => window.location.reload(),

@@ -14,8 +14,8 @@ test.use({ serviceWorkers: 'allow' });
 
 const basePath = process.env.NEXT_PUBLIC_BASE_PATH || '';
 const OUT = path.resolve('out');
-const BUILD_META = /<meta name="npe-build" content="([^"]+)"\/>/;
-const currentBuild = BUILD_META.exec(readFileSync(path.join(OUT, 'index.html'), 'utf8'))![1];
+const RELEASE_META = /<meta name="npe-release" content="([^"]+)"\/>/;
+const currentRelease = RELEASE_META.exec(readFileSync(path.join(OUT, 'index.html'), 'utf8'))![1];
 const CHUNKS = path.join(OUT, '_next/static/chunks');
 // The SDK chunk (with its WASM) is by far the largest.
 const SDK_CHUNK = readdirSync(CHUNKS)
@@ -30,17 +30,17 @@ async function serve() {
 }
 
 /** A copy of the export rewritten as another deploy: HTML and sw.js name
- *  `buildId`, and the worker uses its own cache version. */
-function exportCopy(edit: (sw: string) => string, buildId = currentBuild) {
+ *  `release`, and the worker uses its own cache version. */
+function exportCopy(edit: (sw: string) => string, release = currentRelease) {
   const dir = mkdtempSync(path.join(os.tmpdir(), 'npe-deploy-'));
   cpSync(OUT, dir, { recursive: true });
   for (const entry of readdirSync(dir, { recursive: true, withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith('.html')) continue;
     const file = path.join(entry.parentPath, entry.name);
-    writeFileSync(file, readFileSync(file, 'utf8').replace(BUILD_META, `<meta name="npe-build" content="${buildId}"/>`));
+    writeFileSync(file, readFileSync(file, 'utf8').replace(RELEASE_META, `<meta name="npe-release" content="${release}"/>`));
   }
   const sw = path.join(dir, 'sw.js');
-  writeFileSync(sw, edit(readFileSync(sw, 'utf8').replaceAll(`"buildId":"${currentBuild}"`, `"buildId":"${buildId}"`)));
+  writeFileSync(sw, edit(readFileSync(sw, 'utf8').replaceAll(`"release":"${currentRelease}"`, `"release":"${release}"`)));
   return dir;
 }
 
@@ -140,7 +140,7 @@ test('a new deploy offers a reload that switches builds without failed loads', a
     await page.getByRole('button', { name: 'Reload', exact: true }).click();
     await reloaded;
     await expect(HEADER_SEARCH(page)).toBeVisible();
-    await expect(page.locator('meta[name="npe-build"]')).toHaveAttribute('content', currentBuild);
+    await expect(page.locator('meta[name="npe-release"]')).toHaveAttribute('content', currentRelease);
     await expect(page.getByText(PROMPT)).toBeHidden();
     const after = await controlledBy(page);
     expect(after.caches).toHaveLength(2);

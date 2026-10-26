@@ -2,8 +2,9 @@
  *
  * scripts/harden-export.mjs prepends `const CONFIG = {...}` to this file and
  * writes it to out/sw.js:
- *   buildId  the build this worker belongs to (the git commit); every page
- *            of that build names it in <meta name="npe-build">
+ *   release  the build this worker belongs to: the build ID plus a digest
+ *            of its static files; every page names it in <meta name="npe-release">
+ *   buildId  Next's build ID (the git commit), which its RSC payloads carry
  *   version  build ID plus a digest of every exported file; names the caches
  *   shell    scope-relative URLs precached at install: the home and offline
  *            pages and the static assets their HTML references
@@ -30,7 +31,7 @@ const PAGES = `${CACHE_PREFIX}pages:${CONFIG.version}`;
 const STATIC = `${CACHE_PREFIX}static:${CONFIG.version}`;
 const STATIC_PATH = new URL('_next/static/', SCOPE).pathname;
 const OFFLINE_URL = new URL('offline/', SCOPE).href;
-const BUILD_META = `<meta name="npe-build" content="${CONFIG.buildId}"/>`;
+const RELEASE_META = `<meta name="npe-release" content="${CONFIG.release}"/>`;
 const ASSETS = new Map(Object.entries(CONFIG.assets).map(([path, sri]) => [new URL(path, SCOPE).pathname, sri]));
 
 /** A static host ignores the query string, so it is not part of a page's
@@ -72,7 +73,7 @@ async function precache() {
     if (!cacheable(response)) throw new Error(`Precache failed for ${url.pathname}: HTTP ${response.status}`);
     // The site may have been redeployed since this worker was fetched. Never
     // store another build's files: install fails and is retried later.
-    if (file ? !(await matchesSri(response, file.sri)) : !(await response.clone().text()).includes(BUILD_META)) {
+    if (file ? !(await matchesSri(response, file.sri)) : !(await response.clone().text()).includes(RELEASE_META)) {
       throw new Error(`${url.pathname} belongs to a different build`);
     }
     await (file ? statics.put(file.key, response) : pages.put(url.href, response));
@@ -106,7 +107,7 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('message', (event) => {
   const message = event.data;
-  if (message?.type === 'npe:get-build') event.ports[0]?.postMessage({ buildId: CONFIG.buildId });
+  if (message?.type === 'npe:get-release') event.ports[0]?.postMessage({ release: CONFIG.release });
   if (message?.type === 'npe:activate') self.skipWaiting();
   if (message?.type === 'npe:cache-loaded') event.waitUntil(cacheLoaded(message));
 });
@@ -135,7 +136,7 @@ async function cacheLoaded({ page, assets }) {
   if (!pageUrl || pageUrl.pathname.startsWith(STATIC_PATH)) return;
   try {
     const response = await fetch(pageUrl, { cache: 'no-cache' });
-    if (cacheable(response)) await storePage(pageUrl.href, response, BUILD_META);
+    if (cacheable(response)) await storePage(pageUrl.href, response, RELEASE_META);
   } catch {
     // As above.
   }
@@ -163,7 +164,7 @@ async function navigate(event) {
     // Revalidate: the HTTP cache must not hand back HTML that references
     // chunks a newer deploy has removed. The copy keeps redirect: 'manual'.
     const response = await fetch(new Request(request, { cache: 'no-cache' }));
-    if (cacheable(response)) event.waitUntil(storePage(request.url, response.clone(), BUILD_META));
+    if (cacheable(response)) event.waitUntil(storePage(request.url, response.clone(), RELEASE_META));
     return response;
   } catch (error) {
     const pages = await caches.open(PAGES);

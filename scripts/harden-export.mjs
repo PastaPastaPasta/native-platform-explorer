@@ -100,16 +100,17 @@ export function inlineScriptHashes(html) {
 }
 
 /** Insert the policy right after <meta charset>: a meta CSP only governs
- *  markup after it, and nothing before it may load or run. The build ID meta
- *  tells the page which build its HTML (and so its chunks) came from. */
-export function injectHeadMeta(html, policy, buildId) {
+ *  markup after it, and nothing before it may load or run. The release meta
+ *  tells the page and the worker which build its HTML (and so its chunks)
+ *  came from. */
+export function injectHeadMeta(html, policy, release) {
   const charset = html.match(/<head>\s*<meta charSet="utf-8"\/>/i);
   if (!charset) throw new Error('Exported HTML has no <head><meta charSet="utf-8"/> to anchor the CSP');
   if (/http-equiv\s*=\s*["']?content-security-policy/i.test(html)) throw new Error('HTML already has a CSP');
   const before = html.slice(0, charset.index);
   if (/<(script|link|style|img|iframe|object|base)\b/i.test(before)) throw new Error('Content precedes the CSP anchor');
   const at = charset.index + charset[0].length;
-  const meta = `<meta http-equiv="Content-Security-Policy" content="${policy}"/><meta name="npe-build" content="${buildId}"/>`;
+  const meta = `<meta http-equiv="Content-Security-Policy" content="${policy}"/><meta name="npe-release" content="${release}"/>`;
   return `${html.slice(0, at)}${meta}${html.slice(at)}`;
 }
 
@@ -203,12 +204,17 @@ export function hardenExport({ outDir = path.join(root, 'out'), nextDir = path.j
   write(renamed, patched);
   const files = listFiles(outDir);
   const staticHashes = new Map(files.filter((file) => file.startsWith('_next/static/')).map((file) => [file, sri(read(file))]));
+  // The build ID is the commit, which two builds with different settings
+  // share; the release also names the static files the HTML loads.
+  const staticDigest = createHash('sha256');
+  for (const [file, hash] of staticHashes) staticDigest.update(`${file}\0${hash}\n`);
+  const release = `${buildId}-${staticDigest.digest('hex').slice(0, 16)}`;
 
-  // 2. Integrity attributes, the per-page CSP and the build ID meta.
+  // 2. Integrity attributes, the per-page CSP and the release meta.
   for (const file of files.filter((name) => name.endsWith('.html'))) {
     const source = read(file).toString('utf8').replaceAll(`${basePath}/${runtime}`, `${basePath}/${renamed}`);
     const html = addIntegrityAttributes(source, (asset) => staticHashes.get(asset), basePath);
-    write(file, injectHeadMeta(html, contentSecurityPolicy(inlineScriptHashes(html)), buildId));
+    write(file, injectHeadMeta(html, contentSecurityPolicy(inlineScriptHashes(html)), release));
   }
 
   // 3. Files GitHub Pages needs next to the export.
@@ -231,6 +237,7 @@ export function hardenExport({ outDir = path.join(root, 'out'), nextDir = path.j
       shell.push(...shellAssets(html, basePath));
     }
     const config = {
+      release,
       buildId,
       version: `${buildId.slice(0, 12)}-${digest.digest('hex').slice(0, 16)}`,
       shell: [...new Set(shell)],
@@ -258,6 +265,7 @@ export function hardenExport({ outDir = path.join(root, 'out'), nextDir = path.j
     // Uncommitted changes to tracked files: such a build is not reproducible from `commit`.
     dirty: status === null ? null : status !== '',
     buildId,
+    release,
     basePath,
     serviceWorker: serviceWorkerOff ? 'off' : 'on',
     env: publicEnv,

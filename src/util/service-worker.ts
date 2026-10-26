@@ -12,15 +12,16 @@
 
 export const UPDATE_CHECK_INTERVAL_MS = 30 * 60_000;
 const VISIBLE_CHECK_THROTTLE_MS = 5 * 60_000;
-const BUILD_QUERY_TIMEOUT_MS = 3_000;
+const RELEASE_QUERY_TIMEOUT_MS = 3_000;
 const ACTIVATION_TIMEOUT_MS = 5_000;
 
 export interface ServiceWorkerOptions {
   container: ServiceWorkerContainer;
   scriptUrl: string;
   scope: string;
-  /** This page's build ID; the worker reports the build it was generated for. */
-  buildId: string;
+  /** This page's release (its <meta name="npe-release">); the worker reports
+   *  the release it was generated for. */
+  release: string;
   /** False unregisters a worker installed by an earlier deploy. */
   enabled: boolean;
   /** A newer build is ready; call `apply` to switch to it (it reloads the page). */
@@ -28,20 +29,20 @@ export interface ServiceWorkerOptions {
   reload: () => void;
 }
 
-/** The build a worker serves, or null if it does not answer. */
-export function askWorkerBuild(worker: ServiceWorker, timeoutMs = BUILD_QUERY_TIMEOUT_MS): Promise<string | null> {
+/** The release a worker serves, or null if it does not answer. */
+export function askWorkerRelease(worker: ServiceWorker, timeoutMs = RELEASE_QUERY_TIMEOUT_MS): Promise<string | null> {
   return new Promise((resolve) => {
     const channel = new MessageChannel();
     const timer = setTimeout(() => {
       channel.port1.close();
       resolve(null);
     }, timeoutMs);
-    channel.port1.onmessage = (event: MessageEvent<{ buildId?: unknown }>) => {
+    channel.port1.onmessage = (event: MessageEvent<{ release?: unknown }>) => {
       clearTimeout(timer);
       channel.port1.close();
-      resolve(typeof event.data?.buildId === 'string' ? event.data.buildId : null);
+      resolve(typeof event.data?.release === 'string' ? event.data.release : null);
     };
-    worker.postMessage({ type: 'npe:get-build' }, [channel.port2]);
+    worker.postMessage({ type: 'npe:get-release' }, [channel.port2]);
   });
 }
 
@@ -71,7 +72,7 @@ function reportLoadsOutsideWorker(container: ServiceWorkerContainer): () => void
 
 /** Register the worker and watch for updates. Returns a cleanup function. */
 export function startServiceWorker(options: ServiceWorkerOptions): () => void {
-  const { container, scriptUrl, scope, buildId, enabled, onUpdate } = options;
+  const { container, scriptUrl, scope, release, enabled, onUpdate } = options;
   if (!enabled) {
     container.getRegistration(scope)
       .then((registration) => registration?.unregister())
@@ -104,9 +105,9 @@ export function startServiceWorker(options: ServiceWorkerOptions): () => void {
   };
 
   const inspectWaiting = async (worker: ServiceWorker) => {
-    const theirs = await askWorkerBuild(worker);
+    const theirs = await askWorkerRelease(worker);
     if (disposed) return;
-    if (theirs === buildId) worker.postMessage({ type: 'npe:activate' });
+    if (theirs === release) worker.postMessage({ type: 'npe:activate' });
     else offerUpdate(worker);
   };
 
@@ -117,8 +118,8 @@ export function startServiceWorker(options: ServiceWorkerOptions): () => void {
     }
     const controller = container.controller;
     if (!controller) return;
-    const theirs = await askWorkerBuild(controller);
-    if (!disposed && theirs !== null && theirs !== buildId) offerUpdate(null);
+    const theirs = await askWorkerRelease(controller);
+    if (!disposed && theirs !== null && theirs !== release) offerUpdate(null);
   };
   container.addEventListener('controllerchange', onControllerChange);
   cleanups.push(() => container.removeEventListener('controllerchange', onControllerChange));
