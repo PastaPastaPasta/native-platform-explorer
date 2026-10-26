@@ -138,7 +138,8 @@ export function SeededHoldersForm({ tokenId }: SeededHoldersFormProps) {
               size="sm"
               colorScheme="blue"
               onClick={() => void run()}
-              isDisabled={entries.filter((e) => e.kind !== 'invalid').length === 0 || loading}
+              // Until the session is ready a click would do nothing.
+              isDisabled={entries.filter((e) => e.kind !== 'invalid').length === 0 || loading || !sdk || status !== 'ready'}
             >
               Resolve &amp; query
             </Button>

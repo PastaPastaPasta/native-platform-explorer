@@ -15,7 +15,7 @@ interface Preset {
   group?: 'docs' | 'aggregates';
 }
 
-// A published testnet contract with 150 seeded `grade` documents (7 classes,
+// A published testnet contract with about 150 seeded `grade` documents (7 classes,
 // semesters 20241–20261) and countable, summable and averageable indexes.
 // The system-contract presets work on every network; this contract is on
 // testnet only.
