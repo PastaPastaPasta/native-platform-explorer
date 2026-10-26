@@ -328,7 +328,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 382,
+              "line": 390,
               "owner": "executeDocumentCreate"
             }
           ]
@@ -339,7 +339,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 453,
+              "line": 461,
               "owner": "executeDocumentDelete"
             }
           ]
@@ -350,8 +350,8 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 353,
-              "owner": "fetchExistingDocument"
+              "line": 358,
+              "owner": "fetchDocumentForNextRevision"
             },
             {
               "file": "src/components/broadcast/forms/DocumentReplace.tsx",
@@ -366,7 +366,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 581,
+              "line": 589,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -377,7 +377,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 421,
+              "line": 429,
               "owner": "executeDocumentReplace"
             }
           ]
@@ -388,7 +388,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 538,
+              "line": 546,
               "owner": "executeDocumentSetPrice"
             }
           ]
@@ -399,7 +399,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 498,
+              "line": 506,
               "owner": "executeDocumentTransfer"
             }
           ]
@@ -421,7 +421,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 790,
+              "line": 798,
               "owner": "executeDpnsRegister"
             }
           ]
@@ -568,7 +568,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 639,
+              "line": 647,
               "owner": "executeIdentityCreditTransfer"
             }
           ]
@@ -579,7 +579,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 672,
+              "line": 680,
               "owner": "executeIdentityCreditWithdrawal"
             }
           ]
@@ -590,7 +590,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 359,
+              "line": 367,
               "owner": "fetchExistingIdentity"
             },
             {
@@ -638,7 +638,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 708,
+              "line": 716,
               "owner": "executeIdentityUpdateKeys"
             }
           ]
@@ -1017,12 +1017,12 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 495,
+              "line": 503,
               "owner": "executeDocumentTransfer"
             },
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 578,
+              "line": 586,
               "owner": "executeDocumentPurchase"
             }
           ]
@@ -1044,7 +1044,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 747,
+              "line": 755,
               "owner": "newIdentityKeys"
             },
             {
@@ -1142,7 +1142,7 @@
           "sources": [
             {
               "file": "src/components/broadcast/executors.ts",
-              "line": 666,
+              "line": 674,
               "owner": "executeIdentityCreditWithdrawal"
             },
             {

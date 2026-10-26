@@ -344,7 +344,12 @@ async function buildDocument(
   });
 }
 
-async function fetchExistingDocument(
+/**
+ * The stored document at the revision a transfer, price update or purchase
+ * writes. Drive requires the stored revision + 1 (every write after a create
+ * bumps it), and the SDK sends the document's revision as given.
+ */
+async function fetchDocumentForNextRevision(
   sdk: EvoSDK,
   contractId: string,
   documentType: string,
@@ -352,6 +357,9 @@ async function fetchExistingDocument(
 ): Promise<Document> {
   const existing = await sdk.documents.get(contractId, documentType, documentId);
   if (!existing) throw new Error(`Document ${documentId} not found.`);
+  if (existing.revision === undefined || existing.revision === null)
+    throw new Error(`Document ${documentId} has no revision: its type is not mutable or transferable.`);
+  existing.revision = existing.revision + 1n;
   return existing;
 }
 
@@ -485,7 +493,7 @@ export async function executeDocumentTransfer(
   const { sdk, options } = args;
   const criteria = () => resolveSigningCriteria('document.transfer', sdk, options);
   return withSigningMaterial(args, criteria, async (material, submit) => {
-    const existing = await fetchExistingDocument(
+    const existing = await fetchDocumentForNextRevision(
       sdk,
       options.contractId,
       options.documentType,
@@ -527,7 +535,7 @@ export async function executeDocumentSetPrice(
   const { sdk, options } = args;
   const criteria = () => resolveSigningCriteria('document.setPrice', sdk, options);
   return withSigningMaterial(args, criteria, async (material, submit) => {
-    const existing = await fetchExistingDocument(
+    const existing = await fetchDocumentForNextRevision(
       sdk,
       options.contractId,
       options.documentType,
@@ -566,7 +574,7 @@ export async function executeDocumentPurchase(
   const { sdk, options } = args;
   const criteria = () => resolveSigningCriteria('document.purchase', sdk, options);
   return withSigningMaterial(args, criteria, async (material, submit) => {
-    const existing = await fetchExistingDocument(
+    const existing = await fetchDocumentForNextRevision(
       sdk,
       options.contractId,
       options.documentType,

@@ -666,7 +666,7 @@ describe('broadcast executors', () => {
     const purchase = vi.fn().mockResolvedValue(undefined);
     const sdk = {
       contracts: noteContracts(),
-      documents: { get: vi.fn().mockResolvedValue({ id: 'doc-1' }), transfer, purchase },
+      documents: { get: vi.fn().mockResolvedValue({ id: 'doc-1', revision: 1n }), transfer, purchase },
     } as never;
     const target = { contractId: 'contract-1', documentType: 'note', documentId: 'doc-1' };
     await executeDocumentTransfer({
@@ -683,12 +683,29 @@ describe('broadcast executors', () => {
     expect(purchase.mock.calls[0]![0].buyerId).toEqual({ base58: 'identity-1' });
   });
 
+  // Drive refuses a transfer, price update or purchase whose revision is not
+  // the stored one + 1 ("invalid revision Some(1). The desired revision is 1").
+  it.each([
+    ['transfer', executeDocumentTransfer, { recipientId: 'recipient-1' }],
+    ['setPrice', executeDocumentSetPrice, { priceCredits: 5n }],
+    ['purchase', executeDocumentPurchase, { priceCredits: 5n }],
+  ] as const)('%s sends the stored document at its next revision', async (method, execute, extra) => {
+    const write = vi.fn().mockResolvedValue(undefined);
+    const stored = { id: 'doc-1', revision: 3n };
+    await (execute as typeof executeDocumentTransfer)({
+      sdk: { contracts: noteContracts(), documents: { get: vi.fn().mockResolvedValue(stored), [method]: write } } as never,
+      signer: createMockSigner(),
+      options: { contractId: 'contract-1', documentType: 'note', documentId: 'doc-1', ...extra } as never,
+    });
+    expect(write.mock.calls[0]![0].document.revision).toBe(4n);
+  });
+
   it('keeps the recipient in an unknown transfer receipt', async () => {
     const error = await executeDocumentTransfer({
       sdk: {
         contracts: noteContracts(),
         documents: {
-          get: vi.fn().mockResolvedValue({}),
+          get: vi.fn().mockResolvedValue({ revision: 1n }),
           transfer: vi.fn().mockRejectedValue(new Error('timeout')),
         },
       } as never,
